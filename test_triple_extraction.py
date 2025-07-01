@@ -11,7 +11,8 @@ from src.hipporag.llm.openai_gpt import CacheOpenAI
 from src.hipporag.utils.config_utils import BaseConfig
 
 # 设置API密钥
-os.environ['OPENAI_API_KEY'] = 'sk-0xdfGKYi0W6KOzcGC4B3958f6b6b482f8616A7E05eCa7aEb'
+# os.environ['OPENAI_API_KEY'] = 'sk-0xdfGKYi0W6KOzcGC4B3958f6b6b482f8616A7E05eCa7aEb'
+os.environ['OPENAI_API_KEY'] = 'siq3nBr8C75Pv89E0CQaKq4c3KTCpOREj8Umj8OMCM5ByKkBrHxm-IOPiLuFlEOjnU3HFE5Hv-sfLzShM8CCoA'
 
 def test_triple_extraction_with_hipporag():
     """使用HippoRAG实例测试三元组提取功能"""
@@ -141,16 +142,20 @@ def test_complete_openie_pipeline():
 
     test_passages = [
     ]
-    with open('tmp.input', 'r') as f:
+    with open('tmp.md', 'r') as f:
         test_passages.append(f.read())
         # test_passages.extend(f.readlines())
     
 
     
     config = BaseConfig()
-    config.llm_name = 'qwen-plus-latest'
-    config.llm_base_url = 'https://api.vveai.com/v1'
+    # config.llm_name = 'qwen-plus-latest'
+    # config.llm_base_url = 'https://api.vveai.com/v1'
     config.save_dir = 'outputs/complete_openie_test'
+    config.llm_name = 'DeepSeek-V3'
+    config.llm_base_url = 'https://api.modelarts-maas.com/v1'
+    
+
     
     llm_model = CacheOpenAI.from_experiment_config(config)
     openie = OpenIE(llm_model=llm_model)

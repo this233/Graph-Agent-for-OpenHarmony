@@ -52,11 +52,40 @@ class QuerySolution:
         }
 
 def text_processing(text):
+    """
+    文本预处理函数，支持中文和其他语言字符
+    
+    功能：
+    - 支持批量处理（列表输入）
+    - 转换为小写（仅对英文字符有效）
+    - 移除或替换标点符号，保留字母、数字、中文等语言字符
+    - 清理多余空格
+    
+    Args:
+        text: 单个文本字符串或文本列表
+        
+    Returns:
+        处理后的文本字符串或字符串列表
+    """
     if isinstance(text, list):
         return [text_processing(t) for t in text]
     if not isinstance(text, str):
         text = str(text)
-    return re.sub('[^A-Za-z0-9 ]', ' ', text.lower()).strip()
+    
+    # 转换为小写（对中文无影响）
+    text = text.lower()
+    
+    # 方案1：移除标点符号，保留字母、数字、中文及其他语言字符
+    # 这个正则表达式匹配常见的标点符号和特殊字符，但保留中文、英文、数字等
+    text = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', text)
+    
+    # 方案2（备选）：如果需要更精确的控制，可以使用下面的正则表达式
+    # text = re.sub(r'[!"#$%&\'()*+,-./:;<=>?@\[\]\\^_`{|}~，。！？；：""''（）【】《》、]', ' ', text)
+    
+    # 清理多余的空格：将多个连续空格替换为单个空格，并去除首尾空格
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
 def reformat_openie_results(corpus_openie_results) -> (Dict[str, NerRawOutput], Dict[str, TripleRawOutput]):
 

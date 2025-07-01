@@ -13,3 +13,6 @@ numpy
 scipy
 tqdm
 einops
+langchain
+beautifulsoup4
+lxml
