@@ -1,32 +1,60 @@
-ner_system = """您的任务是从给定的段落中提取与开源鸿蒙(OpenHarmony)相关的专有名词作为命名实体。
-这些命名实体将用于构建开源鸿蒙知识图谱，助力开发者掌握鸿蒙技术栈、高效开发，参与开源社区共建。
+ner_system = """您的任务是从开源鸿蒙(OpenHarmony)技术文档中精确提取专有名词作为命名实体，用于构建技术知识图谱。
 
-请重点提取以下类型的开源鸿蒙相关专有名词：
-1. 技术组件和框架：如分布式软总线、Ability框架、UI框架等
-2. 系统架构层次：如内核层、系统服务层、框架层、应用层等
-3. 系统类型：如轻量系统、小型系统、标准系统等
-4. 硬件架构：如Arm Cortex-M、RISC-V、x86、MCU等
-5. API接口和参数：如系统API、应用API、接口名称、方法名、参数名、返回值类型、回调函数、事件监听器等
-6. 开发工具和环境：如开发工具链、编译脚本、配置文件、IDE工具等
-7. 产品设备类型：如智能家居设备、IP Camera、路由器等
-8. 组织和项目名称：如OpenHarmony、开放原子开源基金会等
-9. 技术概念：如子系统、组件、分布式能力等
+**提取原则：**
+- 只提取具体的技术术语，忽略通用词汇和描述性语言
+- 优先提取API相关的核心概念
+- 保持实体名称的原始形式，不要修改或翻译
+- 每个实体应该是独立的、有意义的技术概念
 
-请用JSON列表格式回复实体，忽略通用词汇。
+**重点提取的实体类型：**
+
+**1. API核心实体（最高优先级）**
+- 模块/命名空间：API模块标识符
+- 类型定义：类名、接口名、枚举
+- 方法/函数：具体的方法名、构造函数
+- 属性/字段：对象属性、常量、配置项
+- 参数/返回值：参数名称、返回类型
+
+**2. 系统与框架实体**
+- 系统组件：核心服务、框架组件
+- 开发工具：编译器、开发环境
+- 架构概念：应用模型、设计模式
+
+**3. 技术规范实体**
+- 权限标识：具体的权限名称
+- 错误码：错误类型、状态码
+- 版本标识：API版本号、兼容性标记
+
+**输出要求：**
+- 格式：{"named_entities": [("实体名", "简短类型说明"), ...]}
+- 每个实体的类型说明控制在3-8个汉字
+- 按重要性排序，API相关实体优先
+- 避免重复和过于泛化的概念
+
+**不要提取：**
+- 通用形容词（如"强大"、"高效"）
+- 业务描述词（如"用户体验"、"开发效率"）
+- 过于抽象的概念（如"生态系统"、"技术栈"）
 """
 
-one_shot_ner_paragraph = """OpenHarmony分布式软总线
-OpenHarmony的分布式软总线是多设备终端的统一基座，为设备间的无缝互联提供了统一的分布式通信能力。
-它基于Arm Cortex-A处理器架构，支持轻量系统和标准系统的部署。
-分布式软总线能够快速发现并连接设备，与分布式数据管理、分布式任务调度共同构成OpenHarmony的核心分布式能力。
-开发者可以通过Ability框架和UI框架实现一次开发、多端部署的应用程序。
-开发时需要调用connectDevice()接口建立连接，通过onDeviceStateChange回调函数监听设备状态变化，
-deviceId参数用于标识目标设备，ConnectionCallback接口处理连接结果。"""
+# - 只需提取关键实体，不要超过30个
+one_shot_ner_paragraph = """Context类提供startAbility方法启动应用，需要ohos.permission.START_ABILITIES权限。
+方法接受Want参数对象，返回Promise<void>类型。
+失败时抛出BusinessError异常，错误码为16000001表示无效参数。
+UIAbilityContext继承自Context，提供terminateSelf方法结束当前Ability。"""
 
-one_shot_ner_output = """{"named_entities":
-    ["OpenHarmony", "分布式软总线", "Arm Cortex-A", "轻量系统", "标准系统", "分布式数据管理", "分布式任务调度", "分布式能力", "Ability框架", "UI框架", "connectDevice", "onDeviceStateChange", "deviceId", "ConnectionCallback"]
-}
-"""
+one_shot_ner_output = """{"named_entities": [
+    ("Context", "基础类"),
+    ("startAbility", "启动方法"),
+    ("ohos.permission.START_ABILITIES", "权限标识"),
+    ("Want", "参数对象"),
+    ("Promise<void>", "返回类型"),
+    ("BusinessError", "异常类型"),
+    ("16000001", "错误码"),
+    ("UIAbilityContext", "上下文类"),
+    ("terminateSelf", "生命周期方法"),
+    ("Ability", "组件类型")
+]}"""
 
 prompt_template = [
     {"role": "system", "content": ner_system},

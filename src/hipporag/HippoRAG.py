@@ -233,15 +233,25 @@ class HippoRAG:
                                                                               embedding_model_name=self.global_config.embedding_model_name)
         
         # 初始化三个嵌入存储器：段落、实体、事实
+        self.file_embedding_store = EmbeddingStore(self.embedding_model,
+                                                   os.path.join(self.working_dir, "file_embeddings"),
+                                                   self.global_config.embedding_batch_size, 'file') # file_id,摘要,embedding
         self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
-                                                    self.global_config.embedding_batch_size, 'chunk')
+                                                    self.global_config.embedding_batch_size, 'chunk') # chunk_id,摘要,embedding
         self.entity_embedding_store = EmbeddingStore(self.embedding_model,
+                                                     os.path.join(self.working_dir, "code_embeddings"),
+                                                     self.global_config.embedding_batch_size, 'code') # code_id,代码摘要,embedding
+        self.table_embedding_store = EmbeddingStore(self.embedding_model,
+                                                     os.path.join(self.working_dir, "table_embeddings"),
+                                                     self.global_config.embedding_batch_size, 'table') # table_id,表格摘要,embedding
+        self.entity_embedding_store = EmbeddingStore(self.embedding_model, 
                                                      os.path.join(self.working_dir, "entity_embeddings"),
-                                                     self.global_config.embedding_batch_size, 'entity')
+                                                     self.global_config.embedding_batch_size, 'entity') # entity_id,实体,embedding
         self.fact_embedding_store = EmbeddingStore(self.embedding_model,
                                                    os.path.join(self.working_dir, "fact_embeddings"),
-                                                   self.global_config.embedding_batch_size, 'fact')
+                                                   self.global_config.embedding_batch_size, 'fact') # fact_id,事实,embedding
+        
 
         # 初始化提示模板管理器
         self.prompt_template_manager = PromptTemplateManager(role_mapping={"system": "system", "user": "user", "assistant": "assistant"})
@@ -1256,12 +1266,26 @@ class HippoRAG:
 
     def augment_graph(self):
         """
-        Provides utility functions to augment a graph by adding new nodes and edges.
-        It ensures that the graph structure is extended to include additional components,
-        and logs the completion status along with printing the updated graph information.
+        图增强：构建完整的知识图谱结构
+        
+        通过添加新节点和新边来扩展图结构，完成知识图谱的构建过程。
+        这是索引流程的最后阶段，将所有收集的实体、段落和关系信息
+        整合成一个完整的图结构。
+        
+        处理流程:
+        1. 添加新节点 - 将实体和段落节点加入图中
+        2. 添加新边 - 建立节点间的连接关系
+        3. 记录完成状态并输出图信息
+        
+        重要性:
+        - 完成从数据到图结构的转换
+        - 为后续的图搜索和PageRank计算提供基础
+        - 确保图的完整性和一致性
         """
 
+        # 添加所有新节点到图中
         self.add_new_nodes()
+        # 添加所有新边到图中
         self.add_new_edges()
 
         logger.info(f"Graph construction completed!")
@@ -1269,65 +1293,121 @@ class HippoRAG:
 
     def add_new_nodes(self):
         """
-        Adds new nodes to the graph from entity and passage embedding stores based on their attributes.
-
-        This method identifies and adds new nodes to the graph by comparing existing nodes
-        in the graph and nodes retrieved from the entity embedding store and the passage
-        embedding store. The method checks attributes and ensures no duplicates are added.
-        New nodes are prepared and added in bulk to optimize graph updates.
+        添加新节点：将实体和段落节点批量加入图中
+        
+        从实体嵌入存储器和段落嵌入存储器中获取所有节点信息，
+        与图中现有节点进行比较，识别并批量添加新节点。
+        
+        处理逻辑:
+        1. 获取图中现有节点列表
+        2. 从嵌入存储器中获取所有节点信息
+        3. 识别尚未添加到图中的新节点
+        4. 批量添加新节点及其属性
+        
+        节点类型:
+        - 实体节点：从entity_embedding_store获取
+        - 段落节点：从chunk_embedding_store获取
+        
+        优化特性:
+        - 批量操作提高效率
+        - 避免重复添加已存在的节点
+        - 保持节点属性的完整性
         """
 
+        # 获取图中现有节点，建立名称到节点的映射
         existing_nodes = {v["name"]: v for v in self.graph.vs if "name" in v.attributes()}
 
+        # 从嵌入存储器中获取所有实体和段落的ID到行的映射
         entity_to_row = self.entity_embedding_store.get_all_id_to_rows()
         passage_to_row = self.chunk_embedding_store.get_all_id_to_rows()
 
+        # 合并实体和段落节点信息
         node_to_rows = entity_to_row
         node_to_rows.update(passage_to_row)
 
+        # 准备新节点的属性字典
         new_nodes = {}
         for node_id, node in node_to_rows.items():
-            node['name'] = node_id
+            node['name'] = node_id  # 设置节点名称
+            # 只处理不在现有节点中的新节点
             if node_id not in existing_nodes:
+                # 为每个属性准备列表
                 for k, v in node.items():
                     if k not in new_nodes:
                         new_nodes[k] = []
                     new_nodes[k].append(v)
 
+        # 如果有新节点，批量添加到图中
         if len(new_nodes) > 0:
             self.graph.add_vertices(n=len(next(iter(new_nodes.values()))), attributes=new_nodes)
 
     def add_new_edges(self):
         """
-        Processes edges from `node_to_node_stats` to add them into a graph object while
-        managing adjacency lists, validating edges, and logging invalid edge cases.
+        添加新边：将节点间的连接关系加入图中
+        
+        处理node_to_node_stats中记录的所有边信息，验证边的有效性，
+        并将有效的边批量添加到图结构中。
+        
+        处理流程:
+        1. 构建邻接表和逆邻接表
+        2. 准备边的源节点、目标节点和权重信息
+        3. 验证边的有效性（确保两端节点都存在）
+        4. 批量添加有效边到图中
+        
+        边类型包括:
+        - 事实边：实体间的关系连接
+        - 段落边：段落与实体的连接
+        - 同义词边：相似实体间的连接
+        
+        验证机制:
+        - 检查源节点和目标节点是否都存在于图中
+        - 过滤自环边（源节点等于目标节点）
+        - 记录无效边的警告信息
+        
+        数据结构:
+        - graph_adj_list: 正向邻接表
+        - graph_inverse_adj_list: 反向邻接表
+        - 边权重信息保存在边属性中
         """
 
+        # 构建邻接表和反向邻接表
         graph_adj_list = defaultdict(dict)
         graph_inverse_adj_list = defaultdict(dict)
         edge_source_node_keys = []
         edge_target_node_keys = []
         edge_metadata = []
+        
+        # 遍历所有节点间的统计信息
         for edge, weight in self.node_to_node_stats.items():
+            # 跳过自环边
             if edge[0] == edge[1]: continue
+            
+            # 构建邻接表
             graph_adj_list[edge[0]][edge[1]] = weight
             graph_inverse_adj_list[edge[1]][edge[0]] = weight
 
+            # 准备边信息
             edge_source_node_keys.append(edge[0])
             edge_target_node_keys.append(edge[1])
             edge_metadata.append({
                 "weight": weight
             })
 
+        # 验证边的有效性并准备添加
         valid_edges, valid_weights = [], {"weight": []}
         current_node_ids = set(self.graph.vs["name"])
+        
         for source_node_id, target_node_id, edge_d in zip(edge_source_node_keys, edge_target_node_keys, edge_metadata):
+            # 检查源节点和目标节点是否都存在于图中
             if source_node_id in current_node_ids and target_node_id in current_node_ids:
                 valid_edges.append((source_node_id, target_node_id))
                 weight = edge_d.get("weight", 1.0)
                 valid_weights["weight"].append(weight)
             else:
+                # 记录无效边的警告
                 logger.warning(f"Edge {source_node_id} -> {target_node_id} is not valid.")
+        
+        # 批量添加有效边到图中
         self.graph.add_edges(
             valid_edges,
             attributes=valid_weights

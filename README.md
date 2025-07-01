@@ -1,3 +1,14 @@
+### TL;DR
+```
+conda activate hipporag
+python src/hipporag/document_processor.py  2>>index.log
+python generate_abstracts.py outputs/Harmony_docs_zh_cn/markdown_parse/structure.json outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json 2>> index.log
+python extract_entities_triples.py outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json outputs/Harmony_docs_zh_cn/markdown_parse/triples.json 2>> index.log
+```
+
+
+
+
 <h1 align="center">HippoRAG 2: From RAG to Memory</h1>
 <p align="center">
     <img src="https://github.com/OSU-NLP-Group/HippoRAG/raw/main/images/hippo_brain.png" width="55%" style="max-width: 300px;">
