@@ -92,6 +92,151 @@ class FallbackOpenIE:
             except Exception as e:
                 self.logger.warning(f"备用OpenIE配置初始化失败: {str(e)}")
     
+    def _record_primary_failure_details(self, failure_type: str, chunks: Dict[str, ChunkInfo], 
+                                      **kwargs):
+        """
+        记录主配置失败的详细信息
+        
+        Args:
+            failure_type: 失败类型 ("low_success_rate" 或 "exception")
+            chunks: 失败的chunks字典
+            **kwargs: 其他失败相关的参数
+        """
+        import datetime
+        
+        # 获取当前时间
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.logger.error("=" * 80)
+        self.logger.error(f"主配置失败记录 - {timestamp}")
+        self.logger.error("=" * 80)
+        
+        if failure_type == "low_success_rate":
+            # 记录成功率较低的情况
+            success_rate = kwargs.get('success_rate', 0)
+            successful_ner = kwargs.get('successful_ner', 0)
+            successful_triples = kwargs.get('successful_triples', 0)
+            total_chunks = kwargs.get('total_chunks', 0)
+            ner_results_dict = kwargs.get('ner_results_dict', {})
+            triple_results_dict = kwargs.get('triple_results_dict', {})
+            
+            self.logger.error(f"失败类型: 成功率过低 ({success_rate:.1%})")
+            self.logger.error(f"处理统计:")
+            self.logger.error(f"  总chunks数: {total_chunks}")
+            self.logger.error(f"  成功NER: {successful_ner}")
+            self.logger.error(f"  成功三元组提取: {successful_triples}")
+            self.logger.error(f"  失败NER: {total_chunks - successful_ner}")
+            self.logger.error(f"  失败三元组提取: {total_chunks - successful_triples}")
+            
+            # 分析失败的chunks
+            failed_chunks = []
+            for chunk_id, chunk_info in chunks.items():
+                ner_result = ner_results_dict.get(chunk_id)
+                triple_result = triple_results_dict.get(chunk_id)
+                
+                ner_failed = not ner_result or not ner_result.unique_entities or ner_result.metadata.get('error')
+                triple_failed = not triple_result or not triple_result.triples or triple_result.metadata.get('error')
+                
+                if ner_failed or triple_failed:
+                    failed_chunks.append({
+                        'chunk_id': chunk_id,
+                        'content_length': len(chunk_info['content']),
+                        'content': chunk_info['content'],  # 添加chunk内容
+                        'ner_failed': ner_failed,
+                        'triple_failed': triple_failed,
+                        'ner_error': ner_result.metadata.get('error') if ner_result else '无结果',
+                        'triple_error': triple_result.metadata.get('error') if triple_result else '无结果'
+                    })
+            
+            self.logger.error(f"失败chunks详情 (显示前5个):")
+            for i, failed_chunk in enumerate(failed_chunks[:5]):
+                self.logger.error(f"  Chunk {i+1}: {failed_chunk['chunk_id']}")
+                self.logger.error(f"    内容长度: {failed_chunk['content_length']} 字符")
+                self.logger.error(f"    NER失败: {failed_chunk['ner_failed']}")
+                self.logger.error(f"    三元组失败: {failed_chunk['triple_failed']}")
+                if failed_chunk['ner_error'] != '无结果':
+                    self.logger.error(f"    NER错误: {failed_chunk['ner_error']}")
+                if failed_chunk['triple_error'] != '无结果':
+                    self.logger.error(f"    三元组错误: {failed_chunk['triple_error']}")
+                
+                # 打印chunk内容
+                chunk_content = failed_chunk.get('content', '')
+                if chunk_content:
+                    # 截取前500字符作为预览
+                    content_preview = chunk_content[:500] + "..." if len(chunk_content) > 500 else chunk_content
+                    self.logger.error(f"    内容预览: {content_preview}")
+                    
+                    # 如果内容较短，打印完整内容
+                    if len(chunk_content) <= 200:
+                        self.logger.error(f"    完整内容: {chunk_content}")
+                else:
+                    self.logger.error(f"    内容: [无内容]")
+                
+                self.logger.error(f"    " + "-" * 50)
+            
+            if len(failed_chunks) > 5:
+                self.logger.error(f"  ... 还有 {len(failed_chunks) - 5} 个失败的chunks")
+                
+        elif failure_type == "exception":
+            # 记录异常情况
+            exception = kwargs.get('exception')
+            total_chunks = kwargs.get('total_chunks', 0)
+            
+            self.logger.error(f"失败类型: 异常")
+            self.logger.error(f"批次大小: {total_chunks} 个chunks")
+            self.logger.error(f"异常类型: {type(exception).__name__}")
+            self.logger.error(f"异常信息: {str(exception)}")
+            
+            # 记录chunks的基本信息
+            self.logger.error(f"失败chunks概览:")
+            for i, (chunk_id, chunk_info) in enumerate(chunks.items()):
+                if i >= 3:  # 只显示前3个
+                    remaining = len(chunks) - 3
+                    self.logger.error(f"  ... 还有 {remaining} 个chunks")
+                    break
+                content = chunk_info['content']
+                content_length = len(content)
+                
+                self.logger.error(f"  Chunk {i+1}: {chunk_id}")
+                self.logger.error(f"    内容长度: {content_length} 字符")
+                
+                # 打印chunk内容
+                if content:
+                    # 截取前500字符作为预览
+                    content_preview = content[:500] + "..." if len(content) > 500 else content
+                    self.logger.error(f"    内容预览: {content_preview}")
+                    
+                    # 如果内容较短，打印完整内容
+                    if len(content) <= 200:
+                        self.logger.error(f"    完整内容: {content}")
+                else:
+                    self.logger.error(f"    内容: [无内容]")
+                
+                self.logger.error(f"    " + "-" * 50)
+        
+        # 记录主配置信息
+        self.logger.error(f"主配置信息:")
+        self.logger.error(f"  LLM模型: {self.primary_config.llm_name}")
+        self.logger.error(f"  API Base URL: {getattr(self.primary_config, 'llm_base_url', 'Default')}")
+        self.logger.error(f"  OpenIE模式: {self.primary_config.openie_mode}")
+        self.logger.error(f"  温度: {getattr(self.primary_config, 'temperature', 'Default')}")
+        
+        # 记录备用配置可用性
+        if self.fallback_config:
+            self.logger.error(f"备用配置: 可用")
+            self.logger.error(f"  备用LLM: {self.fallback_config.llm_name}")
+            self.logger.error(f"  备用API Base URL: {getattr(self.fallback_config, 'llm_base_url', 'Default')}")
+        else:
+            self.logger.error(f"备用配置: 不可用")
+        
+        self.logger.error("=" * 80)
+        
+        # 如果有备用配置，记录即将尝试备用配置
+        if self.fallback_config:
+            self.logger.warning(f"⚠️  主配置失败，将尝试备用配置...")
+        else:
+            self.logger.error(f"❌ 主配置失败且无备用配置，处理将失败")
+    
     def batch_openie_with_fallback(self, chunks: Dict[str, ChunkInfo]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         使用备用配置机制进行批量OpenIE处理
@@ -103,6 +248,7 @@ class FallbackOpenIE:
             Tuple[Dict, Dict]: NER结果字典和三元组结果字典，以及是否使用了备用配置的标记
         """
         primary_failed = False
+        failure_details = {}
         
         # 首先尝试主配置，确保使用主API密钥
         try:
@@ -122,21 +268,34 @@ class FallbackOpenIE:
             success_rate = (successful_ner + successful_triples) / (2 * total_chunks) if total_chunks > 0 else 0
             
             # 如果成功率大于50%，认为主配置工作正常
-            if success_rate > 0.5:
+            if success_rate == 1:
                 self.logger.info(f"主配置OpenIE处理成功，成功率: {success_rate:.1%}")
                 return ner_results_dict, triple_results_dict
             else:
                 primary_failed = True
-                self.logger.warning(f"⚠️  主配置OpenIE处理成功率较低: {success_rate:.1%}")
-                self.logger.warning(f"  成功的NER: {successful_ner}/{total_chunks}")
-                self.logger.warning(f"  成功的三元组提取: {successful_triples}/{total_chunks}")
-                self.logger.warning(f"  将尝试备用配置...")
+                
+                # 记录详细的失败情况
+                self._record_primary_failure_details(
+                    failure_type="low_success_rate",
+                    chunks=chunks,
+                    ner_results_dict=ner_results_dict,
+                    triple_results_dict=triple_results_dict,
+                    success_rate=success_rate,
+                    successful_ner=successful_ner,
+                    successful_triples=successful_triples,
+                    total_chunks=total_chunks
+                )
                 
         except Exception as e:
             primary_failed = True
-            self.logger.warning(f"❌ 主配置OpenIE处理异常:")
-            self.logger.warning(f"  错误: {str(e)}")
-            self.logger.warning(f"  批次大小: {len(chunks)} 个chunks")
+            
+            # 记录详细的异常失败情况
+            self._record_primary_failure_details(
+                failure_type="exception",
+                chunks=chunks,
+                exception=e,
+                total_chunks=len(chunks)
+            )
         
         # 如果主配置失败或成功率太低，且有备用配置，则尝试备用配置
         if self.fallback_openie and primary_failed:
@@ -202,9 +361,12 @@ class FallbackOpenIE:
                     
             except Exception as e:
                 self.logger.error(f"备用配置OpenIE处理也失败: {str(e)}")
+                
+                # 记录备用配置失败的详细信息
+                self._record_fallback_failure_details(chunks, e)
         
         # 所有配置都失败，返回空结果
-        self.logger.error("主配置和备用配置都失败，返回空结果")
+        self._record_complete_failure(chunks)
         empty_ner_results = {}
         empty_triple_results = {}
         
@@ -224,6 +386,182 @@ class FallbackOpenIE:
             )
         
         return empty_ner_results, empty_triple_results
+
+    def _record_fallback_failure_details(self, chunks: Dict[str, ChunkInfo], exception: Exception):
+        """
+        记录备用配置失败的详细信息
+        
+        Args:
+            chunks: 失败的chunks字典
+            exception: 异常对象
+        """
+        import datetime
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.logger.error("=" * 80)
+        self.logger.error(f"备用配置失败记录 - {timestamp}")
+        self.logger.error("=" * 80)
+        
+        self.logger.error(f"备用配置处理失败")
+        self.logger.error(f"批次大小: {len(chunks)} 个chunks")
+        self.logger.error(f"异常类型: {type(exception).__name__}")
+        self.logger.error(f"异常信息: {str(exception)}")
+        
+        # 详细打印失败chunks的内容
+        self.logger.error(f"失败chunks详情 (显示前3个):")
+        for i, (chunk_id, chunk_info) in enumerate(chunks.items()):
+            if i >= 3:  # 只显示前3个
+                remaining = len(chunks) - 3
+                self.logger.error(f"  ... 还有 {remaining} 个chunks")
+                break
+            
+            content = chunk_info['content']
+            content_length = len(content)
+            
+            self.logger.error(f"  Chunk {i+1}: {chunk_id}")
+            self.logger.error(f"    内容长度: {content_length} 字符")
+            
+            # 打印chunk内容
+            if content:
+                # 截取前500字符作为预览
+                content_preview = content[:500] + "..." if len(content) > 500 else content
+                self.logger.error(f"    内容预览: {content_preview}")
+                
+                # 如果内容较短，打印完整内容
+                if len(content) <= 200:
+                    self.logger.error(f"    完整内容: {content}")
+            else:
+                self.logger.error(f"    内容: [无内容]")
+            
+            self.logger.error(f"    " + "-" * 50)
+        
+        # 记录备用配置信息
+        if self.fallback_config:
+            self.logger.error(f"备用配置信息:")
+            self.logger.error(f"  备用LLM: {self.fallback_config.llm_name}")
+            self.logger.error(f"  备用API Base URL: {getattr(self.fallback_config, 'llm_base_url', 'Default')}")
+            self.logger.error(f"  备用OpenIE模式: {self.fallback_config.openie_mode}")
+        else:
+            self.logger.error(f"备用配置信息: 未配置")
+        
+        self.logger.error("=" * 80)
+
+    def _record_complete_failure(self, chunks: Dict[str, ChunkInfo]):
+        """
+        记录完全失败的情况
+        
+        Args:
+            chunks: 失败的chunks字典
+        """
+        import datetime
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.logger.error("=" * 80)
+        self.logger.error(f"完全失败记录 - {timestamp}")
+        self.logger.error("=" * 80)
+        
+        self.logger.error("❌ 主配置和备用配置都失败，无法处理任何chunks")
+        self.logger.error(f"失败的批次大小: {len(chunks)} 个chunks")
+        
+        # 记录失败chunks概要
+        total_content_length = sum(len(chunk_info['content']) for chunk_info in chunks.values())
+        avg_content_length = total_content_length / len(chunks) if chunks else 0
+        
+        self.logger.error(f"失败chunks统计:")
+        self.logger.error(f"  总数: {len(chunks)}")
+        self.logger.error(f"  总内容长度: {total_content_length} 字符")
+        self.logger.error(f"  平均内容长度: {avg_content_length:.1f} 字符")
+        
+        # 详细打印失败chunks的内容
+        self.logger.error(f"失败chunks详情 (显示前3个):")
+        for i, (chunk_id, chunk_info) in enumerate(chunks.items()):
+            if i >= 3:  # 只显示前3个
+                remaining = len(chunks) - 3
+                self.logger.error(f"  ... 还有 {remaining} 个chunks")
+                break
+            
+            content = chunk_info['content']
+            content_length = len(content)
+            
+            self.logger.error(f"  Chunk {i+1}: {chunk_id}")
+            self.logger.error(f"    内容长度: {content_length} 字符")
+            
+            # 打印chunk内容
+            if content:
+                # 截取前500字符作为预览
+                content_preview = content[:500] + "..." if len(content) > 500 else content
+                self.logger.error(f"    内容预览: {content_preview}")
+                
+                # 如果内容较短，打印完整内容
+                if len(content) <= 200:
+                    self.logger.error(f"    完整内容: {content}")
+            else:
+                self.logger.error(f"    内容: [无内容]")
+            
+            self.logger.error(f"    " + "-" * 50)
+        
+        self.logger.error("建议:")
+        self.logger.error("  1. 检查API密钥是否正确")
+        self.logger.error("  2. 检查网络连接")
+        self.logger.error("  3. 检查API服务是否正常")
+        self.logger.error("  4. 考虑减少batch_size")
+        self.logger.error("  5. 检查输入内容是否过长或包含特殊字符")
+        
+        self.logger.error("=" * 80)
+
+        # 保存失败信息到文件
+        self._save_failure_log(chunks, timestamp)
+
+    def _save_failure_log(self, chunks: Dict[str, ChunkInfo], timestamp: str):
+        """
+        保存失败信息到单独的日志文件
+        
+        Args:
+            chunks: 失败的chunks字典
+            timestamp: 时间戳
+        """
+        try:
+            import json
+            
+            failure_log = {
+                'timestamp': timestamp,
+                'failure_type': 'complete_failure',
+                'total_chunks': len(chunks),
+                'primary_config': {
+                    'llm_name': self.primary_config.llm_name,
+                    'llm_base_url': getattr(self.primary_config, 'llm_base_url', 'Default'),
+                    'openie_mode': self.primary_config.openie_mode,
+                    'temperature': getattr(self.primary_config, 'temperature', 'Default')
+                },
+                'fallback_config': {
+                    'llm_name': self.fallback_config.llm_name if self.fallback_config else None,
+                    'llm_base_url': getattr(self.fallback_config, 'llm_base_url', 'Default') if self.fallback_config else None,
+                    'openie_mode': self.fallback_config.openie_mode if self.fallback_config else None
+                },
+                'chunks_summary': []
+            }
+            
+            # 添加chunks摘要信息
+            for chunk_id, chunk_info in chunks.items():
+                content = chunk_info['content']
+                failure_log['chunks_summary'].append({
+                    'chunk_id': chunk_id,
+                    'content_length': len(content),
+                    'content_preview': content[:200] + "..." if len(content) > 200 else content,
+                    'full_content': content  # 保存完整内容到日志文件
+                })
+            
+            # 保存到文件
+            failure_log_file = f"failure_log_{timestamp.replace(' ', '_').replace(':', '-')}.json"
+            with open(failure_log_file, 'w', encoding='utf-8') as f:
+                json.dump(failure_log, f, ensure_ascii=False, indent=2)
+            
+            self.logger.error(f"详细失败信息已保存到: {failure_log_file}")
+            
+        except Exception as e:
+            self.logger.error(f"保存失败日志时出错: {str(e)}")
 
 class EntityTripleExtractor:
     """

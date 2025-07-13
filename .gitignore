@@ -14,7 +14,7 @@ __pycache__/
 # Ignore nohup_out directory
 nohup_out/
 # Ignore outputs directory
-outputs/
+# outputs/
 # Ignore data directory
 data/
 # Ignore the bash script to clear files under outputs and logs directories

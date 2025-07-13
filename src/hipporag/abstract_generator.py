@@ -230,7 +230,8 @@ class AbstractGenerator:
         
         for file_id, file_info in doc_structure.items():
             # 处理文件级别的摘要
-            if file_info.get('abstract', '') == '':
+            # if file_info.get('abstract', '') == '':
+            if True:
                 tasks.append({
                     'type': 'file',
                     'path': [file_id],

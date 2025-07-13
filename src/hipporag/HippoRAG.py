@@ -112,7 +112,7 @@ import time
 
 from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
-from .embedding_store import EmbeddingStore
+from .embedding_store_v2 import EmbeddingStoreV2
 from .information_extraction import OpenIE
 from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
 from .evaluation.retrieval_eval import RetrievalRecall
@@ -125,8 +125,23 @@ from .utils.misc_utils import NerRawOutput, TripleRawOutput
 from .utils.embed_utils import retrieve_knn
 from .utils.typing import Triple
 from .utils.config_utils import BaseConfig
+from .utils.misc_utils import compute_mdhash_id
+
+import vllm
+from vllm import LLM
+import torch
 
 logger = logging.getLogger(__name__)
+
+# 设置全局logger配置
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# 确保当前模块的logger也设置为INFO级别
+logger.setLevel(logging.INFO)
 
 class HippoRAG:
     """
@@ -225,30 +240,33 @@ class HippoRAG:
         self.graph = self.initialize_graph()
 
         # 初始化嵌入模型（离线模式下为None）
-        if self.global_config.openie_mode == 'offline':
-            self.embedding_model = None
-        else:
-            self.embedding_model: BaseEmbeddingModel = _get_embedding_model_class(
-                embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
-                                                                              embedding_model_name=self.global_config.embedding_model_name)
+        # if self.global_config.openie_mode == 'offline':
+        #     self.embedding_model = None
+        # else:
+        #     self.embedding_model = _get_embedding_model_class(
+        #         embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
+        #                                                                       embedding_model_name=self.global_config.embedding_model_name)
         
-        # 初始化三个嵌入存储器：段落、实体、事实
-        self.file_embedding_store = EmbeddingStore(self.embedding_model,
+        self.embedding_model = LLM(model="../Qwen3-Embedding-4B", task="embed",dtype=torch.float16)
+
+
+        # 初始化五个嵌入存储器：文件、段落、代码、表格、实体、事实
+        self.file_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                    os.path.join(self.working_dir, "file_embeddings"),
                                                    self.global_config.embedding_batch_size, 'file') # file_id,摘要,embedding
-        self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
+        self.chunk_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
                                                     self.global_config.embedding_batch_size, 'chunk') # chunk_id,摘要,embedding
-        self.entity_embedding_store = EmbeddingStore(self.embedding_model,
+        self.code_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                      os.path.join(self.working_dir, "code_embeddings"),
                                                      self.global_config.embedding_batch_size, 'code') # code_id,代码摘要,embedding
-        self.table_embedding_store = EmbeddingStore(self.embedding_model,
+        self.table_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                      os.path.join(self.working_dir, "table_embeddings"),
                                                      self.global_config.embedding_batch_size, 'table') # table_id,表格摘要,embedding
-        self.entity_embedding_store = EmbeddingStore(self.embedding_model, 
+        self.entity_embedding_store = EmbeddingStoreV2(self.embedding_model, 
                                                      os.path.join(self.working_dir, "entity_embeddings"),
                                                      self.global_config.embedding_batch_size, 'entity') # entity_id,实体,embedding
-        self.fact_embedding_store = EmbeddingStore(self.embedding_model,
+        self.fact_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                    os.path.join(self.working_dir, "fact_embeddings"),
                                                    self.global_config.embedding_batch_size, 'fact') # fact_id,事实,embedding
         
@@ -271,7 +289,7 @@ class HippoRAG:
         self.all_retrieval_time = 0  # 总检索耗时
 
         # 实体到段落映射（用于增量更新）
-        self.ent_node_to_chunk_ids = None
+        self.ent_node_to_chunk_ids: Optional[Dict[str, set]] = None
 
     def initialize_graph(self):
         """
@@ -306,6 +324,29 @@ class HippoRAG:
                 f"Loaded graph from {self._graph_pickle_filename} with {preloaded_graph.vcount()} nodes, {preloaded_graph.ecount()} edges"
             )
             return preloaded_graph
+
+    def _batch_encode_texts(self, texts, instruction=None, norm=True):
+        """
+        使用新的嵌入模型API对文本进行批量编码
+        
+        Args:
+            texts: 要编码的文本列表或单个文本
+            instruction: 指令文本（暂时未使用）
+            norm: 是否归一化（暂时未使用）
+            
+        Returns:
+            embeddings: 嵌入向量
+        """
+        if isinstance(texts, str):
+            texts = [texts]
+        
+        outputs = self.embedding_model.embed(texts)
+        embeddings = torch.tensor([o.outputs.embedding for o in outputs])
+        
+        if len(texts) == 1:
+            return embeddings[0]
+        else:
+            return embeddings
 
     def pre_openie(self,  docs: List[str]):
         """
@@ -534,8 +575,8 @@ class HippoRAG:
 
     def retrieve(self,
                  queries: List[str],
-                 num_to_retrieve: int = None,
-                 gold_docs: List[List[str]] = None) -> List[QuerySolution] | Tuple[List[QuerySolution], Dict]:
+                 num_to_retrieve: Optional[int] = None,
+                 gold_docs: Optional[List[List[str]]] = None) -> List[QuerySolution] | Tuple[List[QuerySolution], Dict]:
         """
         HippoRAG检索：模拟人类记忆的多步骤检索过程
         
@@ -581,7 +622,7 @@ class HippoRAG:
         # 记录检索开始时间
 
         if num_to_retrieve is None:
-            num_to_retrieve = self.global_config.retrieval_top_k
+            num_to_retrieve = self.global_config.retrieval_top_k # 200
 
         if gold_docs is not None:
             retrieval_recall_evaluator = RetrievalRecall(global_config=self.global_config)
@@ -1132,7 +1173,7 @@ class HippoRAG:
 
                 num_nns = 0
                 for nn, score in zip(nns[0], nns[1]):
-                    if score < self.global_config.synonymy_edge_sim_threshold or num_nns > 100:
+                    if score < self.global_config.synonymy_edge_sim_threshold: # or num_nns > 100:
                         break
 
                     nn_phrase = self.entity_id_to_row[nn]["content"]
@@ -1273,8 +1314,8 @@ class HippoRAG:
         整合成一个完整的图结构。
         
         处理流程:
-        1. 添加新节点 - 将实体和段落节点加入图中
-        2. 添加新边 - 建立节点间的连接关系
+        1. 添加新节点 - 将所有类型的节点加入图中（文件、段落、代码、表格、实体、事实）
+        2. 添加新边 - 建立节点间的连接关系（结构性边和语义边）
         3. 记录完成状态并输出图信息
         
         重要性:
@@ -1293,20 +1334,24 @@ class HippoRAG:
 
     def add_new_nodes(self):
         """
-        添加新节点：将实体和段落节点批量加入图中
+        添加新节点：将所有类型的节点批量加入图中
         
-        从实体嵌入存储器和段落嵌入存储器中获取所有节点信息，
-        与图中现有节点进行比较，识别并批量添加新节点。
+        从所有嵌入存储器中获取节点信息，与图中现有节点进行比较，
+        识别并批量添加新节点。支持层次化结构的多种节点类型。
         
         处理逻辑:
         1. 获取图中现有节点列表
-        2. 从嵌入存储器中获取所有节点信息
+        2. 从所有嵌入存储器中获取节点信息
         3. 识别尚未添加到图中的新节点
         4. 批量添加新节点及其属性
         
         节点类型:
-        - 实体节点：从entity_embedding_store获取
+        - 文件节点：从file_embedding_store获取
         - 段落节点：从chunk_embedding_store获取
+        - 代码节点：从code_embedding_store获取
+        - 表格节点：从table_embedding_store获取
+        - 实体节点：从entity_embedding_store获取
+        - 事实节点：从fact_embedding_store获取
         
         优化特性:
         - 批量操作提高效率
@@ -1317,13 +1362,56 @@ class HippoRAG:
         # 获取图中现有节点，建立名称到节点的映射
         existing_nodes = {v["name"]: v for v in self.graph.vs if "name" in v.attributes()}
 
-        # 从嵌入存储器中获取所有实体和段落的ID到行的映射
-        entity_to_row = self.entity_embedding_store.get_all_id_to_rows()
-        passage_to_row = self.chunk_embedding_store.get_all_id_to_rows()
+        # 从所有嵌入存储器中获取ID到行的映射
+        all_node_stores = []
+        
+        # 获取各类型节点（如果存在数据）
+        try:
+            file_to_row = self.file_embedding_store.get_all_id_to_rows()
+            if file_to_row:
+                all_node_stores.append(file_to_row)
+        except Exception as e:
+            logger.debug(f"No file nodes to add: {e}")
+        
+        try:
+            chunk_to_row = self.chunk_embedding_store.get_all_id_to_rows()
+            if chunk_to_row:
+                all_node_stores.append(chunk_to_row)
+        except Exception as e:
+            logger.debug(f"No chunk nodes to add: {e}")
+            
+        try:
+            code_to_row = self.code_embedding_store.get_all_id_to_rows()
+            if code_to_row:
+                all_node_stores.append(code_to_row)
+        except Exception as e:
+            logger.debug(f"No code nodes to add: {e}")
+            
+        try:
+            table_to_row = self.table_embedding_store.get_all_id_to_rows()
+            if table_to_row:
+                all_node_stores.append(table_to_row)
+        except Exception as e:
+            logger.debug(f"No table nodes to add: {e}")
+            
+        try:
+            entity_to_row = self.entity_embedding_store.get_all_id_to_rows()
+            if entity_to_row:
+                all_node_stores.append(entity_to_row)
+        except Exception as e:
+            logger.debug(f"No entity nodes to add: {e}")
+            
+        # try:
+        #     fact_to_row = self.fact_embedding_store.get_all_id_to_rows()
+        #     if fact_to_row:
+        #         all_node_stores.append(fact_to_row)
+        # except Exception as e:
+        #     logger.debug(f"No fact nodes to add: {e}")
 
-        # 合并实体和段落节点信息
-        node_to_rows = entity_to_row
-        node_to_rows.update(passage_to_row)
+        # 合并所有节点信息
+        node_to_rows = {}
+        for store in all_node_stores:
+            node_to_rows.update(store)
 
         # 准备新节点的属性字典
         new_nodes = {}
@@ -1340,13 +1428,14 @@ class HippoRAG:
         # 如果有新节点，批量添加到图中
         if len(new_nodes) > 0:
             self.graph.add_vertices(n=len(next(iter(new_nodes.values()))), attributes=new_nodes)
+            logger.info(f"Added {len(next(iter(new_nodes.values())))} new nodes to graph")
 
     def add_new_edges(self):
         """
         添加新边：将节点间的连接关系加入图中
         
         处理node_to_node_stats中记录的所有边信息，验证边的有效性，
-        并将有效的边批量添加到图结构中。
+        并将有效的边批量添加到图结构中。支持多种类型的边。
         
         处理流程:
         1. 构建邻接表和逆邻接表
@@ -1355,9 +1444,10 @@ class HippoRAG:
         4. 批量添加有效边到图中
         
         边类型包括:
-        - 事实边：实体间的关系连接
+        - 结构性边：层次关系边（contains）、跳转边（jump）
+        - 语义边：实体间的关系连接（基于三元组）
+        - 同义词边：相似实体间的连接（基于相似度）
         - 段落边：段落与实体的连接
-        - 同义词边：相似实体间的连接
         
         验证机制:
         - 检查源节点和目标节点是否都存在于图中
@@ -1377,10 +1467,19 @@ class HippoRAG:
         edge_target_node_keys = []
         edge_metadata = []
         
+        # 统计边的类型
+        edge_type_counts = {
+            'structural': 0,  # 结构性边
+            'semantic': 0,    # 语义边
+            'synonymy': 0,    # 同义词边
+            'passage': 0      # 段落边
+        }
+        
         # 遍历所有节点间的统计信息
         for edge, weight in self.node_to_node_stats.items():
             # 跳过自环边
-            if edge[0] == edge[1]: continue
+            if edge[0] == edge[1]: 
+                continue
             
             # 构建邻接表
             graph_adj_list[edge[0]][edge[1]] = weight
@@ -1389,12 +1488,18 @@ class HippoRAG:
             # 准备边信息
             edge_source_node_keys.append(edge[0])
             edge_target_node_keys.append(edge[1])
+            
+            # 判断边的类型
+            edge_type = self._classify_edge_type(edge[0], edge[1])
+            edge_type_counts[edge_type] += 1
+            
             edge_metadata.append({
-                "weight": weight
+                "weight": weight,
+                "type": edge_type
             })
 
         # 验证边的有效性并准备添加
-        valid_edges, valid_weights = [], {"weight": []}
+        valid_edges, valid_weights = [], {"weight": [], "type": []}
         current_node_ids = set(self.graph.vs["name"])
         
         for source_node_id, target_node_id, edge_d in zip(edge_source_node_keys, edge_target_node_keys, edge_metadata):
@@ -1402,16 +1507,62 @@ class HippoRAG:
             if source_node_id in current_node_ids and target_node_id in current_node_ids:
                 valid_edges.append((source_node_id, target_node_id))
                 weight = edge_d.get("weight", 1.0)
+                edge_type = edge_d.get("type", "unknown")
                 valid_weights["weight"].append(weight)
+                valid_weights["type"].append(edge_type)
             else:
                 # 记录无效边的警告
                 logger.warning(f"Edge {source_node_id} -> {target_node_id} is not valid.")
         
         # 批量添加有效边到图中
-        self.graph.add_edges(
-            valid_edges,
-            attributes=valid_weights
-        )
+        if valid_edges:
+            self.graph.add_edges(
+                valid_edges,
+                attributes=valid_weights
+            )
+            logger.info(f"Added {len(valid_edges)} edges to graph")
+            logger.info(f"Edge type distribution: {edge_type_counts}")
+        else:
+            logger.warning("No valid edges to add to graph")
+            
+    def _classify_edge_type(self, source_id: str, target_id: str) -> str:
+        """
+        分类边的类型
+        
+        Args:
+            source_id: 源节点ID
+            target_id: 目标节点ID
+            
+        Returns:
+            str: 边的类型 ('structural', 'semantic', 'synonymy', 'passage')
+        """
+        # 结构性边：文件到段落、段落到代码/表格、段落到子段落
+        if ((source_id.startswith('file-') and target_id.startswith('chunk-')) or
+            (source_id.startswith('chunk-') and target_id.startswith('code-')) or
+            (source_id.startswith('chunk-') and target_id.startswith('table-')) or
+            (source_id.startswith('chunk-') and target_id.startswith('chunk-'))):
+            return 'structural'
+        
+        # 段落边：段落到实体
+        if source_id.startswith('chunk-') and target_id.startswith('entity-'):
+            return 'passage'
+        
+        # 实体间的边需要进一步区分
+        if source_id.startswith('entity-') and target_id.startswith('entity-'):
+            edge_weight = self.node_to_node_stats.get((source_id, target_id), 0)
+            
+            # 同义词边：权重是相似度分数（通常是0-1之间的浮点数）
+            # 这种边是通过add_synonymy_edges方法添加的
+            if (isinstance(edge_weight, float) and 0 < edge_weight < 1):
+                return 'synonymy'
+            
+            # 语义边：权重是整数（通常是三元组的共现次数）
+            # 这种边是通过add_fact_edges方法添加的
+            else:
+                return 'semantic'
+        
+        # 默认为结构性边
+        return 'structural'
 
     def save_igraph(self):
         logger.info(
@@ -1422,56 +1573,103 @@ class HippoRAG:
 
     def get_graph_info(self) -> Dict:
         """
-        Obtains detailed information about the graph such as the number of nodes,
-        triples, and their classifications.
-
-        This method calculates various statistics about the graph based on the
-        stores and node-to-node relationships, including counts of phrase and
-        passage nodes, total nodes, extracted triples, triples involving passage
-        nodes, synonymy triples, and total triples.
-
+        获取图的详细信息：支持层次化结构的统计信息
+        
+        统计各类节点和连接的数量，包括：
+        - 文件节点数量
+        - 段落节点数量  
+        - 代码块节点数量
+        - 表格节点数量
+        - 实体节点数量
+        - 事实数量
+        - 各类边的数量统计
+        
         Returns:
-            Dict
-                A dictionary containing the following keys and their respective values:
-                - num_phrase_nodes: The number of unique phrase nodes.
-                - num_passage_nodes: The number of unique passage nodes.
-                - num_total_nodes: The total number of nodes (sum of phrase and passage nodes).
-                - num_extracted_triples: The number of unique extracted triples.
-                - num_triples_with_passage_node: The number of triples involving at least one
-                  passage node.
-                - num_synonymy_triples: The number of synonymy triples (distinct from extracted
-                  triples and those with passage nodes).
-                - num_total_triples: The total number of triples.
+            Dict: 包含图统计信息的字典
         """
         graph_info = {}
 
-        # get # of phrase nodes
-        phrase_nodes_keys = self.entity_embedding_store.get_all_ids()
-        graph_info["num_phrase_nodes"] = len(set(phrase_nodes_keys))
+        # 获取各类节点数量
+        try:
+            file_nodes_keys = self.file_embedding_store.get_all_ids()
+            graph_info["num_file_nodes"] = len(set(file_nodes_keys))
+        except:
+            graph_info["num_file_nodes"] = 0
 
-        # get # of passage nodes
-        passage_nodes_keys = self.chunk_embedding_store.get_all_ids()
-        graph_info["num_passage_nodes"] = len(set(passage_nodes_keys))
+        try:
+            chunk_nodes_keys = self.chunk_embedding_store.get_all_ids()
+            graph_info["num_chunk_nodes"] = len(set(chunk_nodes_keys))
+        except:
+            graph_info["num_chunk_nodes"] = 0
 
-        # get # of total nodes
-        graph_info["num_total_nodes"] = graph_info["num_phrase_nodes"] + graph_info["num_passage_nodes"]
+        try:
+            code_nodes_keys = self.code_embedding_store.get_all_ids()
+            graph_info["num_code_nodes"] = len(set(code_nodes_keys))
+        except:
+            graph_info["num_code_nodes"] = 0
 
-        # get # of extracted triples
-        graph_info["num_extracted_triples"] = len(self.fact_embedding_store.get_all_ids())
+        try:
+            table_nodes_keys = self.table_embedding_store.get_all_ids()
+            graph_info["num_table_nodes"] = len(set(table_nodes_keys))
+        except:
+            graph_info["num_table_nodes"] = 0
 
-        num_triples_with_passage_node = 0
-        passage_nodes_set = set(passage_nodes_keys)
-        num_triples_with_passage_node = sum(
-            1 for node_pair in self.node_to_node_stats
-            if node_pair[0] in passage_nodes_set or node_pair[1] in passage_nodes_set
-        )
-        graph_info['num_triples_with_passage_node'] = num_triples_with_passage_node
+        try:
+            entity_nodes_keys = self.entity_embedding_store.get_all_ids()
+            graph_info["num_entity_nodes"] = len(set(entity_nodes_keys))
+        except:
+            graph_info["num_entity_nodes"] = 0
 
-        graph_info['num_synonymy_triples'] = len(self.node_to_node_stats) - graph_info[
-            "num_extracted_triples"] - num_triples_with_passage_node
+        # 计算总节点数
+        graph_info["num_total_nodes"] = (graph_info["num_file_nodes"] + 
+                                        graph_info["num_chunk_nodes"] +
+                                        graph_info["num_code_nodes"] + 
+                                        graph_info["num_table_nodes"] +
+                                        graph_info["num_entity_nodes"])
 
-        # get # of total triples
-        graph_info["num_total_triples"] = len(self.node_to_node_stats)
+        # 获取事实数量
+        try:
+            graph_info["num_extracted_facts"] = len(self.fact_embedding_store.get_all_ids())
+        except:
+            graph_info["num_extracted_facts"] = 0
+
+        # 统计边的数量和类型
+        if hasattr(self, 'node_to_node_stats') and self.node_to_node_stats:
+            # 统计不同类型的边
+            structure_edges = 0  # 结构性边
+            semantic_edges = 0   # 语义边（实体关系）
+            synonymy_edges = 0   # 同义词边
+            
+            all_node_sets = set()
+            try:
+                all_node_sets.update(chunk_nodes_keys)
+            except:
+                pass
+            try:
+                all_node_sets.update(entity_nodes_keys)
+            except:
+                pass
+            
+            for (node1, node2) in self.node_to_node_stats:
+                # 判断边的类型
+                if (node1.startswith('file-') or node1.startswith('chunk-') or 
+                    node1.startswith('code-') or node1.startswith('table-')):
+                    structure_edges += 1
+                elif (node1.startswith('entity-') and node2.startswith('entity-')):
+                    # 这里可以进一步区分是语义边还是同义词边
+                    # 简化处理：假设实体间的边都是语义边
+                    semantic_edges += 1
+                else:
+                    # 其他边归类为结构边
+                    structure_edges += 1
+            
+            graph_info["num_structure_edges"] = structure_edges
+            graph_info["num_semantic_edges"] = semantic_edges
+            graph_info["num_total_edges"] = len(self.node_to_node_stats)
+        else:
+            graph_info["num_structure_edges"] = 0
+            graph_info["num_semantic_edges"] = 0
+            graph_info["num_total_edges"] = 0
 
         return graph_info
 
@@ -1506,99 +1704,116 @@ class HippoRAG:
         logger.info("Preparing for fast retrieval.")
 
         logger.info("Loading keys.")
+        # 初始化查询嵌入缓存字典，用于存储查询的向量表示
+        # 分别缓存用于事实检索和段落检索的查询嵌入
         self.query_to_embedding: Dict = {'triple': {}, 'passage': {}}
 
-        self.entity_node_keys: List = list(self.entity_embedding_store.get_all_ids()) # a list of phrase node keys
-        self.passage_node_keys: List = list(self.chunk_embedding_store.get_all_ids()) # a list of passage node keys
-        self.fact_node_keys: List = list(self.fact_embedding_store.get_all_ids())
+        # 从各个嵌入存储器中获取所有节点的键列表
+        # 这些键用于后续的向量检索和图搜索
+        self.entity_node_keys: List = list(self.entity_embedding_store.get_all_ids()) # 实体节点键列表
+        self.passage_node_keys: List = list(self.chunk_embedding_store.get_all_ids()) # 段落节点键列表
+        self.fact_node_keys: List = list(self.fact_embedding_store.get_all_ids()) # 事实节点键列表
 
-        # Check if the graph has the expected number of nodes
+        # 数据一致性检查：验证图中的节点数量与嵌入存储器中的节点数量是否匹配
         expected_node_count = len(self.entity_node_keys) + len(self.passage_node_keys)
         actual_node_count = self.graph.vcount()
         
         if expected_node_count != actual_node_count:
             logger.warning(f"Graph node count mismatch: expected {expected_node_count}, got {actual_node_count}")
-            # If the graph is empty but we have nodes, we need to add them
+            # 如果图为空但存在节点数据，需要重新构建图
             if actual_node_count == 0 and expected_node_count > 0:
                 logger.info(f"Initializing graph with {expected_node_count} nodes")
                 self.add_new_nodes()
                 self.save_igraph()
 
-        # Create mapping from node name to vertex index
+        # 创建节点名称到图顶点索引的映射关系
+        # 这个映射用于在图搜索时快速定位节点
         try:
-            igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)} # from node key to the index in the backbone graph
+            igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)} # 节点键到图索引的映射
             self.node_name_to_vertex_idx = igraph_name_to_idx
             
-            # Check if all entity and passage nodes are in the graph
+            # 检查所有实体和段落节点是否都在图中存在
             missing_entity_nodes = [node_key for node_key in self.entity_node_keys if node_key not in igraph_name_to_idx]
             missing_passage_nodes = [node_key for node_key in self.passage_node_keys if node_key not in igraph_name_to_idx]
             
             if missing_entity_nodes or missing_passage_nodes:
                 logger.warning(f"Missing nodes in graph: {len(missing_entity_nodes)} entity nodes, {len(missing_passage_nodes)} passage nodes")
-                # If nodes are missing, rebuild the graph
+                # 如果发现缺失节点，重新构建图结构
                 self.add_new_nodes()
                 self.save_igraph()
-                # Update the mapping
+                # 更新映射关系
                 igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)}
                 self.node_name_to_vertex_idx = igraph_name_to_idx
             
-            self.entity_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.entity_node_keys] # a list of backbone graph node index
-            self.passage_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.passage_node_keys] # a list of backbone passage node index
+            # 创建节点键到图索引的快速查找列表
+            self.entity_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.entity_node_keys] # 实体节点的图索引列表
+            self.passage_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.passage_node_keys] # 段落节点的图索引列表
         except Exception as e:
             logger.error(f"Error creating node index mapping: {str(e)}")
-            # Initialize with empty lists if mapping fails
+            # 如果映射创建失败，初始化为空列表
             self.node_name_to_vertex_idx = {}
             self.entity_node_idxs = []
             self.passage_node_idxs = []
 
         logger.info("Loading embeddings.")
+        # 将所有向量嵌入加载到内存中的numpy数组，提高检索性能
+        # 避免检索时频繁的磁盘I/O操作
         self.entity_embeddings = np.array(self.entity_embedding_store.get_embeddings(self.entity_node_keys))
         self.passage_embeddings = np.array(self.chunk_embedding_store.get_embeddings(self.passage_node_keys))
-
         self.fact_embeddings = np.array(self.fact_embedding_store.get_embeddings(self.fact_node_keys))
 
+        # 加载现有的OpenIE结果，用于构建事实到文档的映射关系
         all_openie_info, chunk_keys_to_process = self.load_existing_openie([])
 
+        # 初始化处理后的三元组到文档的映射字典
+        # 用于跟踪每个事实三元组出现在哪些文档中
         self.proc_triples_to_docs = {}
 
+        # 构建三元组到文档的映射关系
         for doc in all_openie_info:
             triples = flatten_facts([doc['extracted_triples']])
             for triple in triples:
                 if len(triple) == 3:
+                    # 对三元组进行文本处理并创建映射
                     proc_triple = tuple(text_processing(list(triple)))
                     self.proc_triples_to_docs[str(proc_triple)] = self.proc_triples_to_docs.get(str(proc_triple), set()).union(set([doc['idx']]))
 
+        # 如果实体节点到段落ID的映射不存在，需要重新构建
         if self.ent_node_to_chunk_ids is None:
+            # 重新格式化OpenIE结果为标准化格式
             ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)
 
-            # Check if the lengths match
+            # 检查数据长度是否匹配，确保数据完整性
             if not (len(self.passage_node_keys) == len(ner_results_dict) == len(triple_results_dict)):
                 logger.warning(f"Length mismatch: passage_node_keys={len(self.passage_node_keys)}, ner_results_dict={len(ner_results_dict)}, triple_results_dict={len(triple_results_dict)}")
                 
-                # If there are missing keys, create empty entries for them
+                # 为缺失的段落创建空的OpenIE结果条目
                 for chunk_id in self.passage_node_keys:
                     if chunk_id not in ner_results_dict:
                         ner_results_dict[chunk_id] = NerRawOutput(
                             chunk_id=chunk_id,
-                            response=None,
+                            response="",  # 修复：使用空字符串而不是None
                             metadata={},
                             unique_entities=[]
                         )
                     if chunk_id not in triple_results_dict:
                         triple_results_dict[chunk_id] = TripleRawOutput(
                             chunk_id=chunk_id,
-                            response=None,
+                            response="",  # 修复：使用空字符串而不是None
                             metadata={},
                             triples=[]
                         )
 
-            # prepare data_store
+            # 准备段落三元组数据，用于构建图边
             chunk_triples = [[text_processing(t) for t in triple_results_dict[chunk_id].triples] for chunk_id in self.passage_node_keys]
 
+            # 初始化节点统计和实体到段落的映射
             self.node_to_node_stats = {}
             self.ent_node_to_chunk_ids = {}
+            # 添加基于事实的图边连接
             self.add_fact_edges(self.passage_node_keys, chunk_triples)
 
+        # 标记检索对象已准备完毕，可以开始执行检索操作
         self.ready_to_retrieve = True
 
     def get_query_embeddings(self, queries: List[str] | List[QuerySolution]):
@@ -1626,16 +1841,16 @@ class HippoRAG:
             logger.info(f"Encoding {len(all_query_strings)} queries for query_to_fact.")
             # debug;flush
             print(f"all_query_strings: {all_query_strings}", flush=True)
-            query_embeddings_for_triple = self.embedding_model.batch_encode(all_query_strings,
-                                                                            instruction=get_query_instruction('query_to_fact'),
-                                                                            norm=True)
+            query_embeddings_for_triple = self._batch_encode_texts(all_query_strings,
+                                                                   instruction=get_query_instruction('query_to_fact'),
+                                                                   norm=True)
             for query, embedding in zip(all_query_strings, query_embeddings_for_triple):
                 self.query_to_embedding['triple'][query] = embedding
 
             logger.info(f"Encoding {len(all_query_strings)} queries for query_to_passage.")
-            query_embeddings_for_passage = self.embedding_model.batch_encode(all_query_strings,
-                                                                             instruction=get_query_instruction('query_to_passage'),
-                                                                             norm=True)
+            query_embeddings_for_passage = self._batch_encode_texts(all_query_strings,
+                                                                    instruction=get_query_instruction('query_to_passage'),
+                                                                    norm=True)
             for query, embedding in zip(all_query_strings, query_embeddings_for_passage):
                 self.query_to_embedding['passage'][query] = embedding
 
@@ -1667,9 +1882,9 @@ class HippoRAG:
         """
         query_embedding = self.query_to_embedding['triple'].get(query, None)
         if query_embedding is None:
-            query_embedding = self.embedding_model.batch_encode(query,
-                                                                instruction=get_query_instruction('query_to_fact'),
-                                                                norm=True)
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_fact'),
+                                                       norm=True)
 
         # Check if there are any facts
         if len(self.fact_embeddings) == 0:
@@ -1725,9 +1940,9 @@ class HippoRAG:
         """
         query_embedding = self.query_to_embedding['passage'].get(query, None)
         if query_embedding is None:
-            query_embedding = self.embedding_model.batch_encode(query,
-                                                                instruction=get_query_instruction('query_to_passage'),
-                                                                norm=True)
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
         query_doc_scores = np.dot(self.passage_embeddings, query_embedding.T)
         query_doc_scores = np.squeeze(query_doc_scores) if query_doc_scores.ndim == 2 else query_doc_scores
         query_doc_scores = min_max_normalize(query_doc_scores)
@@ -1783,99 +1998,115 @@ class HippoRAG:
                                         top_k_fact_indices: List[str],
                                         passage_node_weight: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Computes document scores based on fact-based similarity and relevance using personalized
-        PageRank (PPR) and dense retrieval models. This function combines the signal from the relevant
-        facts identified with passage similarity and graph-based search for enhanced result ranking.
+        基于事实实体的图搜索算法
+        
+        使用个性化PageRank (PPR)和密集检索模型，基于事实相似性和相关性计算文档分数。
+        该函数将相关事实的信号与段落相似性和基于图的搜索相结合，以增强结果排名。
 
         Parameters:
-            query (str): The input query string for which similarity and relevance computations
-                need to be performed.
-            link_top_k (int): The number of top phrases to include from the linking score map for
-                downstream processing.
-            query_fact_scores (np.ndarray): An array of scores representing fact-query similarity
-                for each of the provided facts.
-            top_k_facts (List[Tuple]): A list of top-ranked facts, where each fact is represented
-                as a tuple of its subject, predicate, and object.
-            top_k_fact_indices (List[str]): Corresponding indices or identifiers for the top-ranked
-                facts in the query_fact_scores array.
-            passage_node_weight (float): Default weight to scale passage scores in the graph.
+            query (str): 需要进行相似性和相关性计算的输入查询字符串
+            link_top_k (int): 从链接分数映射中包含的顶级短语数量，用于下游处理
+            query_fact_scores (np.ndarray): 表示每个提供事实的事实-查询相似性的分数数组
+            top_k_facts (List[Tuple]): 顶级事实列表，每个事实表示为主语、谓语和宾语的元组
+            top_k_fact_indices (List[str]): query_fact_scores数组中顶级事实对应的索引或标识符
+            passage_node_weight (float): 缩放图中段落分数的默认权重
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: A tuple containing two arrays:
-                - The first array corresponds to document IDs sorted based on their scores.
-                - The second array consists of the PPR scores associated with the sorted document IDs.
+            Tuple[np.ndarray, np.ndarray]: 包含两个数组的元组：
+                - 第一个数组对应根据分数排序的文档ID
+                - 第二个数组包含与排序文档ID关联的PPR分数
         """
-        #Assigning phrase weights based on selected facts from previous steps.
-        linking_score_map = {}  # from phrase to the average scores of the facts that contain the phrase
-        phrase_scores = {}  # store all fact scores for each phrase regardless of whether they exist in the knowledge graph or not
-        phrase_weights = np.zeros(len(self.graph.vs['name']))
-        passage_weights = np.zeros(len(self.graph.vs['name']))
+        # 基于前面步骤选择的事实分配短语权重
+        linking_score_map = {}  # 从短语到包含该短语的事实的平均分数的映射
+        phrase_scores = {}  # 存储每个短语的所有事实分数，无论它们是否存在于知识图谱中
+        phrase_weights = np.zeros(len(self.graph.vs['name']))  # 初始化短语权重数组
+        passage_weights = np.zeros(len(self.graph.vs['name']))  # 初始化段落权重数组
 
+        # 遍历顶级事实，为相关短语分配权重
         for rank, f in enumerate(top_k_facts):
-            subject_phrase = f[0].lower()
-            predicate_phrase = f[1].lower()
-            object_phrase = f[2].lower()
+            subject_phrase = f[0].lower()  # 事实的主语短语（转为小写）
+            predicate_phrase = f[1].lower()  # 事实的谓语短语（转为小写）
+            object_phrase = f[2].lower()  # 事实的宾语短语（转为小写）
+            
+            # 获取当前事实的相关性分数
             fact_score = query_fact_scores[
                 top_k_fact_indices[rank]] if query_fact_scores.ndim > 0 else query_fact_scores
+                
+            # 处理主语和宾语短语（谓语通常不作为实体处理）
             for phrase in [subject_phrase, object_phrase]:
+                # 计算短语的哈希ID
                 phrase_key = compute_mdhash_id(
                     content=phrase,
                     prefix="entity-"
                 )
+                # 获取短语在图中的节点ID
                 phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
 
+                # 如果短语在图中存在
                 if phrase_id is not None:
+                    # 设置短语权重为事实分数
                     phrase_weights[phrase_id] = fact_score
 
-                    if len(self.ent_node_to_chunk_ids.get(phrase_key, set())) > 0:
+                    # 检查实体到文档块的映射是否存在且非空
+                    if self.ent_node_to_chunk_ids is not None and len(self.ent_node_to_chunk_ids.get(phrase_key, set())) > 0:
+                        # 根据包含该实体的文档块数量进行权重归一化
                         phrase_weights[phrase_id] /= len(self.ent_node_to_chunk_ids[phrase_key])
 
+                # 记录短语分数用于后续平均值计算
                 if phrase not in phrase_scores:
                     phrase_scores[phrase] = []
                 phrase_scores[phrase].append(fact_score)
 
-        # calculate average fact score for each phrase
+        # 计算每个短语的平均事实分数
         for phrase, scores in phrase_scores.items():
             linking_score_map[phrase] = float(np.mean(scores))
 
+        # 如果指定了链接top-k，则过滤权重以保留顶级短语
         if link_top_k:
             phrase_weights, linking_score_map = self.get_top_k_weights(link_top_k,
                                                                            phrase_weights,
-                                                                           linking_score_map)  # at this stage, the length of linking_scope_map is determined by link_top_k
+                                                                           linking_score_map)
 
-        #Get passage scores according to chosen dense retrieval model
+        # 根据选择的密集检索模型获取段落分数
         dpr_sorted_doc_ids, dpr_sorted_doc_scores = self.dense_passage_retrieval(query)
+        # 对DPR分数进行最小-最大归一化
         normalized_dpr_sorted_scores = min_max_normalize(dpr_sorted_doc_scores)
 
+        # 为每个检索到的段落分配权重
         for i, dpr_sorted_doc_id in enumerate(dpr_sorted_doc_ids.tolist()):
-            passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]
-            passage_dpr_score = normalized_dpr_sorted_scores[i]
-            passage_node_id = self.node_name_to_vertex_idx[passage_node_key]
+            passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]  # 获取段落节点键
+            passage_dpr_score = normalized_dpr_sorted_scores[i]  # 获取归一化的DPR分数
+            passage_node_id = self.node_name_to_vertex_idx[passage_node_key]  # 获取段落在图中的节点ID
+            # 设置段落权重（乘以权重因子）
             passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
+            # 获取段落文本内容
             passage_node_text = self.chunk_embedding_store.get_row(passage_node_key)["content"]
+            # 将段落文本和分数添加到链接分数映射中
             linking_score_map[passage_node_text] = passage_dpr_score * passage_node_weight
 
-        #Combining phrase and passage scores into one array for PPR
+        # 将短语权重和段落权重合并为一个数组用于PPR计算
         node_weights = phrase_weights + passage_weights
 
-        #Recording top 30 facts in linking_score_map
+        # 限制linking_score_map的大小，只保留前30个最高分数的项目
         if len(linking_score_map) > 30:
             linking_score_map = dict(sorted(linking_score_map.items(), key=lambda x: x[1], reverse=True)[:30])
 
-        assert sum(node_weights) > 0, f'No phrases found in the graph for the given facts: {top_k_facts}'
+        # 确保至少有一些权重大于0，否则PPR算法无法运行
+        assert sum(node_weights) > 0, f'在给定事实的图中未找到短语: {top_k_facts}'
 
-        #Running PPR algorithm based on the passage and phrase weights previously assigned
-        ppr_start = time.time()
+        # 基于之前分配的段落和短语权重运行PPR算法
+        ppr_start = time.time()  # 记录PPR开始时间
         ppr_sorted_doc_ids, ppr_sorted_doc_scores = self.run_ppr(node_weights, damping=self.global_config.damping)
-        ppr_end = time.time()
+        ppr_end = time.time()  # 记录PPR结束时间
 
+        # 累加PPR计算时间
         self.ppr_time += (ppr_end - ppr_start)
 
+        # 验证返回的文档数量与语料库大小一致
         assert len(ppr_sorted_doc_ids) == len(
-            self.passage_node_idxs), f"Doc prob length {len(ppr_sorted_doc_ids)} != corpus length {len(self.passage_node_idxs)}"
+            self.passage_node_idxs), f"文档概率长度 {len(ppr_sorted_doc_ids)} != 语料库长度 {len(self.passage_node_idxs)}"
 
         return ppr_sorted_doc_ids, ppr_sorted_doc_scores
-
 
     def rerank_facts(self, query: str, query_fact_scores: np.ndarray) -> Tuple[List[int], List[Tuple], dict]:
         """
@@ -1921,42 +2152,47 @@ class HippoRAG:
 
 
         """
-        # load args
+        # 加载配置参数
         link_top_k: int = self.global_config.linking_top_k
         
-        # Check if there are any facts to rerank
+        # 检查是否有可用的事实进行重排序
         if len(query_fact_scores) == 0 or len(self.fact_node_keys) == 0:
             logger.warning("No facts available for reranking. Returning empty lists.")
             return [], [], {'facts_before_rerank': [], 'facts_after_rerank': []}
             
         try:
-            # Get the top k facts by score
+            # 根据分数获取前k个事实
             if len(query_fact_scores) <= link_top_k:
-                # If we have fewer facts than requested, use all of them
+                # 如果事实数量少于请求数量，使用所有事实
                 candidate_fact_indices = np.argsort(query_fact_scores)[::-1].tolist()
             else:
-                # Otherwise get the top k
+                # 否则获取前k个事实（按分数降序排列）
                 candidate_fact_indices = np.argsort(query_fact_scores)[-link_top_k:][::-1].tolist()
                 
-            # Get the actual fact IDs
+            # 获取实际的事实ID列表
             real_candidate_fact_ids = [self.fact_node_keys[idx] for idx in candidate_fact_indices]
+            
+            # 从嵌入存储器中获取事实内容
             fact_row_dict = self.fact_embedding_store.get_rows(real_candidate_fact_ids)
+            
+            # 解析事实内容，将字符串转换为三元组
             candidate_facts = [eval(fact_row_dict[id]['content']) for id in real_candidate_fact_ids]
             
-            # Rerank the facts
+            # 使用DSPy过滤器对事实进行重排序
             top_k_fact_indices, top_k_facts, reranker_dict = self.rerank_filter(query,
                                                                                 candidate_facts,
                                                                                 candidate_fact_indices,
                                                                                 len_after_rerank=link_top_k)
             
+            # 构建重排序日志，记录重排序前后的事实
             rerank_log = {'facts_before_rerank': candidate_facts, 'facts_after_rerank': top_k_facts}
             
             return top_k_fact_indices, top_k_facts, rerank_log
             
         except Exception as e:
+            # 异常处理：记录错误并返回空结果
             logger.error(f"Error in rerank_facts: {str(e)}")
             return [], [], {'facts_before_rerank': [], 'facts_after_rerank': [], 'error': str(e)}
-    
     def run_ppr(self,
                 reset_prob: np.ndarray,
                 damping: float =0.5) -> Tuple[np.ndarray, np.ndarray]:
@@ -2010,3 +2246,275 @@ class HippoRAG:
         sorted_doc_scores = doc_scores[sorted_doc_ids.tolist()]
 
         return sorted_doc_ids, sorted_doc_scores
+
+    def index_from_json(self, json_structure: Dict[str, Any]):
+        """
+        从层次化JSON结构索引：支持复杂文档结构的HippoRAG索引
+        
+        基于层次化JSON结构构建知识图谱，支持文件、段落、代码块、表格和实体等多种节点类型：
+        1. 文件摘要生成和向量化
+        2. 段落摘要生成和向量化  
+        3. 代码块和表格的摘要及向量化
+        4. 实体提取和关系构建
+        5. 构建多层次的图结构连接
+        
+        Args:
+            json_structure (Dict[str, Any]): 层次化的JSON文档结构
+                格式如用户描述的triples.json结构
+                
+        JSON结构说明:
+        - file-xxxx: 文件节点
+          - abstract: 文件摘要
+          - file_path: 文件路径
+          - content: 文件内容
+          - chunks: 一级切分的段落
+            - chunk-xxxx: 段落节点
+              - abstract: 段落摘要
+              - content: 段落内容
+              - jump: 超链接信息
+              - codes: 代码块实体
+              - tables: 表格实体
+              - filter_chunk: 过滤后的段落内容及提取的实体关系
+              - chunks: 子级段落（递归结构）
+        """
+        logger.info(f"Indexing from hierarchical JSON structure")
+
+        # 收集所有节点信息
+        all_files = []
+        all_chunks = []
+        all_codes = []
+        all_tables = []
+        all_entities = []
+        all_facts = []
+        
+        # 图结构连接信息
+        structure_edges = []  # 结构性边 (parent -> child, jump等)
+        semantic_edges = []   # 语义边 (实体关系)
+        
+        # 递归处理JSON结构
+        self._extract_nodes_from_json(json_structure, all_files, all_chunks, all_codes, 
+                                     all_tables, all_entities, all_facts,
+                                     structure_edges, semantic_edges)
+        
+        logger.info(f"Extracted {len(all_files)} files, {len(all_chunks)} chunks, "
+                   f"{len(all_codes)} codes, {len(all_tables)} tables, "
+                   f"{len(all_entities)} entities, {len(all_facts)} facts")
+
+        # 对各类节点进行向量化编码 
+        logger.info(f"Encoding files") # 7348
+        if all_files:
+            self.file_embedding_store.insert_strings([file[0] for file in all_files], [file[1] for file in all_files], [file[2] for file in all_files])
+            
+        logger.info(f"Encoding chunks") # 68225
+        if all_chunks:
+            self.chunk_embedding_store.insert_strings([chunk[0] for chunk in all_chunks], [chunk[1] for chunk in all_chunks], [chunk[2] for chunk in all_chunks])
+            
+        logger.info(f"Encoding codes") # 20776
+        if all_codes:
+            self.code_embedding_store.insert_strings([code[0] for code in all_codes], [code[1] for code in all_codes], [code[2] for code in all_codes])
+            
+        logger.info(f"Encoding tables") # 17117
+        if all_tables:
+            self.table_embedding_store.insert_strings([table[0] for table in all_tables], [table[1] for table in all_tables], [table[2] for table in all_tables])
+            
+        logger.info(f"Encoding entities") # 328956
+        if all_entities:
+            self.entity_embedding_store.insert_strings([entity[0] for entity in all_entities], [entity[1] for entity in all_entities], [entity[2] for entity in all_entities])
+            
+        logger.info(f"Encoding facts") # 542375
+        if all_facts:
+            self.fact_embedding_store.insert_strings([fact[0] for fact in all_facts], [fact[1] for fact in all_facts], [fact[2] for fact in all_facts])
+
+        # 构建知识图谱
+        logger.info(f"Constructing hierarchical graph")
+        
+        self.node_to_node_stats = {}  # 节点间连接统计
+        self.ent_node_to_chunk_ids = {}  # 实体到段落的映射
+        
+        # 添加结构性边（层次关系、跳转关系等）
+        self._add_structure_edges(structure_edges)
+        
+        # 添加语义边（实体关系）
+        self._add_semantic_edges(semantic_edges)
+        
+        # 添加同义词边（基于相似度的实体连接）
+        if len(all_entities) > 0:
+            self.add_synonymy_edges()
+
+        # 增强图谱并保存
+        self.augment_graph()
+        self.save_igraph()
+        
+        logger.info(f"Hierarchical indexing completed!")
+        print(self.get_graph_info())
+
+    def _extract_nodes_from_json(self, json_structure: Dict[str, Any], 
+                                all_files: List[Tuple[str, str, str]], all_chunks: List[Tuple[str, str, str]],
+                                all_codes: List[Tuple[str, str, str]], all_tables: List[Tuple[str, str, str]],
+                                all_entities: List[Tuple[str, str, str]], all_facts: List[Triple],
+                                structure_edges: List[Tuple[str, str, str, float]],
+                                semantic_edges: List[Triple],
+                                parent_id: str = None):
+        """
+        递归提取JSON结构中的所有节点和边信息
+        
+        Args:
+            json_structure: JSON结构
+            all_*: 各类节点的收集列表
+            structure_edges: 结构性边列表 (source_id, target_id, edge_type, weight)
+            semantic_edges: 语义边列表 (三元组)
+            parent_id: 父节点ID
+        """
+        for node_id, node_data in json_structure.items():
+            if node_id.startswith('file-'):
+                # 处理文件节点
+                file_abstract = node_data.get('abstract', '')
+                file_content = node_data.get('content','')
+                if file_abstract and file_content:
+                    all_files.append((node_id, file_content, file_abstract))
+                    
+                # 处理文件的chunk子节点
+                chunks_data = node_data.get('chunks', {})
+                if chunks_data:
+                    self._extract_nodes_from_json(chunks_data, all_files, all_chunks,
+                                                 all_codes, all_tables, all_entities, all_facts,
+                                                 structure_edges, semantic_edges, parent_id=node_id)
+                    
+            elif node_id.startswith('chunk-'):
+                # 处理段落节点
+                chunk_abstract = node_data.get('abstract', '')
+                chunk_content = node_data.get('content', '')
+                
+                # 使用摘要或内容作为嵌入文本
+                # embed_text = chunk_abstract if chunk_abstract else chunk_content
+                if chunk_abstract and chunk_content:
+                    all_chunks.append((node_id, chunk_content, chunk_abstract))
+                
+                # 添加段落到父节点的边
+                if parent_id:
+                    structure_edges.append((parent_id, node_id, 'contains', 1.0))
+                
+                # 处理跳转关系
+                jump_data = node_data.get('jump', {})
+                for jump_file_id, jump_info in jump_data.items():
+                    structure_edges.append((node_id, jump_file_id, 'jump', 1.0))
+                
+                # 处理代码块
+                codes_data = node_data.get('codes', {})
+                for code_id, code_info in codes_data.items():
+                    code_abstract = code_info.get('abstract', '')
+                    code_content = code_info.get('content', '')
+                    # embed_text = code_abstract if code_abstract else code_content
+                    if code_abstract and code_content:
+                        all_codes.append((code_id,code_content,code_abstract))
+                        structure_edges.append((node_id, code_id, 'contains', 1.0))
+                
+                # 处理表格
+                tables_data = node_data.get('tables', {})
+                for table_id, table_info in tables_data.items():
+                    table_abstract = table_info.get('abstract', '')
+                    table_content = table_info.get('content', '')
+                    # embed_text = table_abstract if table_abstract else table_content
+                    if table_abstract and table_content:
+                        all_tables.append((table_id,table_content,table_abstract))
+                        structure_edges.append((node_id, table_id, 'contains', 1.0))
+                
+                # 处理过滤后的chunk中的实体和关系
+                filter_chunk = node_data.get('filter_chunk', {})
+                if filter_chunk:
+                    # 初始化实体到段落的映射（如果为None）
+                    if self.ent_node_to_chunk_ids is None:
+                        self.ent_node_to_chunk_ids = {}
+                    
+                    # 从三元组中提取实体
+                    triples = filter_chunk.get('extracted_triples', [])
+                    entities_from_triples = set()
+                    
+                    # 收集所有三元组中的实体
+                    for triple in triples:
+                        if isinstance(triple, list) and len(triple) == 3:
+                            subject, predicate, obj = triple
+                            entities_from_triples.add(str(subject))
+                            entities_from_triples.add(str(obj))
+                    
+                    # 构建实体定义映射
+                    entity_definitions = {}
+                    extracted_entities = filter_chunk.get('extracted_entities', [])
+                    for entity_info in extracted_entities:
+                        if isinstance(entity_info, list) and len(entity_info) >= 2:
+                            entity_name, entity_desc = str(entity_info[0]), str(entity_info[1])
+                            entity_definitions[entity_name] = entity_desc
+                    
+                    # 处理从三元组中提取的实体
+                    for entity_name in entities_from_triples:
+                        # 查找实体定义
+                        entity_desc = entity_definitions.get(entity_name, '')
+                        
+                        # 构建嵌入文本和哈希
+                        if entity_desc:
+                            embed_text = f"{entity_name}: {entity_desc}"
+                        else:
+                            embed_text = f"{entity_name}"
+                        
+                        entity_id = compute_mdhash_id(embed_text, "entity-")
+                        all_entities.append((entity_id, embed_text, embed_text))
+                        
+                        # 添加实体到段落的边
+                        structure_edges.append((node_id, entity_id, 'contains', 1.0))
+                        
+                        # 维护实体到段落的映射
+                        if entity_id not in self.ent_node_to_chunk_ids:
+                            self.ent_node_to_chunk_ids[entity_id] = set()
+                        self.ent_node_to_chunk_ids[entity_id].add(node_id)
+                    
+                    # 提取关系三元组
+                    for triple in triples:
+                        if isinstance(triple, list) and len(triple) == 3:
+                            processed_triple = (str(triple[0]), str(triple[1]), str(triple[2]))
+                            embed_text = str(processed_triple)
+                            all_facts.append((compute_mdhash_id(embed_text, "fact-"), embed_text, embed_text))
+                            entity_desc_1 = entity_definitions.get(processed_triple[0], '')
+                            entity_desc_2 = entity_definitions.get(processed_triple[2], '')
+                            embed_text_1 = f"{processed_triple[0]}: {entity_desc_1}" if entity_desc_1 else processed_triple[0]
+                            embed_text_2 = f"{processed_triple[2]}: {entity_desc_2}" if entity_desc_2 else processed_triple[2]
+                            semantic_edges.append((compute_mdhash_id(embed_text_1, "entity-"), processed_triple[1], compute_mdhash_id(embed_text_2, "entity-")))
+                
+                # 递归处理子chunks
+                sub_chunks = node_data.get('chunks', {})
+                if sub_chunks:
+                    self._extract_nodes_from_json(sub_chunks, all_files, all_chunks,
+                                                 all_codes, all_tables, all_entities, all_facts,
+                                                 structure_edges, semantic_edges, parent_id=node_id)
+
+    def _add_structure_edges(self, structure_edges: List[Tuple[str, str, str, float]]):
+        """
+        添加结构性边到图中
+        
+        Args:
+            structure_edges: 结构性边列表 (source_id, target_id, edge_type, weight)
+        """
+        logger.info(f"Adding {len(structure_edges)} structural edges")
+        
+        for source_id, target_id, edge_type, weight in structure_edges:
+            self.node_to_node_stats[(source_id, target_id)] = weight
+            
+            # 对于包含关系，也添加反向边以便双向导航
+            if edge_type == 'contains':
+                self.node_to_node_stats[(target_id, source_id)] = weight
+
+    def _add_semantic_edges(self, semantic_edges: List[Triple]):
+        """
+        添加语义边（实体关系）到图中
+        
+        Args:
+            semantic_edges: 语义边列表（三元组）
+        """
+        logger.info(f"Adding {len(semantic_edges)} semantic edges")
+        
+        for triple in semantic_edges:
+            if len(triple) == 3:
+                subject_id, predicate, obj_id = triple
+                
+                # 添加双向连接（无向图）
+                self.node_to_node_stats[(subject_id, obj_id)] = self.node_to_node_stats.get((subject_id, obj_id), 0.0) + 1
+                self.node_to_node_stats[(obj_id, subject_id)] = self.node_to_node_stats.get((obj_id, subject_id), 0.0) + 1

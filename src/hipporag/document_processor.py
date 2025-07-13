@@ -32,7 +32,6 @@ class DocumentProcessor:
     def _compute_md5_id(self, content: str, prefix: str = "") -> str:
         """计算内容的MD5哈希ID"""
         return prefix + hashlib.md5(content.encode()).hexdigest()
-
     def _extract_hyperlinks(self, content: str, current_file_path: Optional[str] = None) -> Dict[str, Dict[str, str]]:
         """
         提取内容中的超链接
@@ -52,16 +51,19 @@ class DocumentProcessor:
         for text, link in matches:
             # 判断是否是路径名（不是URL）
             if not (link.startswith('http://') or link.startswith('https://') or link.startswith('ftp://')):
+                # 提取链接中的文件路径部分（去掉锚点）
+                file_path = link.split('#')[0] if '#' in link else link
+                
                 # 判断是否是md文件
-                if link.lower().endswith('.md'):
+                if file_path.lower().endswith('.md'):
                     # 处理相对路径
-                    if current_file_path and not os.path.isabs(link):
+                    if current_file_path and not os.path.isabs(file_path):
                         # 相对路径：基于当前文件所在目录解析
                         current_dir = os.path.dirname(current_file_path)
-                        absolute_path = os.path.normpath(os.path.join(current_dir, link))
+                        absolute_path = os.path.normpath(os.path.join(current_dir, file_path))
                     else:
                         # 绝对路径或没有当前文件路径信息
-                        absolute_path = link
+                        absolute_path = file_path
                     
                     # 尝试读取文件内容
                     try:
@@ -71,7 +73,7 @@ class DocumentProcessor:
                             # 基于文件内容计算md5
                             file_id = self._compute_md5_id(file_content, "file-")
                             jump_dict[file_id] = {
-                                "file_path": link,
+                                "file_path": link,  # 保留原始链接（包含锚点）
                                 "jump_name": text
                             }
                     except Exception:

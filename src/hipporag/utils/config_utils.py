@@ -158,7 +158,7 @@ class BaseConfig:
         metadata={"help": "Batch size for key embeddings for knn retrieval in buiding synonymy edges."}
     )
     synonymy_edge_sim_threshold: float = field(
-        default=0.8,
+        default=0.92,
         metadata={"help": "Similarity threshold to include candidate synonymy nodes."}
     )
     is_directed_graph: bool = field(

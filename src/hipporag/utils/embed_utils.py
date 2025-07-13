@@ -1,9 +1,13 @@
 from typing import List
 import torch
 from tqdm import tqdm
+import logging
 
+logger = logging.getLogger(__name__)
+# info level
+logger.setLevel(logging.INFO)
 
-def retrieve_knn(query_ids: List[str], key_ids: List[str], query_vecs, key_vecs, k=2047, query_batch_size=1000,
+def retrieve_knn(query_ids: List[str], key_ids: List[str], query_vecs, key_vecs, k=2047, query_batch_size=2000,
                  key_batch_size=10000):
     """
     Retrieve the top-k nearest neighbors for each query id from the key ids.

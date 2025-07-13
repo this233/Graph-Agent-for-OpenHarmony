@@ -241,7 +241,7 @@ def main():
     parser.add_argument(
         "--max-workers", 
         type=int, 
-        default=100, 
+        default=20, 
         help="最大并发工作线程数 (默认: 3)"
     )
     

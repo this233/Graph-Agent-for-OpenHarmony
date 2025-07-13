@@ -1,32 +1,179 @@
+/root/code/docs/zh-cn 一共7385个md文件(python diagnose_duplicate_files.py /root/code/docs/zh-cn)
+7317个唯一文件，31组重复文件（共涉及68个文件）。最终会有7317+31=7348✅个文件ID（由内容唯一定位）
+
+
+=== 重复文件详情 ===
+
+重复组 1 (file_id: file-d5a61cd66587573d5ff560ddf46d2dd3):
+  [覆盖] /root/code/docs/zh-cn/application-dev/reference/apis-arkweb/capi-web-arkweb-response.md
+  [保留] /root/code/docs/zh-cn/application-dev/reference/apis-arkweb/capi-web-arkweb-resourcehandler.md
+
+重复组 2 (file_id: file-9e996ca9c67d5b101a8c84db50d56110):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-msdp.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202211/js-apidiff-msdp.md
+
+重复组 3 (file_id: file-681455299245c871d57c87c7013efa78):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-accessibility.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202210/js-apidiff-accessibility.md
+
+重复组 4 (file_id: file-f38fe05eb8bb2195d26d2c95ecb648f3):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-start-up.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202210/js-apidiff-start-up.md
+
+重复组 5 (file_id: file-f6bc22b114251864c6460a848afab905):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-update.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202211/js-apidiff-update.md
+
+重复组 6 (file_id: file-76ec2f35a1060222974e75437654b76e):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-distributed-hardware.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202210/js-apidiff-distributed-hardware.md
+
+重复组 7 (file_id: file-c502090f9e68a6e67a601786f94c280d):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v3.2-beta4/js-apidiff-geolocation.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/monthly-202210/js-apidiff-geolocation.md
+
+重复组 8 (file_id: file-49b3e59d85a19931083b70e9fa963246):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v4.0-Release to v3.2-Release/js-apidiff-start-up.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/v4.0-beta2/js-apidiff-start-up.md
+
+重复组 9 (file_id: file-b830b2941a8a40c37c70b080c57f82a1):
+  [覆盖] /root/code/docs/zh-cn/release-notes/api-diff/v4.0-Release to v3.2-Release/js-apidiff-driver.md
+  [保留] /root/code/docs/zh-cn/release-notes/api-diff/v4.0-beta2/js-apidiff-driver.md
+
+重复组 10 (file_id: file-e8e5d978ebf137be18be00d9164824f9):
+  [覆盖] /root/code/docs/zh-cn/release-notes/template/changelog-x-x.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelog-x-x.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.9.1/changelog-x-x.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.9.3/changelog-x-x.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.9.2/changelog-x-x.md
+
+重复组 11 (file_id: file-7c55222ed2de1b59ab6350e06113fb3d):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-window.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-window.md
+
+重复组 12 (file_id: file-5146178f09bd132ee04c9a79cdcb776b):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-system-geolocation.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-system-geolocation.md
+
+重复组 13 (file_id: file-1f23e06da339ad651f955c9356f68942):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-ohos-geoLocationManager.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-ohos-geoLocationManager.md
+
+重复组 14 (file_id: file-530b8a4798bbe8e5503540282e400261):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-ohos-geolocation.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-ohos-geolocation.md
+
+重复组 15 (file_id: file-97f65d6abacdd0680a3f28396088de02):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-inputmethod-framworks.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-inputmethod-framworks.md
+
+重复组 16 (file_id: file-aec3dc31f562298ffae0bb1afbe4fd69):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelogs-useriam.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-useriam.md
+
+重复组 17 (file_id: file-74535fb126a41077a2f8e0de2ef4d108):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.5/changelog-resourceschedule.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-resourceschedule.md
+
+重复组 18 (file_id: file-4fd52839a40d42c5a508dfc34ec95e37):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.6/changelogs-mediaLibrary.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-mediaLibrary.md
+
+重复组 19 (file_id: file-1ac2f218814cfaeb03b59d9f04c5329f):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.6/changelogs-request.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-request.md
+
+重复组 20 (file_id: file-f4444fbb4e8ae9023655536aeeb0f4d4):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.6/changelogs-telephony.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-telephony.md
+
+重复组 21 (file_id: file-f27a214aa5788df6febde6b31bc4775c):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.3/changelogs-account_os_account.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-account_os_account.md
+
+重复组 22 (file_id: file-08cf11c0ef61d27cb5db87c38dffee90):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_4.0.5.3/changelog-imf.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-imf.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.12/changelog-imf.md
+
+重复组 23 (file_id: file-9427863d9cf721910d29d88d7fa8fcee):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_4.0.5.3/changelog-screenlock.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-screenlock.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.12/changelog-screenlock.md
+
+重复组 24 (file_id: file-6dcaee96c1ea09f56fe8cb4f9d7bf3be):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_4.0.5.3/changelog-wallpaper.md
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-wallpaper.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.12/changelog-wallpaper.md
+
+重复组 25 (file_id: file-1f2a4c64d184e10fd356d2f7acfc9e5f):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-resourceschedule.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.7/changelog-resourceschedule.md
+
+重复组 26 (file_id: file-809a75f871ceff64b7b06e576b6bc670):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-util.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.7/changelogs-util.md
+
+重复组 27 (file_id: file-c5344f5f0a80d2d64a680314994ced18):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-ability.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.7/changelogs-ability.md
+
+重复组 28 (file_id: file-5adb1f3ec43cb0b6db56e1a98d2938d5):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-Release/changelogs-telephony.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.7/changelog-telephony.md
+
+重复组 29 (file_id: file-94c9dc031c742841cd77dc48a1f07397):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.1/changelogs-time.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-time.md
+
+重复组 30 (file_id: file-72b8d23a8c60f44ceca585d744fb3fa4):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.1/changelogs-multimedia.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-multimedia.md
+
+重复组 31 (file_id: file-f8cf69a1bd413adb5ca58da610abfe6f):
+  [覆盖] /root/code/docs/zh-cn/release-notes/changelogs/OpenHarmony_3.2.10.1/changelog-security.md
+  [保留] /root/code/docs/zh-cn/release-notes/changelogs/v3.2-beta5/changelogs-security.md
+
+
+
+
+===========
+python src/hipporag/document_processor.py
+
 Results saved to: outputs/Harmony_docs_zh_cn/markdown_parse/structure.json
 Statistics:
-  Total chunks: 69147
-  Total tables: 18200
-  Total codes: 27059
-  Total jump: 49765
+  Total chunks: 69147✅
+  Total tables: 18200✅
+  Total codes: 27059✅
+  Total jump: 65798(原49765 x 还需要考虑 路径后有#的情况)
 Directory processing completed!
 
-tot abstracts: 121754
-2025-06-30 22:53:38,521 - hipporag.abstract_generator - INFO - === 摘要生成统计 ===
-2025-06-30 22:53:38,521 - hipporag.abstract_generator - INFO - 文件摘要: 7348
-2025-06-30 22:53:38,521 - hipporag.abstract_generator - INFO - 文档块摘要: 69147
-2025-06-30 22:53:38,521 - hipporag.abstract_generator - INFO - 代码块摘要: 27059
-2025-06-30 22:53:38,522 - hipporag.abstract_generator - INFO - 表格摘要: 18200
-2025-06-30 22:53:38,522 - hipporag.abstract_generator - INFO - 总LLM调用: 101308
-2025-06-30 22:53:38,522 - hipporag.abstract_generator - INFO - 失败调用: 0
-2025-06-30 22:53:38,522 - hipporag.abstract_generator - INFO - ================
-2025-06-30 22:53:38,559 - __main__ - INFO - 保存结果到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
-2025-06-30 22:53:45,511 - hipporag.abstract_generator - INFO - 更新后的文档结构已保存到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
-2025-06-30 22:53:45,511 - __main__ - INFO - 摘要生成完成！
-2025-06-30 22:53:45,511 - __main__ - INFO - 处理统计:
-2025-06-30 22:53:45,511 - __main__ - INFO -   总任务数: 121754
-2025-06-30 22:53:45,511 - __main__ - INFO -   成功完成: 121754 项
-2025-06-30 22:53:45,511 - __main__ - INFO -   失败: 0 项
-2025-06-30 22:53:45,512 - __main__ - INFO -   总成功率: 100.0%
-2025-06-30 22:53:45,512 - __main__ - INFO -   其中备用配置成功: 20446 项
-2025-06-30 22:53:45,512 - __main__ - INFO -   主配置成功: 101308 项
+
+===========
+python generate_abstracts.py outputs/Harmony_docs_zh_cn/markdown_parse/structure.json outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json 2>> index.log
+
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - === 摘要生成统计 ===
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 文件摘要: 7348✅
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 文档块摘要: 69147✅
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 代码块摘要: 27059✅
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 表格摘要: 18200✅
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 总LLM调用: 121535
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 失败调用: 0
+2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - ================
+2025-07-06 18:41:53,626 - __main__ - INFO - 保存结果到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
+2025-07-06 18:42:00,915 - hipporag.abstract_generator - INFO - 更新后的文档结构已保存到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
+2025-07-06 18:42:00,916 - __main__ - INFO - 摘要生成完成！
+2025-07-06 18:42:00,916 - __main__ - INFO - 处理统计:
+2025-07-06 18:42:00,916 - __main__ - INFO -   总任务数: 121754
+2025-07-06 18:42:00,916 - __main__ - INFO -   成功完成: 121754 项
+2025-07-06 18:42:00,916 - __main__ - INFO -   失败: 0 项
+2025-07-06 18:42:00,916 - __main__ - INFO -   总成功率: 100.0%
+2025-07-06 18:42:00,916 - __main__ - INFO -   其中备用配置成功: 219 项
+2025-07-06 18:42:00,916 - __main__ - INFO -   主配置成功: 121535 项
 
 
+============
+python extract_entities_triples.py outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json outputs/Harmony_docs_zh_cn/markdown_parse/triples.json 2>> index.log
 
 2025-07-01 11:46:20,960 - __main__ - INFO - 主配置OpenIE处理成功，成功率: 93.3%
 2025-07-01 11:46:20,960 - __main__ - INFO - 批量处理完成，成功处理 75 个chunks
@@ -42,6 +189,78 @@ tot abstracts: 121754
 2025-07-01 11:46:37,266 - __main__ - INFO -   成功处理的filter_chunk: 68875
 2025-07-01 11:46:37,266 - __main__ - INFO -   失败的调用: 0
 2025-07-01 11:46:37,266 - __main__ - INFO -   总成功率: 100.0%
-2025-07-01 11:46:37,266 - __main__ - INFO -   提取的实体: 429496
-2025-07-01 11:46:37,266 - __main__ - INFO -   提取的三元组: 680605
-root@rag-v2:~/code/HippoRAG-main# 
+2025-07-01 11:46:37,266 - __main__ - INFO -   提取的实体: 429496✅
+2025-07-01 11:46:37,266 - __main__ - INFO -   提取的三元组: 680605✅
+root@rag-v2:~/code/HippoRAG-main# 扫描目录: /root/code/docs/zh-cn
+  已处理 1000 个文件...
+  已处理 2000 个文件...
+  已处理 3000 个文件...
+  已处理 4000 个文件...
+  已处理 5000 个文件...
+  已处理 6000 个文件...
+  已处理 7000 个文件...
+扫描完成，共处理 7385 个文件
+
+
+
+===============
+python diagnose_duplicate_files.py --json-mode outputs/Harmony_docs_zh_cn/markdown_parse/structure.json > duplicate.log
+
+扫描JSON文件: outputs/Harmony_docs_zh_cn/markdown_parse/structure.json
+JSON扫描完成:
+  文件总数: 7348, 重复: 0
+  块总数: 68225, 重复: 875
+  代码块总数: 26672, 重复: 375
+  表格总数: 18087, 重复: 111
+  跳转总数: 0, 重复: 0
+
+实际文件总数：7385->7348✅✅
+实际块总数：69147->68225✅✅
+实际代码块总数：27059->26672✅✅
+实际表格总数：18200->18087✅✅
+
+实际实体数：779058->328956（去重）
+实际事实数：680605->542375（去重）
+===============
+python demo_openai.py > graph.log 2>&1
+
+
+INFO 07-07 13:46:05 [loader.py:458] Loading weights took 2.96 seconds
+INFO 07-07 13:46:05 [model_runner.py:1140] Model loading took 7.5538 GiB and 3.089657 seconds
+2025-07-07 13:46:06 - src.hipporag.embedding_store_v2 - INFO - Loaded 7348 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/file_embeddings/vdb_file.parquet
+2025-07-07 13:46:13 - src.hipporag.embedding_store_v2 - INFO - Loaded 68225 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/chunk_embeddings/vdb_chunk.parquet
+2025-07-07 13:46:16 - src.hipporag.embedding_store_v2 - INFO - Loaded 26672 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/code_embeddings/vdb_code.parquet
+2025-07-07 13:46:18 - src.hipporag.embedding_store_v2 - INFO - Loaded 18087 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/table_embeddings/vdb_table.parquet
+2025-07-07 13:46:51 - src.hipporag.embedding_store_v2 - INFO - Loaded 328956 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/entity_embeddings/vdb_entity.parquet
+2025-07-07 13:47:49 - src.hipporag.embedding_store_v2 - INFO - Loaded 542375 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/fact_embeddings/vdb_fact.parquet
+2025-07-07 13:47:49 - src.hipporag.prompts.prompt_template_manager - INFO - Loading templates from directory: /root/code/HippoRAG-main/src/hipporag/prompts/templates
+2025-07-07 13:47:49 - src.hipporag.HippoRAG - INFO - Indexing from hierarchical JSON structure
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Extracted 7348 files, 69147 chunks, 27059 codes, 18200 tables, 779058 entities, 680605 facts
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding files
+2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 7348 records already exist.
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding chunks
+2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 68225 records already exist.
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding codes
+2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 26672 records already exist.
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding tables
+2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 18087 records already exist.
+2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding entities
+2025-07-07 13:47:56 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 328956 records already exist.
+2025-07-07 13:47:56 - src.hipporag.HippoRAG - INFO - Encoding facts
+2025-07-07 13:47:57 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 542375 records already exist.
+2025-07-07 13:47:57 - src.hipporag.HippoRAG - INFO - Constructing hierarchical graph
+2025-07-07 13:47:57 - src.hipporag.HippoRAG - INFO - Adding 959262 structural edges
+2025-07-07 13:47:58 - src.hipporag.HippoRAG - INFO - Adding 680605 semantic edges
+2025-07-07 13:47:59 - src.hipporag.HippoRAG - INFO - Expanding graph with synonymy edges
+2025-07-07 13:48:00 - src.hipporag.HippoRAG - INFO - Performing KNN retrieval for each phrase nodes (328956).
+
+025-07-07 14:13:29 - src.hipporag.HippoRAG - INFO - Added 3202811 edges to graph
+2025-07-07 14:13:29 - src.hipporag.HippoRAG - INFO - Edge type distribution: {'structural': 1066984, 'semantic': 1080643, 'synonymy': 281976, 'passage': 773208}
+2025-07-07 14:13:30 - src.hipporag.HippoRAG - INFO - Graph construction completed!
+{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 328956, 'num_total_nodes': 449288, 'num_extracted_facts': 542375, 'num_structure_edges': 1840192, 'num_semantic_edges': 1362920, 'num_total_edges': 3203112}
+2025-07-07 14:13:32 - src.hipporag.HippoRAG - INFO - Writing graph with 449288 nodes, 6125993 edges
+2025-07-07 14:13:38 - src.hipporag.HippoRAG - INFO - Saving graph completed!
+2025-07-07 14:13:38 - src.hipporag.HippoRAG - INFO - Hierarchical indexing completed!
+{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 328956, 'num_total_nodes': 449288, 'num_extracted_facts': 542375, 'num_structure_edges': 1840192, 'num_semantic_edges': 1362920, 'num_total_edges': 3203112}
+[rank0]:[W707 14:13:45.816592957 ProcessGroupNCCL.cpp:1496] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
