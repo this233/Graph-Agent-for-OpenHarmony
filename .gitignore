@@ -14,10 +14,19 @@ __pycache__/
 # Ignore nohup_out directory
 nohup_out/
 # Ignore outputs directory
-# outputs/
+outputs/
 # Ignore data directory
 data/
 # Ignore the bash script to clear files under outputs and logs directories
 clear_outputs_and_logs.sh
 # Ignore the env file
 .env
+
+# Git LFS files (now stored on Huggingface)
+*.parquet
+*.pickle
+*.sqlite
+*.sqlite.lock
+structure.json
+abstract.json
+triples.json
