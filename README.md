@@ -6,6 +6,136 @@ python generate_abstracts.py outputs/Harmony_docs_zh_cn/markdown_parse/structure
 python extract_entities_triples.py outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json outputs/Harmony_docs_zh_cn/markdown_parse/triples.json 2>> index.log
 ```
 
+---
+
+## 中文使用指南 / Chinese Usage Guide
+
+### 知识库构建流程 (Knowledge Base Construction)
+
+本项目已完成知识库构建功能的实现，支持从Markdown文档构建层次化知识图谱。完整流程包括：
+
+#### 步骤1: 文档处理 (Document Processing)
+使用 `document_processor.py` 处理Markdown文档，提取文档结构、代码块、表格等信息：
+
+```bash
+python src/hipporag/document_processor.py [input_dir] [output_dir] 2>>index.log
+```
+
+该步骤会生成 `structure.json`，包含文档的层次化结构。
+
+#### 步骤2: 生成摘要 (Abstract Generation)
+使用 `generate_abstracts.py` 为文档、段落、代码块和表格生成摘要：
+
+```bash
+python generate_abstracts.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/structure.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    2>> index.log
+```
+
+#### 步骤3: 提取实体和三元组 (Entity and Triple Extraction)
+使用 `extract_entities_triples.py` 从文档中提取实体和关系三元组：
+
+```bash
+python extract_entities_triples.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
+    2>> index.log
+```
+
+该步骤会生成包含实体和三元组的 `triples.json` 文件。
+
+### 检索功能 (Retrieval Functionality)
+
+检索功能已实现，支持以下两种检索模式：
+
+#### 1. 传统段落检索 (Traditional Passage Retrieval)
+
+```python
+from src.hipporag import HippoRAG
+from src.hipporag.utils.config_utils import BaseConfig
+
+# 配置
+config = BaseConfig(
+    save_dir='outputs',
+    llm_name='gpt-4o-mini',
+    embedding_model_name='nvidia/NV-Embed-v2'
+)
+
+# 初始化HippoRAG
+hipporag = HippoRAG(global_config=config)
+
+# 索引文档
+docs = ["文档1", "文档2", "文档3"]
+hipporag.index(docs)
+
+# 检索
+queries = ["查询问题1", "查询问题2"]
+retrieval_results = hipporag.retrieve(queries=queries, num_to_retrieve=5)
+
+# 检索增强生成
+qa_results = hipporag.rag_qa(queries=queries)
+```
+
+#### 2. 层次化索引检索 (Hierarchical Index Retrieval)
+
+使用层次化JSON结构进行索引和检索：
+
+```python
+import json
+from src.hipporag import HippoRAG
+from src.hipporag.utils.config_utils import BaseConfig
+
+# 配置
+config = BaseConfig(
+    save_dir='outputs/Harmony_docs_zh_cn',
+    llm_name='gpt-4o-mini',
+    embedding_model_name='Qwen/Qwen2.5-7B-Instruct'
+)
+
+# 初始化HippoRAG
+hipporag = HippoRAG(global_config=config)
+
+# 加载层次化JSON结构（包含文件、段落、代码块、表格等）
+with open('outputs/Harmony_docs_zh_cn/markdown_parse/triples.json', 'r', encoding='utf-8') as f:
+    json_structure = json.load(f)
+
+# 执行层次化索引
+hipporag.index_from_json(json_structure)
+
+# 检索查询
+queries = ["如何配置API?", "代码示例在哪里?"]
+retrieval_results = hipporag.retrieve(queries=queries, num_to_retrieve=10)
+
+# 检索增强生成
+qa_results, responses, metadata = hipporag.rag_qa(queries=queries)
+```
+
+#### 检索特性 (Retrieval Features)
+
+1. **多步骤检索流程**:
+   - 事实检索：基于查询向量与事实向量的相似度
+   - 认知记忆：使用重排序器筛选高质量事实
+   - 图搜索：基于PersonalizedPageRank在知识图谱上传播权重
+   - 结果合成：结合图搜索和密集检索的结果
+
+2. **支持的节点类型**:
+   - 文件节点：完整文档级别的检索
+   - 段落节点：文档段落检索
+   - 代码块节点：代码片段检索
+   - 表格节点：结构化数据检索
+   - 实体节点：语义实体检索
+
+3. **评估功能**:
+   - 支持检索评估（Recall@K）
+   - 支持问答评估（精确匹配和F1分数）
+
+### 完整示例脚本 (Complete Example Script)
+
+查看 `demo_retrieval.py` 了解完整的检索使用示例。
+
+---
+
 
 
 

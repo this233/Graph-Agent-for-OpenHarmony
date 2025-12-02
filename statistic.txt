@@ -152,25 +152,24 @@ Directory processing completed!
 ===========
 python generate_abstracts.py outputs/Harmony_docs_zh_cn/markdown_parse/structure.json outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json 2>> index.log
 
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - === 摘要生成统计 ===
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 文件摘要: 7348✅
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 文档块摘要: 69147✅
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 代码块摘要: 27059✅
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 表格摘要: 18200✅
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 总LLM调用: 121535
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - 失败调用: 0
-2025-07-06 18:41:53,597 - hipporag.abstract_generator - INFO - ================
-2025-07-06 18:41:53,626 - __main__ - INFO - 保存结果到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
-2025-07-06 18:42:00,915 - hipporag.abstract_generator - INFO - 更新后的文档结构已保存到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
-2025-07-06 18:42:00,916 - __main__ - INFO - 摘要生成完成！
-2025-07-06 18:42:00,916 - __main__ - INFO - 处理统计:
-2025-07-06 18:42:00,916 - __main__ - INFO -   总任务数: 121754
-2025-07-06 18:42:00,916 - __main__ - INFO -   成功完成: 121754 项
-2025-07-06 18:42:00,916 - __main__ - INFO -   失败: 0 项
-2025-07-06 18:42:00,916 - __main__ - INFO -   总成功率: 100.0%
-2025-07-06 18:42:00,916 - __main__ - INFO -   其中备用配置成功: 219 项
-2025-07-06 18:42:00,916 - __main__ - INFO -   主配置成功: 121535 项
-
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - === 摘要生成统计 ===
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 文件摘要: 7348
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 文档块摘要: 69147
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 代码块摘要: 27059
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 表格摘要: 18200
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 总LLM调用: 121664
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - 失败调用: 0
+2025-07-15 14:06:44 - hipporag.abstract_generator - INFO - ================
+2025-07-15 14:06:44 - __main__ - INFO - 保存结果到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
+2025-07-15 14:06:51 - hipporag.abstract_generator - INFO - 更新后的文档结构已保存到: outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json
+2025-07-15 14:06:51 - __main__ - INFO - 摘要生成完成！
+2025-07-15 14:06:51 - __main__ - INFO - 处理统计:
+2025-07-15 14:06:51 - __main__ - INFO -   总任务数: 121754
+2025-07-15 14:06:51 - __main__ - INFO -   成功完成: 121754 项
+2025-07-15 14:06:51 - __main__ - INFO -   失败: 0 项
+2025-07-15 14:06:51 - __main__ - INFO -   总成功率: 100.0%
+2025-07-15 14:06:51 - __main__ - INFO -   其中备用配置成功: 90 项
+2025-07-15 14:06:51 - __main__ - INFO -   主配置成功: 121664 项
 
 ============
 python extract_entities_triples.py outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json outputs/Harmony_docs_zh_cn/markdown_parse/triples.json 2>> index.log
@@ -219,48 +218,61 @@ JSON扫描完成:
 实际代码块总数：27059->26672✅✅
 实际表格总数：18200->18087✅✅
 
-实际实体数：779058->328956（去重）
-实际事实数：680605->542375（去重）
+实际实体数：429238(原)->778821（从三元组提取的）->329035（去重）
+实际事实数：680546->542247（去重）
 ===============
 python demo_openai.py > graph.log 2>&1
 
 
-INFO 07-07 13:46:05 [loader.py:458] Loading weights took 2.96 seconds
-INFO 07-07 13:46:05 [model_runner.py:1140] Model loading took 7.5538 GiB and 3.089657 seconds
-2025-07-07 13:46:06 - src.hipporag.embedding_store_v2 - INFO - Loaded 7348 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/file_embeddings/vdb_file.parquet
-2025-07-07 13:46:13 - src.hipporag.embedding_store_v2 - INFO - Loaded 68225 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/chunk_embeddings/vdb_chunk.parquet
-2025-07-07 13:46:16 - src.hipporag.embedding_store_v2 - INFO - Loaded 26672 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/code_embeddings/vdb_code.parquet
-2025-07-07 13:46:18 - src.hipporag.embedding_store_v2 - INFO - Loaded 18087 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/table_embeddings/vdb_table.parquet
-2025-07-07 13:46:51 - src.hipporag.embedding_store_v2 - INFO - Loaded 328956 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/entity_embeddings/vdb_entity.parquet
-2025-07-07 13:47:49 - src.hipporag.embedding_store_v2 - INFO - Loaded 542375 records from outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/fact_embeddings/vdb_fact.parquet
-2025-07-07 13:47:49 - src.hipporag.prompts.prompt_template_manager - INFO - Loading templates from directory: /root/code/HippoRAG-main/src/hipporag/prompts/templates
-2025-07-07 13:47:49 - src.hipporag.HippoRAG - INFO - Indexing from hierarchical JSON structure
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Extracted 7348 files, 69147 chunks, 27059 codes, 18200 tables, 779058 entities, 680605 facts
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding files
-2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 7348 records already exist.
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding chunks
-2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 68225 records already exist.
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding codes
-2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 26672 records already exist.
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding tables
-2025-07-07 13:47:55 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 18087 records already exist.
-2025-07-07 13:47:55 - src.hipporag.HippoRAG - INFO - Encoding entities
-2025-07-07 13:47:56 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 328956 records already exist.
-2025-07-07 13:47:56 - src.hipporag.HippoRAG - INFO - Encoding facts
-2025-07-07 13:47:57 - src.hipporag.embedding_store_v2 - INFO - Inserting 0 new records, 542375 records already exist.
-2025-07-07 13:47:57 - src.hipporag.HippoRAG - INFO - Constructing hierarchical graph
-2025-07-07 13:47:57 - src.hipporag.HippoRAG - INFO - Adding 959262 structural edges
-2025-07-07 13:47:58 - src.hipporag.HippoRAG - INFO - Adding 680605 semantic edges
-2025-07-07 13:47:59 - src.hipporag.HippoRAG - INFO - Expanding graph with synonymy edges
-2025-07-07 13:48:00 - src.hipporag.HippoRAG - INFO - Performing KNN retrieval for each phrase nodes (328956).
+INFO 07-15 15:24:11 [loader.py:458] Loading weights took 3.11 seconds
+INFO 07-15 15:24:11 [model_runner.py:1140] Model loading took 7.5538 GiB and 3.238899 seconds
+2025-07-15 15:24:11 - src.hipporag.prompts.prompt_template_manager - INFO - Loading templates from directory: /root/code/HippoRAG-main/src/hipporag/prompts/templates
+2025-07-15 15:24:11 - src.hipporag.HippoRAG - INFO - Indexing from hierarchical JSON structure
+2025-07-15 15:24:17 - src.hipporag.HippoRAG - INFO - Extracted 7348 files, 69147 chunks, 27059 codes, 18200 tables, 778821 entities, 680546 facts
+2025-07-15 15:24:17 - src.hipporag.HippoRAG - INFO - Encoding files
+2025-07-15 15:24:17 - src.hipporag.embedding_store_v2 - INFO - Inserting 7348 new records, 0 records already exist.
 
-025-07-07 14:13:29 - src.hipporag.HippoRAG - INFO - Added 3202811 edges to graph
-2025-07-07 14:13:29 - src.hipporag.HippoRAG - INFO - Edge type distribution: {'structural': 1066984, 'semantic': 1080643, 'synonymy': 281976, 'passage': 773208}
-2025-07-07 14:13:30 - src.hipporag.HippoRAG - INFO - Graph construction completed!
-{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 328956, 'num_total_nodes': 449288, 'num_extracted_facts': 542375, 'num_structure_edges': 1840192, 'num_semantic_edges': 1362920, 'num_total_edges': 3203112}
-2025-07-07 14:13:32 - src.hipporag.HippoRAG - INFO - Writing graph with 449288 nodes, 6125993 edges
-2025-07-07 14:13:38 - src.hipporag.HippoRAG - INFO - Saving graph completed!
-2025-07-07 14:13:38 - src.hipporag.HippoRAG - INFO - Hierarchical indexing completed!
-{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 328956, 'num_total_nodes': 449288, 'num_extracted_facts': 542375, 'num_structure_edges': 1840192, 'num_semantic_edges': 1362920, 'num_total_edges': 3203112}
-[rank0]:[W707 14:13:45.816592957 ProcessGroupNCCL.cpp:1496] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+2025-07-15 15:26:18 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 15:26:21 - src.hipporag.embedding_store_v2 - INFO - Saved 7348 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/file_embeddings/vdb_file.parquet
+2025-07-15 15:26:21 - src.hipporag.HippoRAG - INFO - Encoding chunks
+2025-07-15 15:26:21 - src.hipporag.embedding_store_v2 - INFO - Inserting 68225 new records, 0 records already exist.
+
+2025-07-15 15:36:57 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 15:37:15 - src.hipporag.embedding_store_v2 - INFO - Saved 68225 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/chunk_embeddings/vdb_chunk.parquet
+2025-07-15 15:37:15 - src.hipporag.HippoRAG - INFO - Encoding codes
+2025-07-15 15:37:15 - src.hipporag.embedding_store_v2 - INFO - Inserting 26672 new records, 0 records already exist.
+
+2025-07-15 15:41:25 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 15:41:32 - src.hipporag.embedding_store_v2 - INFO - Saved 26672 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/code_embeddings/vdb_code.parquet
+2025-07-15 15:41:32 - src.hipporag.HippoRAG - INFO - Encoding tables
+2025-07-15 15:41:32 - src.hipporag.embedding_store_v2 - INFO - Inserting 18087 new records, 0 records already exist.
+
+2025-07-15 15:44:30 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 15:44:35 - src.hipporag.embedding_store_v2 - INFO - Saved 18087 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/table_embeddings/vdb_table.parquet
+2025-07-15 15:44:35 - src.hipporag.HippoRAG - INFO - Encoding entities
+2025-07-15 15:44:36 - src.hipporag.embedding_store_v2 - INFO - Inserting 329035 new records, 0 records already exist.
+
+2025-07-15 15:54:46 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 15:56:13 - src.hipporag.embedding_store_v2 - INFO - Saved 329035 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/entity_embeddings/vdb_entity.parquet
+2025-07-15 15:56:13 - src.hipporag.HippoRAG - INFO - Encoding facts
+2025-07-15 15:56:14 - src.hipporag.embedding_store_v2 - INFO - Inserting 542247 new records, 0 records already exist.
+
+2025-07-15 16:22:15 - src.hipporag.embedding_store_v2 - INFO - Saving new records.
+2025-07-15 16:24:41 - src.hipporag.embedding_store_v2 - INFO - Saved 542247 records to outputs/Harmony_docs_zh_cn/DeepSeekV3_Qwen3-Embedding-4B/fact_embeddings/vdb_fact.parquet
+2025-07-15 16:24:41 - src.hipporag.HippoRAG - INFO - Constructing hierarchical graph
+2025-07-15 16:24:41 - src.hipporag.HippoRAG - INFO - Adding 959025 structural edges
+2025-07-15 16:24:42 - src.hipporag.HippoRAG - INFO - Adding 680546 semantic edges
+2025-07-15 16:24:43 - src.hipporag.HippoRAG - INFO - Expanding graph with synonymy edges
+2025-07-15 16:24:44 - src.hipporag.HippoRAG - INFO - Performing KNN retrieval for each phrase nodes (329035).
+
+2025-07-15 16:39:40 - src.hipporag.HippoRAG - INFO - Added 449367 new nodes to graph
+2025-07-15 16:39:50 - src.hipporag.HippoRAG - INFO - Added 3202249 edges to graph
+2025-07-15 16:39:50 - src.hipporag.HippoRAG - INFO - Edge type distribution: {'structural': 1066707, 'semantic': 1079699, 'synonymy': 282912, 'passage': 772931}
+2025-07-15 16:39:51 - src.hipporag.HippoRAG - INFO - Graph construction completed!
+{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 329035, 'num_total_nodes': 449367, 'num_extracted_facts': 542247, 'num_structure_edges': 1839638, 'num_semantic_edges': 1362922, 'num_total_edges': 3202560}
+2025-07-15 16:39:53 - src.hipporag.HippoRAG - INFO - Writing graph with 449367 nodes, 3202249 edges
+2025-07-15 16:39:56 - src.hipporag.HippoRAG - INFO - Saving graph completed!
+2025-07-15 16:39:56 - src.hipporag.HippoRAG - INFO - Hierarchical indexing completed!
+{'num_file_nodes': 7348, 'num_chunk_nodes': 68225, 'num_code_nodes': 26672, 'num_table_nodes': 18087, 'num_entity_nodes': 329035, 'num_total_nodes': 449367, 'num_extracted_facts': 542247, 'num_structure_edges': 1839638, 'num_semantic_edges': 1362922, 'num_total_edges': 3202560}
+[rank0]:[W715 16:40:26.118521150 ProcessGroupNCCL.cpp:1496] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
 

@@ -285,6 +285,7 @@ class FallbackOpenIE:
                     successful_triples=successful_triples,
                     total_chunks=total_chunks
                 )
+                return ner_results_dict, triple_results_dict
                 
         except Exception as e:
             primary_failed = True

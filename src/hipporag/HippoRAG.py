@@ -86,8 +86,49 @@ HippoRAG系统由以下核心组件构成：
 - 长文档理解：需要在长文档中定位相关信息
 - 实时知识更新：需要动态更新知识库的应用
 
+================================================================================
+层次化结构支持（新增功能）
+================================================================================
+
+基于index_from_json的层次化RAG-QA增强：
+
+1. 多类型内容索引：
+   - 文件级别索引：处理完整文档的摘要和内容
+   - 段落级别索引：传统的文档分块处理
+   - 代码块索引：专门处理代码片段的摘要和内容
+   - 表格索引：处理结构化表格数据
+
+2. 智能检索策略：
+   - 自动检测内容结构类型（传统vs层次化）
+   - 多类型内容的统一相似度计算
+   - 基于内容类型的优化检索算法
+
+3. 增强的问答体验：
+   - 内容类型感知的提示构建
+   - 支持不同类型内容的上下文整合
+   - 改进的答案生成质量
+
+4. 向后兼容性：
+   - 完全兼容原有的段落检索模式
+   - 自动降级到传统检索机制
+   - 无缝的API过渡
+
+使用方法：
+```python
+# 传统方式（仍然支持）
+hippo_rag.index(docs)  # 段落索引
+results = hippo_rag.rag_qa(queries)
+
+# 层次化方式（新增）
+hippo_rag.index_from_json(json_structure)  # 层次化索引
+results = hippo_rag.rag_qa(queries)  # 自动使用层次化检索
+
+# 完整示例
+results = hippo_rag.hierarchical_rag_qa_example(json_structure, queries)
+```
+
 作者：HippoRAG团队
-版本：2.0
+版本：2.1（层次化增强版）
 许可：请参考LICENSE文件
 """
 
@@ -642,26 +683,44 @@ class HippoRAG:
             
             # 第二步：认知记忆 - 重排序事实以提高相关性
             top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(query, query_fact_scores)
+            
+            # 第二步B：文件摘要检索和重排序（如果有文件索引）
+            top_files = []
+            if hasattr(self, 'file_node_keys') and len(self.file_node_keys) > 0:
+                query_file_scores, file_keys = self.get_file_scores(query)
+                if len(query_file_scores) > 0:
+                    _, top_files, _ = self.rerank_files(query, query_file_scores, file_keys)
+            
             rerank_end = time.time()
-
             self.rerank_time += rerank_end - rerank_start
 
             # 第三步：检索策略选择
-            if len(top_k_facts) == 0:
-                # 降级策略：如果没有相关事实，使用纯密集检索
-                logger.info('No facts found after reranking, return DPR results')
+            if len(top_k_facts) == 0 and len(top_files) == 0:
+                # 降级策略：如果没有相关事实和文件，使用纯密集检索
+                logger.info('No facts or files found after reranking, return DPR results')
                 sorted_doc_ids, sorted_doc_scores = self.dense_passage_retrieval(query)
             else:
-                # 主要策略：基于事实和图结构的混合检索
+                # 主要策略：基于事实、文件和图结构的混合检索
                 sorted_doc_ids, sorted_doc_scores = self.graph_search_with_fact_entities(query=query,
                                                                                          link_top_k=self.global_config.linking_top_k,
                                                                                          query_fact_scores=query_fact_scores,
                                                                                          top_k_facts=top_k_facts,
                                                                                          top_k_fact_indices=top_k_fact_indices,
-                                                                                         passage_node_weight=self.global_config.passage_node_weight)
+                                                                                         passage_node_weight=self.global_config.passage_node_weight,
+                                                                                         top_files=top_files)
 
             # 构建检索结果
-            top_k_docs = [self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] for idx in sorted_doc_ids[:num_to_retrieve]]
+            if len(self.all_content_node_keys) > len(self.passage_node_keys):
+                # 使用层次化检索结果
+                top_k_docs = []
+                for idx in sorted_doc_ids[:num_to_retrieve]:
+                    content_key = self.all_content_node_keys[idx]
+                    content_type = self.all_content_node_types[idx]
+                    content_data = self._get_content_by_type_and_key(content_type, content_key)
+                    top_k_docs.append(content_data)
+            else:
+                # 使用原始段落检索结果
+                top_k_docs = [self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] for idx in sorted_doc_ids[:num_to_retrieve]]
 
             retrieval_results.append(QuerySolution(question=query, docs=top_k_docs, doc_scores=sorted_doc_scores[:num_to_retrieve]))
 
@@ -686,6 +745,597 @@ class HippoRAG:
             return retrieval_results, overall_retrieval_result
         else:
             return retrieval_results
+
+    def retrieve_with_debug(self,
+                            queries: List[str],
+                            num_to_retrieve: Optional[int] = None,
+                            verbose: bool = True) -> List[QuerySolution]:
+        """
+        带详细Debug输出的检索方法
+        
+        与retrieve方法相同，但在每个步骤输出详细的中间结果，便于调试和理解检索流程。
+        
+        Args:
+            queries (List[str]): 查询字符串列表
+            num_to_retrieve (int, optional): 每个查询返回的文档数量
+            verbose (bool): 是否输出详细信息，默认True
+                
+        Returns:
+            List[QuerySolution]: 检索结果列表
+        """
+        def debug_print(msg, data=None, max_items=5, max_chars=200):
+            """辅助函数：格式化打印debug信息"""
+            if not verbose:
+                return
+            print(f"\n{'='*60}")
+            print(f"🔍 {msg}")
+            print(f"{'='*60}")
+            if data is not None:
+                if isinstance(data, (list, tuple)):
+                    print(f"  数量: {len(data)}")
+                    for i, item in enumerate(data[:max_items]):
+                        item_str = str(item)
+                        if len(item_str) > max_chars:
+                            item_str = item_str[:max_chars] + "..."
+                        print(f"  [{i+1}] {item_str}")
+                    if len(data) > max_items:
+                        print(f"  ... 还有 {len(data) - max_items} 项")
+                elif isinstance(data, dict):
+                    print(f"  数量: {len(data)}")
+                    for i, (k, v) in enumerate(list(data.items())[:max_items]):
+                        v_str = str(v)
+                        if len(v_str) > max_chars:
+                            v_str = v_str[:max_chars] + "..."
+                        print(f"  [{k}]: {v_str}")
+                elif isinstance(data, np.ndarray):
+                    print(f"  形状: {data.shape}")
+                    print(f"  统计: min={data.min():.4f}, max={data.max():.4f}, mean={data.mean():.4f}")
+                    if len(data) > 0:
+                        top_indices = np.argsort(data)[-max_items:][::-1]
+                        print(f"  Top-{max_items}分数: {[f'{data[i]:.4f}' for i in top_indices]}")
+                else:
+                    print(f"  {data}")
+        
+        retrieve_start_time = time.time()
+        
+        if num_to_retrieve is None:
+            num_to_retrieve = self.global_config.retrieval_top_k
+        
+        rerank_candidate_k = getattr(self.global_config, 'rerank_candidate_k', 50)
+        file_rerank_candidate_k = getattr(self.global_config, 'file_rerank_candidate_k', 50)
+        file_linking_top_k = getattr(self.global_config, 'file_linking_top_k', 5)
+        debug_print("检索配置", {
+            'num_to_retrieve': num_to_retrieve,
+            'linking_top_k (最终保留事实数)': self.global_config.linking_top_k,
+            'rerank_candidate_k (候选事实数)': rerank_candidate_k,
+            'file_rerank_candidate_k (候选文件数)': file_rerank_candidate_k,
+            'file_linking_top_k (最终保留文件数)': file_linking_top_k,
+            'damping': self.global_config.damping,
+            'passage_node_weight': self.global_config.passage_node_weight
+        })
+        
+        if not self.ready_to_retrieve:
+            debug_print("准备检索对象...")
+            self.prepare_retrieval_objects()
+        
+        # 统计信息
+        debug_print("索引统计", {
+            '事实数量': len(self.fact_node_keys) if hasattr(self, 'fact_node_keys') else 0,
+            '段落数量': len(self.passage_node_keys) if hasattr(self, 'passage_node_keys') else 0,
+            '实体数量': len(self.entity_node_keys) if hasattr(self, 'entity_node_keys') else 0,
+            '图节点数': self.graph.vcount() if hasattr(self, 'graph') else 0,
+            '图边数': self.graph.ecount() if hasattr(self, 'graph') else 0,
+            '层次化内容数': len(self.all_content_node_keys) if hasattr(self, 'all_content_node_keys') else 0
+        })
+        
+        # 获取查询嵌入
+        debug_print("获取查询嵌入...")
+        self.get_query_embeddings(queries)
+        
+        retrieval_results = []
+        
+        for q_idx, query in enumerate(queries):
+            print(f"\n{'#'*70}")
+            print(f"# 查询 {q_idx + 1}/{len(queries)}: {query}")
+            print(f"{'#'*70}")
+            
+            # ====== 第一步：事实检索 ======
+            step1_start = time.time()
+            debug_print("步骤1: 事实检索 (get_fact_scores)")
+            query_fact_scores = self.get_fact_scores(query)
+            step1_time = time.time() - step1_start
+            
+            if len(query_fact_scores) > 0:
+                debug_print(f"事实相似度分数 (耗时: {step1_time:.3f}s)", query_fact_scores)
+                
+                # 显示将送入重排序的候选事实（使用rerank_candidate_k）
+                display_k = min(rerank_candidate_k, len(query_fact_scores), 20)  # 最多显示20个
+                top_indices = np.argsort(query_fact_scores)[-display_k:][::-1]
+                print(f"\n  📋 Top-{display_k} 候选事实三元组 (将送入LLM重排序):")
+                for i, idx in enumerate(top_indices):
+                    fact_id = self.fact_node_keys[idx]
+                    try:
+                        fact_content = self.fact_embedding_store.get_row(fact_id)['content']
+                        print(f"    [{i+1}] 分数={query_fact_scores[idx]:.4f} | {fact_content}")
+                    except:
+                        print(f"    [{i+1}] 分数={query_fact_scores[idx]:.4f} | (无法获取内容)")
+                if rerank_candidate_k > display_k:
+                    print(f"    ... 还有 {rerank_candidate_k - display_k} 个候选事实")
+            else:
+                debug_print("没有可用的事实进行评分")
+            
+            # ====== 第二步：认知记忆 - 事实重排序 ======
+            step2_start = time.time()
+            debug_print("步骤2: 认知记忆 - 事实重排序 (rerank_facts)")
+            top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(query, query_fact_scores)
+            step2_time = time.time() - step2_start
+            
+            print(f"\n  ⏱️ 重排序耗时: {step2_time:.3f}s")
+            facts_before = rerank_log.get('facts_before_rerank', [])
+            print(f"\n  📋 重排序前的候选事实 ({len(facts_before)}个):")
+            display_before = min(len(facts_before), 10)  # 显示前10个
+            for i, fact in enumerate(facts_before[:display_before]):
+                print(f"    [{i+1}] {fact}")
+            if len(facts_before) > display_before:
+                print(f"    ... 还有 {len(facts_before) - display_before} 个")
+            
+            print(f"\n  📋 重排序后的事实 ({len(top_k_facts)}个) [最终用于图搜索]:")
+            for i, fact in enumerate(top_k_facts):
+                print(f"    [{i+1}] {fact}")
+            
+            # ====== 第二步B：文件摘要检索和重排序 ======
+            step2b_start = time.time()
+            top_files = []
+            if hasattr(self, 'file_node_keys') and len(self.file_node_keys) > 0:
+                debug_print("步骤2B: 文件摘要检索和重排序 (get_file_scores + rerank_files)")
+                query_file_scores, file_keys = self.get_file_scores(query)
+                
+                if len(query_file_scores) > 0:
+                    debug_print(f"文件相似度分数", query_file_scores)
+                    
+                    # 显示将送入LLM重排序的候选文件（使用file_rerank_candidate_k）
+                    display_k = min(file_rerank_candidate_k, len(query_file_scores))
+                    top_file_indices = np.argsort(query_file_scores)[-display_k:][::-1]
+                    # 只显示前15个，避免输出过多
+                    show_k = min(15, display_k)
+                    print(f"\n  📂 Top-{display_k} 候选文件 (将送入LLM重排序，显示前{show_k}个):")
+                    print(f"  {'-'*60}")
+                    for i, idx in enumerate(top_file_indices[:show_k]):
+                        try:
+                            file_key = file_keys[idx]
+                            row = self.file_embedding_store.get_row(file_key)
+                            summary = row.get('summary', '')
+                            file_path = row.get('file_path', '')
+                            print(f"    [{i+1}] 分数={query_file_scores[idx]:.4f}")
+                            print(f"        路径: {file_path}")
+                            print(f"        摘要: {summary[:300]}{'...' if len(summary) > 300 else ''}")
+                            print()
+                        except Exception as e:
+                            print(f"    [{i+1}] 分数={query_file_scores[idx]:.4f} | (无法获取信息: {e})")
+                    if display_k > show_k:
+                        print(f"    ... 还有 {display_k - show_k} 个候选文件")
+                    
+                    # 文件重排序
+                    _, top_files, file_rerank_log = self.rerank_files(query, query_file_scores, file_keys)
+                    
+                    print(f"\n  📂 重排序后的文件 ({len(top_files)}个，目标保留{file_linking_top_k}个) [LLM筛选后，用于图搜索]:")
+                    print(f"  {'-'*60}")
+                    for i, f in enumerate(top_files):
+                        print(f"    [{i+1}] 分数={f.get('score', 0):.4f}")
+                        print(f"        路径: {f.get('file_path', '')}")
+                        print(f"        摘要: {f.get('summary', '')[:300]}{'...' if len(f.get('summary', '')) > 300 else ''}")
+                        print()
+            else:
+                debug_print("没有文件索引，跳过文件检索")
+            
+            step2b_time = time.time() - step2b_start
+            self.rerank_time += step2_time + step2b_time
+            
+            # ====== 第三步：图邻居搜索 + 分类型LLM重排序 ======
+            step3_start = time.time()
+            entities_for_search = set()
+            
+            if len(top_k_facts) == 0 and len(top_files) == 0:
+                debug_print("步骤3: 降级策略 - 分类型DPR检索 (_dpr_by_type)")
+                type_results = self._dpr_by_type(query)
+                retrieval_method = "DPR by Type"
+                # 构建各类型结果
+                chunk_result = self._build_typed_result('chunk', type_results.get('chunk'), num_to_retrieve)
+                table_result = self._build_typed_result('table', type_results.get('table'), num_to_retrieve // 2)
+                code_result = self._build_typed_result('code', type_results.get('code'), num_to_retrieve // 2)
+            else:
+                debug_print("步骤3: 图邻居搜索 + LLM重排序 (graph_neighbor_rerank)")
+                
+                # 显示将用于图搜索的实体
+                for fact in top_k_facts:
+                    entities_for_search.add(fact[0].lower())  # subject
+                    entities_for_search.add(fact[2].lower())  # object
+                print(f"\n  🔗 用于图搜索的实体 ({len(entities_for_search)}个):")
+                for i, ent in enumerate(list(entities_for_search)[:10]):
+                    print(f"    [{i+1}] {ent}")
+                
+                if top_files:
+                    print(f"\n  📂 用于图搜索的文件 ({len(top_files)}个):")
+                    for i, f in enumerate(top_files[:5]):
+                        summary_preview = f.get('summary', '')[:150]
+                        print(f"    [{i+1}] {f.get('file_path', '')} (分数={f.get('score', 0):.4f})")
+                        print(f"        摘要: {summary_preview}{'...' if len(f.get('summary', '')) > 150 else ''}")
+                
+                # 使用新的图邻居搜索 + LLM重排序方法
+                type_results = self.graph_neighbor_rerank(
+                    query=query,
+                    top_k_facts=top_k_facts,
+                    top_files=top_files,
+                    chunk_candidate_k=50,
+                    table_candidate_k=20,
+                    code_candidate_k=20,
+                    chunk_top_k=num_to_retrieve,
+                    table_top_k=num_to_retrieve // 2,
+                    code_top_k=num_to_retrieve // 2,
+                    max_hop=2,
+                    verbose=True
+                )
+                retrieval_method = "Graph Neighbor + LLM Rerank"
+                
+                # 直接构建结果（graph_neighbor_rerank 返回的格式不同）
+                chunk_data = type_results.get('chunk', ([], np.array([]), []))
+                table_data = type_results.get('table', ([], np.array([]), []))
+                code_data = type_results.get('code', ([], np.array([]), []))
+                
+                chunk_result = TypedContentResult(
+                    content_type='chunk',
+                    contents=chunk_data[0] if len(chunk_data[0]) > 0 else [],
+                    scores=chunk_data[1] if len(chunk_data[1]) > 0 else np.array([]),
+                    keys=chunk_data[2] if len(chunk_data[2]) > 0 else []
+                )
+                table_result = TypedContentResult(
+                    content_type='table',
+                    contents=table_data[0] if len(table_data[0]) > 0 else [],
+                    scores=table_data[1] if len(table_data[1]) > 0 else np.array([]),
+                    keys=table_data[2] if len(table_data[2]) > 0 else []
+                )
+                code_result = TypedContentResult(
+                    content_type='code',
+                    contents=code_data[0] if len(code_data[0]) > 0 else [],
+                    scores=code_data[1] if len(code_data[1]) > 0 else np.array([]),
+                    keys=code_data[2] if len(code_data[2]) > 0 else []
+                )
+            
+            step3_time = time.time() - step3_start
+            
+            debug_print(f"检索方法: {retrieval_method} (耗时: {step3_time:.3f}s)")
+            
+            # 打印分类型结果
+            print(f"\n  {'='*50}")
+            print(f"  📊 分类型检索结果")
+            print(f"  {'='*50}")
+            
+            # Chunk 结果
+            print(f"\n  📁 Chunk 结果 (共{len(chunk_result.contents)}个):")
+            print(f"  {'-'*50}")
+            for i in range(min(5, len(chunk_result.contents))):
+                score = chunk_result.scores[i] if i < len(chunk_result.scores) else 0
+                content = chunk_result.contents[i]
+                preview = content[:150].replace('\n', ' ') + "..." if len(content) > 150 else content.replace('\n', ' ')
+                print(f"    [{i+1}] 分数={score:.6f}, 长度={len(content)}字符")
+                print(f"        {preview}")
+            
+            # Table 结果
+            print(f"\n  📁 Table 结果 (共{len(table_result.contents)}个):")
+            print(f"  {'-'*50}")
+            for i in range(min(3, len(table_result.contents))):
+                score = table_result.scores[i] if i < len(table_result.scores) else 0
+                content = table_result.contents[i]
+                preview = content[:150].replace('\n', ' ') + "..." if len(content) > 150 else content.replace('\n', ' ')
+                print(f"    [{i+1}] 分数={score:.6f}, 长度={len(content)}字符")
+                print(f"        {preview}")
+            
+            # Code 结果
+            print(f"\n  📁 Code 结果 (共{len(code_result.contents)}个):")
+            print(f"  {'-'*50}")
+            for i in range(min(3, len(code_result.contents))):
+                score = code_result.scores[i] if i < len(code_result.scores) else 0
+                content = code_result.contents[i]
+                preview = content[:150].replace('\n', ' ') + "..." if len(content) > 150 else content.replace('\n', ' ')
+                print(f"    [{i+1}] 分数={score:.6f}, 长度={len(content)}字符")
+                print(f"        {preview}")
+            
+            # 合并为兼容的 top_k_docs（用于返回 QuerySolution）
+            top_k_docs = chunk_result.contents[:num_to_retrieve]
+            
+            # ====== 统计汇总 ======
+            total_tokens = sum(len(doc)//4 for doc in top_k_docs)
+            print(f"\n  📊 本次查询统计:")
+            print(f"     - Chunk数: {len(chunk_result.contents)}, Table数: {len(table_result.contents)}, Code数: {len(code_result.contents)}")
+            print(f"     - 总token估计: ~{total_tokens}")
+            print(f"     - 步骤1 (事实检索): {step1_time:.3f}s")
+            print(f"     - 步骤2 (事实重排序): {step2_time:.3f}s")
+            print(f"     - 步骤2B(文件检索+重排): {step2b_time:.3f}s")
+            print(f"     - 步骤3 (图邻居+重排序): {step3_time:.3f}s")
+            print(f"     - 使用实体数: {len(entities_for_search)}")
+            print(f"     - 使用文件数: {len(top_files)}")
+            
+            # 同时返回分类型结果
+            retrieval_results.append(QuerySolution(
+                question=query, 
+                docs=top_k_docs, 
+                doc_scores=chunk_result.scores[:num_to_retrieve] if len(chunk_result.scores) > 0 else np.array([])
+            ))
+        
+        # 总体统计
+        retrieve_end_time = time.time()
+        total_time = retrieve_end_time - retrieve_start_time
+        
+        print(f"\n{'='*70}")
+        print(f"📈 检索总体统计")
+        print(f"{'='*70}")
+        print(f"  查询数量: {len(queries)}")
+        print(f"  总耗时: {total_time:.2f}s")
+        print(f"  平均每查询: {total_time/len(queries):.2f}s")
+        print(f"  重排序总耗时: {self.rerank_time:.2f}s")
+        print(f"  PPR总耗时: {self.ppr_time:.2f}s")
+        
+        return retrieval_results
+
+    def retrieve_by_type(self,
+                         queries: List[str],
+                         chunk_top_k: int = 10,
+                         table_top_k: int = 5,
+                         code_top_k: int = 5,
+                         verbose: bool = True) -> List[TypedQuerySolution]:
+        """
+        分类型检索：分别返回 chunk、table、code 的排序结果
+        
+        与 retrieve 方法类似，但返回按类型分开的结果。
+        
+        Args:
+            queries (List[str]): 查询字符串列表
+            chunk_top_k (int): 返回的 chunk 数量
+            table_top_k (int): 返回的 table 数量
+            code_top_k (int): 返回的 code 数量
+            verbose (bool): 是否输出详细信息
+                
+        Returns:
+            List[TypedQuerySolution]: 分类型的检索结果列表
+        """
+        def debug_print(msg, data=None, max_items=5):
+            """辅助函数：格式化打印debug信息"""
+            if not verbose:
+                return
+            print(f"\n{'='*60}")
+            print(f"🔍 {msg}")
+            print(f"{'='*60}")
+            if data is not None:
+                if isinstance(data, dict):
+                    for k, v in list(data.items())[:max_items]:
+                        print(f"  [{k}]: {v}")
+        
+        retrieve_start_time = time.time()
+        
+        rerank_candidate_k = getattr(self.global_config, 'rerank_candidate_k', 50)
+        file_rerank_candidate_k = getattr(self.global_config, 'file_rerank_candidate_k', 50)
+        file_linking_top_k = getattr(self.global_config, 'file_linking_top_k', 5)
+        
+        if not self.ready_to_retrieve:
+            debug_print("准备检索对象...")
+            self.prepare_retrieval_objects()
+        
+        debug_print("索引统计", {
+            '事实数量': len(self.fact_node_keys),
+            'chunk数量': len(self.passage_node_keys),
+            'code数量': len(self.code_node_keys),
+            'table数量': len(self.table_node_keys),
+            '图节点数': self.graph.vcount(),
+        })
+        
+        # 获取查询嵌入
+        self.get_query_embeddings(queries)
+        
+        retrieval_results = []
+        
+        for q_idx, query in enumerate(queries):
+            if verbose:
+                print(f"\n{'#'*70}")
+                print(f"# 查询 {q_idx + 1}/{len(queries)}: {query}")
+                print(f"{'#'*70}")
+            
+            # 第一步：事实检索
+            step1_start = time.time()
+            query_fact_scores = self.get_fact_scores(query)
+            step1_time = time.time() - step1_start
+            
+            # 第二步：事实重排序
+            step2_start = time.time()
+            top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(query, query_fact_scores)
+            step2_time = time.time() - step2_start
+            
+            if verbose:
+                print(f"\n  ⏱️ 事实检索耗时: {step1_time:.3f}s, 重排序耗时: {step2_time:.3f}s")
+                print(f"  📋 重排序后的事实 ({len(top_k_facts)}个):")
+                for i, fact in enumerate(top_k_facts[:5]):
+                    print(f"    [{i+1}] {fact}")
+            
+            # 第二步B：文件摘要检索和重排序
+            step2b_start = time.time()
+            top_files = []
+            if hasattr(self, 'file_node_keys') and len(self.file_node_keys) > 0:
+                query_file_scores, file_keys = self.get_file_scores(query)
+                if len(query_file_scores) > 0:
+                    _, top_files, _ = self.rerank_files(query, query_file_scores, file_keys)
+            step2b_time = time.time() - step2b_start
+            
+            if verbose and top_files:
+                print(f"\n  📂 相关文件 ({len(top_files)}个):")
+                for i, f in enumerate(top_files[:3]):
+                    print(f"    [{i+1}] {f.get('file_path', '')} (分数={f.get('score', 0):.4f})")
+            
+            # 第三步：图邻居搜索 + 分类型重排序
+            step3_start = time.time()
+            if len(top_k_facts) == 0 and len(top_files) == 0:
+                # 降级到DPR，但仍然分类型返回
+                if verbose:
+                    print(f"\n  ⚠️ 无事实或文件，使用DPR降级检索")
+                type_results = self._dpr_by_type(query)
+                # 构建分类型结果
+                chunk_result = self._build_typed_result('chunk', type_results.get('chunk'), chunk_top_k)
+                table_result = self._build_typed_result('table', type_results.get('table'), table_top_k)
+                code_result = self._build_typed_result('code', type_results.get('code'), code_top_k)
+            else:
+                # 使用新的图邻居搜索 + LLM重排序方法
+                if verbose:
+                    print(f"\n  🔍 使用图邻居搜索 + LLM重排序")
+                type_results = self.graph_neighbor_rerank(
+                    query=query,
+                    top_k_facts=top_k_facts,
+                    top_files=top_files,
+                    chunk_candidate_k=50,
+                    table_candidate_k=20,
+                    code_candidate_k=20,
+                    chunk_top_k=chunk_top_k,
+                    table_top_k=table_top_k,
+                    code_top_k=code_top_k,
+                    max_hop=2,
+                    verbose=verbose
+                )
+                # 直接构建结果（graph_neighbor_rerank 返回的格式不同）
+                chunk_data = type_results.get('chunk', ([], np.array([]), []))
+                table_data = type_results.get('table', ([], np.array([]), []))
+                code_data = type_results.get('code', ([], np.array([]), []))
+                
+                chunk_result = TypedContentResult(
+                    content_type='chunk',
+                    contents=chunk_data[0] if len(chunk_data[0]) > 0 else [],
+                    scores=chunk_data[1] if len(chunk_data[1]) > 0 else np.array([]),
+                    keys=chunk_data[2] if len(chunk_data[2]) > 0 else []
+                )
+                table_result = TypedContentResult(
+                    content_type='table',
+                    contents=table_data[0] if len(table_data[0]) > 0 else [],
+                    scores=table_data[1] if len(table_data[1]) > 0 else np.array([]),
+                    keys=table_data[2] if len(table_data[2]) > 0 else []
+                )
+                code_result = TypedContentResult(
+                    content_type='code',
+                    contents=code_data[0] if len(code_data[0]) > 0 else [],
+                    scores=code_data[1] if len(code_data[1]) > 0 else np.array([]),
+                    keys=code_data[2] if len(code_data[2]) > 0 else []
+                )
+            step3_time = time.time() - step3_start
+            
+            if verbose:
+                print(f"\n  ⏱️ 图邻居搜索+重排序总耗时: {step3_time:.3f}s")
+                print(f"\n  📊 分类型检索结果:")
+                self._print_typed_result("Chunk", chunk_result, 5)
+                self._print_typed_result("Table", table_result, 3)
+                self._print_typed_result("Code", code_result, 3)
+            
+            retrieval_results.append(TypedQuerySolution(
+                question=query,
+                chunks=chunk_result,
+                tables=table_result,
+                codes=code_result
+            ))
+        
+        # 总体统计
+        retrieve_end_time = time.time()
+        total_time = retrieve_end_time - retrieve_start_time
+        
+        if verbose:
+            print(f"\n{'='*70}")
+            print(f"📈 检索总体统计")
+            print(f"{'='*70}")
+            print(f"  查询数量: {len(queries)}")
+            print(f"  总耗时: {total_time:.2f}s")
+            print(f"  平均每查询: {total_time/len(queries):.2f}s")
+        
+        return retrieval_results
+
+    def _dpr_by_type(self, query: str) -> Dict[str, Tuple[np.ndarray, np.ndarray, List[str]]]:
+        """
+        分类型的DPR检索（降级方案）
+        """
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        
+        results = {}
+        
+        for content_type in ['chunk', 'code', 'table']:
+            start_idx, end_idx = self.content_type_ranges.get(content_type, (0, 0))
+            
+            if start_idx >= end_idx:
+                results[content_type] = (np.array([]), np.array([]), [])
+                continue
+            
+            # 获取该类型的嵌入
+            type_embeddings = self.all_content_embeddings[start_idx:end_idx]
+            type_node_keys = self.all_content_node_keys[start_idx:end_idx]
+            
+            # 计算相似度
+            type_scores = np.dot(type_embeddings, query_embedding.T)
+            type_scores = np.squeeze(type_scores) if type_scores.ndim == 2 else type_scores
+            type_scores = min_max_normalize(type_scores)
+            
+            # 排序
+            sorted_local_ids = np.argsort(type_scores)[::-1]
+            sorted_scores = type_scores[sorted_local_ids]
+            sorted_node_keys = [type_node_keys[i] for i in sorted_local_ids]
+            
+            results[content_type] = (sorted_local_ids, sorted_scores, sorted_node_keys)
+        
+        return results
+
+    def _build_typed_result(self, content_type: str, 
+                           type_data: Tuple[np.ndarray, np.ndarray, List[str]],
+                           top_k: int) -> TypedContentResult:
+        """
+        构建单一类型的检索结果
+        """
+        if type_data is None or len(type_data[0]) == 0:
+            return TypedContentResult(
+                content_type=content_type,
+                contents=[],
+                scores=np.array([]),
+                keys=[]
+            )
+        
+        sorted_ids, sorted_scores, sorted_keys = type_data
+        
+        # 获取top_k个内容
+        top_keys = sorted_keys[:top_k]
+        top_scores = sorted_scores[:top_k]
+        
+        # 获取内容文本
+        contents = []
+        for key in top_keys:
+            content = self._get_content_by_type_and_key(content_type, key)
+            contents.append(content)
+        
+        return TypedContentResult(
+            content_type=content_type,
+            contents=contents,
+            scores=top_scores,
+            keys=top_keys
+        )
+
+    def _print_typed_result(self, type_name: str, result: TypedContentResult, top_k: int = 3):
+        """
+        打印单一类型的检索结果
+        """
+        print(f"\n  📁 {type_name} (共{len(result.contents)}个，显示Top-{min(top_k, len(result.contents))}):")
+        if len(result.contents) == 0:
+            print(f"      无结果")
+            return
+        
+        for i in range(min(top_k, len(result.contents))):
+            score = result.scores[i] if i < len(result.scores) else 0
+            content = result.contents[i]
+            preview = content[:120] + "..." if len(content) > 120 else content
+            preview = preview.replace('\n', ' ')
+            print(f"      [{i+1}] 分数={score:.6f}")
+            print(f"          {preview}")
 
     def rag_qa(self,
                queries: List[str|QuerySolution],
@@ -976,8 +1626,14 @@ class HippoRAG:
             retrieved_passages = query_solution.docs[:self.global_config.qa_top_k]
 
             prompt_user = ''
-            for passage in retrieved_passages:
-                prompt_user += f'Wikipedia Title: {passage}\n\n'
+            for idx, passage in enumerate(retrieved_passages):
+                # 检查是否是层次化内容（包含类型标记）
+                if passage.startswith('[文件]') or passage.startswith('[段落]') or passage.startswith('[代码]') or passage.startswith('[表格]'):
+                    # 层次化内容，保持原有格式
+                    prompt_user += f'参考内容 {idx+1}: {passage}\n\n'
+                else:
+                    # 传统段落内容
+                    prompt_user += f'Wikipedia Title: {passage}\n\n'
             prompt_user += 'Question: ' + query_solution.question + '\nThought: '
 
             if self.prompt_template_manager.is_template_name_valid(name=f'rag_qa_{self.global_config.dataset}'):
@@ -1713,9 +2369,43 @@ class HippoRAG:
         self.entity_node_keys: List = list(self.entity_embedding_store.get_all_ids()) # 实体节点键列表
         self.passage_node_keys: List = list(self.chunk_embedding_store.get_all_ids()) # 段落节点键列表
         self.fact_node_keys: List = list(self.fact_embedding_store.get_all_ids()) # 事实节点键列表
+        
+        # 获取层次化结构的其他类型节点
+        try:
+            self.file_node_keys: List = list(self.file_embedding_store.get_all_ids()) # 文件节点键列表
+        except:
+            self.file_node_keys: List = []
+            
+        try:
+            self.code_node_keys: List = list(self.code_embedding_store.get_all_ids()) # 代码节点键列表
+        except:
+            self.code_node_keys: List = []
+            
+        try:
+            self.table_node_keys: List = list(self.table_embedding_store.get_all_ids()) # 表格节点键列表
+        except:
+            self.table_node_keys: List = []
+            
+        # 合并所有内容节点用于检索（文件、段落、代码、表格）
+        self.all_content_node_keys: List = self.file_node_keys + self.passage_node_keys + self.code_node_keys + self.table_node_keys
+        self.all_content_node_types: List = (['file'] * len(self.file_node_keys) + 
+                                           ['chunk'] * len(self.passage_node_keys) + 
+                                           ['code'] * len(self.code_node_keys) + 
+                                           ['table'] * len(self.table_node_keys))
+        
+        # 记录各类型在 all_content_node_keys 中的索引范围（用于分类型检索）
+        self.content_type_ranges = {
+            'file': (0, len(self.file_node_keys)),
+            'chunk': (len(self.file_node_keys), len(self.file_node_keys) + len(self.passage_node_keys)),
+            'code': (len(self.file_node_keys) + len(self.passage_node_keys), 
+                    len(self.file_node_keys) + len(self.passage_node_keys) + len(self.code_node_keys)),
+            'table': (len(self.file_node_keys) + len(self.passage_node_keys) + len(self.code_node_keys),
+                     len(self.all_content_node_keys))
+        }
+        logger.info(f"Content type ranges: file={self.content_type_ranges['file']}, chunk={self.content_type_ranges['chunk']}, code={self.content_type_ranges['code']}, table={self.content_type_ranges['table']}")
 
         # 数据一致性检查：验证图中的节点数量与嵌入存储器中的节点数量是否匹配
-        expected_node_count = len(self.entity_node_keys) + len(self.passage_node_keys)
+        expected_node_count = len(self.entity_node_keys) + len(self.all_content_node_keys)
         actual_node_count = self.graph.vcount()
         
         if expected_node_count != actual_node_count:
@@ -1732,12 +2422,12 @@ class HippoRAG:
             igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)} # 节点键到图索引的映射
             self.node_name_to_vertex_idx = igraph_name_to_idx
             
-            # 检查所有实体和段落节点是否都在图中存在
+            # 检查所有实体和内容节点是否都在图中存在
             missing_entity_nodes = [node_key for node_key in self.entity_node_keys if node_key not in igraph_name_to_idx]
-            missing_passage_nodes = [node_key for node_key in self.passage_node_keys if node_key not in igraph_name_to_idx]
+            missing_content_nodes = [node_key for node_key in self.all_content_node_keys if node_key not in igraph_name_to_idx]
             
-            if missing_entity_nodes or missing_passage_nodes:
-                logger.warning(f"Missing nodes in graph: {len(missing_entity_nodes)} entity nodes, {len(missing_passage_nodes)} passage nodes")
+            if missing_entity_nodes or missing_content_nodes:
+                logger.warning(f"Missing nodes in graph: {len(missing_entity_nodes)} entity nodes, {len(missing_content_nodes)} content nodes")
                 # 如果发现缺失节点，重新构建图结构
                 self.add_new_nodes()
                 self.save_igraph()
@@ -1747,20 +2437,60 @@ class HippoRAG:
             
             # 创建节点键到图索引的快速查找列表
             self.entity_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.entity_node_keys] # 实体节点的图索引列表
+            # 为了兼容性，保留passage_node_idxs，但也创建所有内容节点的索引
             self.passage_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.passage_node_keys] # 段落节点的图索引列表
+            self.all_content_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.all_content_node_keys] # 所有内容节点的图索引列表
         except Exception as e:
             logger.error(f"Error creating node index mapping: {str(e)}")
             # 如果映射创建失败，初始化为空列表
             self.node_name_to_vertex_idx = {}
             self.entity_node_idxs = []
             self.passage_node_idxs = []
+            self.all_content_node_idxs = []
 
         logger.info("Loading embeddings.")
         # 将所有向量嵌入加载到内存中的numpy数组，提高检索性能
         # 避免检索时频繁的磁盘I/O操作
         self.entity_embeddings = np.array(self.entity_embedding_store.get_embeddings(self.entity_node_keys))
+        logger.info(f"Loaded {len(self.entity_embeddings)} entity embeddings.")
+        
         self.passage_embeddings = np.array(self.chunk_embedding_store.get_embeddings(self.passage_node_keys))
+        logger.info(f"Loaded {len(self.passage_embeddings)} passage embeddings.")
+        
         self.fact_embeddings = np.array(self.fact_embedding_store.get_embeddings(self.fact_node_keys))
+        logger.info(f"Loaded {len(self.fact_embeddings)} fact embeddings.")
+        
+        # 批量加载层次化结构的所有内容类型嵌入（优化性能）
+        logger.info("Loading hierarchical content embeddings...")
+        all_content_embeddings_list = []
+        
+        # 批量获取各类型嵌入，避免逐个循环
+        if self.file_node_keys:
+            file_embeddings = self.file_embedding_store.get_embeddings(self.file_node_keys)
+            all_content_embeddings_list.extend(file_embeddings)
+            logger.info(f"Loaded {len(file_embeddings)} file embeddings.")
+        
+        if self.passage_node_keys:
+            # passage_embeddings 已经加载过了，直接复用
+            all_content_embeddings_list.extend(self.passage_embeddings.tolist())
+            logger.info(f"Reused {len(self.passage_embeddings)} passage embeddings.")
+        
+        if self.code_node_keys:
+            code_embeddings = self.code_embedding_store.get_embeddings(self.code_node_keys)
+            all_content_embeddings_list.extend(code_embeddings)
+            logger.info(f"Loaded {len(code_embeddings)} code embeddings.")
+        
+        if self.table_node_keys:
+            table_embeddings = self.table_embedding_store.get_embeddings(self.table_node_keys)
+            all_content_embeddings_list.extend(table_embeddings)
+            logger.info(f"Loaded {len(table_embeddings)} table embeddings.")
+        
+        if all_content_embeddings_list:
+            self.all_content_embeddings = np.array(all_content_embeddings_list)
+        else:
+            self.all_content_embeddings = np.array([])
+        
+        logger.info(f"Total content embeddings: {len(self.all_content_embeddings)}")
 
         # 加载现有的OpenIE结果，用于构建事实到文档的映射关系
         all_openie_info, chunk_keys_to_process = self.load_existing_openie([])
@@ -1815,6 +2545,13 @@ class HippoRAG:
 
         # 标记检索对象已准备完毕，可以开始执行检索操作
         self.ready_to_retrieve = True
+        
+        # 检查是否使用层次化结构
+        self.is_hierarchical = len(self.all_content_node_keys) > len(self.passage_node_keys)
+        if self.is_hierarchical:
+            logger.info(f"Using hierarchical structure with {len(self.all_content_node_keys)} content nodes")
+        else:
+            logger.info(f"Using traditional structure with {len(self.passage_node_keys)} passage nodes")
 
     def get_query_embeddings(self, queries: List[str] | List[QuerySolution]):
         """
@@ -1900,9 +2637,170 @@ class HippoRAG:
             logger.error(f"Error computing fact scores: {str(e)}")
             return np.array([])
 
+    def get_file_scores(self, query: str) -> Tuple[np.ndarray, List[str]]:
+        """
+        计算文件摘要相关性分数：查询与文件摘要的语义匹配
+        
+        通过向量相似度计算查询与文件摘要嵌入之间的标准化相似度分数，
+        用于在事实检索之外提供文件级别的相关性信息。
+        
+        Args:
+            query (str): 输入查询文本
+            
+        Returns:
+            Tuple[np.ndarray, List[str]]:
+                - file_scores: 标准化的相似度分数数组，形状为(#files,)
+                - file_keys: 文件节点键列表
+        """
+        if not hasattr(self, 'file_node_keys') or len(self.file_node_keys) == 0:
+            logger.warning("No file nodes available for scoring.")
+            return np.array([]), []
+        
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        
+        try:
+            # 获取文件嵌入（如果还没有加载到内存）
+            if not hasattr(self, 'file_embeddings') or self.file_embeddings is None or len(self.file_embeddings) == 0:
+                self.file_embeddings = np.array(self.file_embedding_store.get_embeddings(self.file_node_keys))
+            
+            # 计算相似度
+            query_file_scores = np.dot(self.file_embeddings, query_embedding.T)
+            query_file_scores = np.squeeze(query_file_scores) if query_file_scores.ndim == 2 else query_file_scores
+            query_file_scores = min_max_normalize(query_file_scores)
+            
+            return query_file_scores, self.file_node_keys
+            
+        except Exception as e:
+            logger.error(f"Error computing file scores: {str(e)}")
+            return np.array([]), []
+
+    def rerank_files(self, query: str, query_file_scores: np.ndarray, file_keys: List[str]) -> Tuple[List[int], List[Dict], dict]:
+        """
+        文件摘要重排序：使用LLM对候选文件进行智能筛选
+        
+        从embedding相似度top-k候选文件中，使用LLM筛选最相关的文件。
+        类似于事实重排序的流程：50个候选 -> LLM筛选 -> 保留5个
+        
+        Args:
+            query (str): 输入查询文本
+            query_file_scores (np.ndarray): 文件相关性分数数组
+            file_keys (List[str]): 文件键列表
+            
+        Returns:
+            Tuple[List[int], List[Dict], dict]:
+                - top_file_indices: 重排序后的文件索引列表
+                - top_files: 重排序后的文件信息列表
+                - rerank_log: 重排序过程的日志信息
+        """
+        # 使用文件专用配置参数
+        file_candidate_k: int = getattr(self.global_config, 'file_rerank_candidate_k', 50)
+        file_top_k: int = getattr(self.global_config, 'file_linking_top_k', 5)
+        
+        logger.info(f"File reranking: selecting top {file_candidate_k} candidates, will keep top {file_top_k} after reranking")
+        
+        if len(query_file_scores) == 0 or len(file_keys) == 0:
+            logger.warning("No files available for reranking.")
+            return [], [], {'files_before_rerank': [], 'files_after_rerank': []}
+        
+        try:
+            # 获取top-k候选文件（默认50个）
+            candidate_k = min(file_candidate_k, len(query_file_scores))
+            if len(query_file_scores) <= candidate_k:
+                candidate_file_indices = np.argsort(query_file_scores)[::-1].tolist()
+            else:
+                candidate_file_indices = np.argsort(query_file_scores)[-candidate_k:][::-1].tolist()
+            
+            # 获取候选文件的摘要信息
+            candidate_files = []
+            for idx in candidate_file_indices:
+                file_key = file_keys[idx]
+                try:
+                    row = self.file_embedding_store.get_row(file_key)
+                    file_info = {
+                        'key': file_key,
+                        'summary': row.get('summary', '')[:500],  # 截取摘要
+                        'file_path': row.get('file_path', ''),
+                        'score': float(query_file_scores[idx])
+                    }
+                    candidate_files.append(file_info)
+                except Exception as e:
+                    logger.warning(f"Failed to get file info for {file_key}: {e}")
+            
+            # 构建重排序prompt，发送所有候选文件给LLM
+            files_for_rerank = []
+            for i, f in enumerate(candidate_files):  # 发送所有候选文件
+                files_for_rerank.append({
+                    'id': i,
+                    'summary': f['summary'],
+                    'file_path': f['file_path']
+                })
+            
+            # 使用LLM进行文件重排序
+            try:
+                rerank_prompt = f"""你是一个专业的技术文档检索助手。请根据用户的查询问题，从候选文件中选择最相关的文件。
+
+## 选择标准（按优先级排序）：
+1. **直接相关**：文件摘要直接回答或涉及查询问题的核心内容
+2. **定义/概述**：包含查询主题的定义、概述或基本介绍
+3. **技术细节**：包含查询主题的具体实现、配置或使用方法
+4. **相关概念**：涉及与查询相关的上下游概念或依赖关系
+
+## 注意事项：
+- 优先选择内容具体的文件，而非泛泛的概述
+- 如果查询涉及特定版本/API，优先选择对应版本的文档
+- 避免选择仅在摘要中顺带提及查询关键词的文件
+
+## 查询问题
+{query}
+
+## 候选文件（共{len(files_for_rerank)}个）
+{json.dumps(files_for_rerank, ensure_ascii=False, indent=2)}
+
+## 输出要求
+请返回最相关文件的id列表，格式为JSON数组，如 [0, 3, 5]。最多选择{file_top_k}个文件。
+只输出JSON数组，不要其他内容："""
+
+                messages = [{"role": "user", "content": rerank_prompt}]
+                response, _, _ = self.llm_model.infer(messages)
+                
+                # 解析LLM返回的文件id列表
+                import re
+                match = re.search(r'\[[\d,\s]*\]', response)
+                if match:
+                    selected_ids = json.loads(match.group())
+                    # 限制最多保留file_top_k个
+                    selected_ids = selected_ids[:file_top_k]
+                    top_file_indices = [candidate_file_indices[i] for i in selected_ids if i < len(candidate_file_indices)]
+                    top_files = [candidate_files[i] for i in selected_ids if i < len(candidate_files)]
+                else:
+                    # 如果解析失败，使用embedding分数最高的
+                    logger.warning("Failed to parse LLM response, using embedding scores")
+                    top_file_indices = candidate_file_indices[:file_top_k]
+                    top_files = candidate_files[:file_top_k]
+                    
+            except Exception as e:
+                logger.warning(f"LLM file reranking failed: {e}, using embedding scores")
+                top_file_indices = candidate_file_indices[:file_top_k]
+                top_files = candidate_files[:file_top_k]
+            
+            rerank_log = {
+                'files_before_rerank': candidate_files,
+                'files_after_rerank': top_files
+            }
+            
+            return top_file_indices, top_files, rerank_log
+            
+        except Exception as e:
+            logger.error(f"Error in rerank_files: {str(e)}")
+            return [], [], {'files_before_rerank': [], 'files_after_rerank': [], 'error': str(e)}
+
     def dense_passage_retrieval(self, query: str) -> Tuple[np.ndarray, np.ndarray]:
         """
-        密集段落检索：传统向量相似度检索
+        密集段落检索：传统向量相似度检索（为了兼容性保留）
         
         基于预训练嵌入模型进行查询-段落的密集向量检索，
         作为HippoRAG的基础检索方法和降级策略。
@@ -1938,6 +2836,10 @@ class HippoRAG:
         - 语义理解能力
         - 不依赖图结构
         """
+        # 如果有层次化内容，优先使用多类型检索
+        if len(self.all_content_node_keys) > len(self.passage_node_keys):
+            return self.dense_content_retrieval(query)
+        
         query_embedding = self.query_to_embedding['passage'].get(query, None)
         if query_embedding is None:
             query_embedding = self._batch_encode_texts(query,
@@ -1950,6 +2852,91 @@ class HippoRAG:
         sorted_doc_ids = np.argsort(query_doc_scores)[::-1]
         sorted_doc_scores = query_doc_scores[sorted_doc_ids.tolist()]
         return sorted_doc_ids, sorted_doc_scores
+
+    def dense_content_retrieval(self, query: str) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        多类型内容检索：支持文件、段落、代码、表格的层次化检索
+        
+        基于预训练嵌入模型进行查询与多种类型内容的密集向量检索，
+        支持层次化JSON结构中的所有内容类型。
+        
+        Args:
+            query (str): 输入查询字符串
+            
+        Returns:
+            Tuple[np.ndarray, np.ndarray]:
+                - sorted_content_ids: 按相关性排序的内容ID数组
+                - sorted_content_scores: 标准化的相关性分数数组
+                
+        特点:
+        - 支持文件、段落、代码、表格等多种内容类型
+        - 统一的相似度计算和排序
+        - 为层次化结构优化的检索机制
+        """
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        
+        if len(self.all_content_embeddings) == 0:
+            # 回退到原始段落检索
+            return self.dense_passage_retrieval_original(query)
+        
+        query_content_scores = np.dot(self.all_content_embeddings, query_embedding.T)
+        query_content_scores = np.squeeze(query_content_scores) if query_content_scores.ndim == 2 else query_content_scores
+        query_content_scores = min_max_normalize(query_content_scores)
+
+        sorted_content_ids = np.argsort(query_content_scores)[::-1]
+        sorted_content_scores = query_content_scores[sorted_content_ids.tolist()]
+        return sorted_content_ids, sorted_content_scores
+
+    def dense_passage_retrieval_original(self, query: str) -> Tuple[np.ndarray, np.ndarray]:
+        """原始的段落检索方法（内部使用）"""
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        query_doc_scores = np.dot(self.passage_embeddings, query_embedding.T)
+        query_doc_scores = np.squeeze(query_doc_scores) if query_doc_scores.ndim == 2 else query_doc_scores
+        query_doc_scores = min_max_normalize(query_doc_scores)
+
+        sorted_doc_ids = np.argsort(query_doc_scores)[::-1]
+        sorted_doc_scores = query_doc_scores[sorted_doc_ids.tolist()]
+        return sorted_doc_ids, sorted_doc_scores
+
+    def _get_content_by_type_and_key(self, content_type: str, content_key: str) -> str:
+        """
+        根据内容类型和键获取内容数据
+        
+        Args:
+            content_type: 内容类型 ('file', 'chunk', 'code', 'table')
+            content_key: 内容键
+            
+        Returns:
+            str: 格式化的内容字符串
+        """
+        try:
+            if content_type == 'file':
+                row = self.file_embedding_store.get_row(content_key)
+                return f"[文件] {row.get('content', '')}"
+            elif content_type == 'chunk':
+                row = self.chunk_embedding_store.get_row(content_key)
+                return f"[段落] {row.get('content', '')}"
+            elif content_type == 'code':
+                row = self.code_embedding_store.get_row(content_key)
+                return f"[代码] {row.get('content', '')}"
+            elif content_type == 'table':
+                row = self.table_embedding_store.get_row(content_key)
+                return f"[表格] {row.get('content', '')}"
+            else:
+                # 回退到chunk
+                row = self.chunk_embedding_store.get_row(content_key)
+                return row.get('content', '')
+        except Exception as e:
+            logger.warning(f"Failed to get content for {content_type}:{content_key}, error: {e}")
+            return f"[{content_type}] Content not available"
 
 
     def get_top_k_weights(self,
@@ -1996,12 +2983,14 @@ class HippoRAG:
                                         query_fact_scores: np.ndarray,
                                         top_k_facts: List[Tuple],
                                         top_k_fact_indices: List[str],
-                                        passage_node_weight: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
+                                        passage_node_weight: float = 0.05,
+                                        top_files: List[Dict] = None,
+                                        file_node_weight: float = 0.1) -> Tuple[np.ndarray, np.ndarray]:
         """
-        基于事实实体的图搜索算法
+        基于事实实体和文件摘要的图搜索算法
         
-        使用个性化PageRank (PPR)和密集检索模型，基于事实相似性和相关性计算文档分数。
-        该函数将相关事实的信号与段落相似性和基于图的搜索相结合，以增强结果排名。
+        使用个性化PageRank (PPR)和密集检索模型，基于事实相似性、文件摘要相关性计算文档分数。
+        该函数将相关事实的信号、文件摘要信号与段落相似性和基于图的搜索相结合，以增强结果排名。
 
         Parameters:
             query (str): 需要进行相似性和相关性计算的输入查询字符串
@@ -2010,6 +2999,8 @@ class HippoRAG:
             top_k_facts (List[Tuple]): 顶级事实列表，每个事实表示为主语、谓语和宾语的元组
             top_k_fact_indices (List[str]): query_fact_scores数组中顶级事实对应的索引或标识符
             passage_node_weight (float): 缩放图中段落分数的默认权重
+            top_files (List[Dict]): 重排序后的相关文件列表，每个包含key, summary, score等
+            file_node_weight (float): 缩放图中文件节点分数的权重（默认0.1，比段落权重稍高）
 
         Returns:
             Tuple[np.ndarray, np.ndarray]: 包含两个数组的元组：
@@ -2021,6 +3012,7 @@ class HippoRAG:
         phrase_scores = {}  # 存储每个短语的所有事实分数，无论它们是否存在于知识图谱中
         phrase_weights = np.zeros(len(self.graph.vs['name']))  # 初始化短语权重数组
         passage_weights = np.zeros(len(self.graph.vs['name']))  # 初始化段落权重数组
+        file_weights = np.zeros(len(self.graph.vs['name']))  # 初始化文件权重数组
 
         # 遍历顶级事实，为相关短语分配权重
         for rank, f in enumerate(top_k_facts):
@@ -2052,10 +3044,10 @@ class HippoRAG:
                         # 根据包含该实体的文档块数量进行权重归一化
                         phrase_weights[phrase_id] /= len(self.ent_node_to_chunk_ids[phrase_key])
 
-                # 记录短语分数用于后续平均值计算
-                if phrase not in phrase_scores:
-                    phrase_scores[phrase] = []
-                phrase_scores[phrase].append(fact_score)
+                    # 记录短语分数用于后续平均值计算（只记录存在于图中的短语）
+                    if phrase not in phrase_scores:
+                        phrase_scores[phrase] = []
+                    phrase_scores[phrase].append(fact_score)
 
         # 计算每个短语的平均事实分数
         for phrase, scores in phrase_scores.items():
@@ -2072,27 +3064,61 @@ class HippoRAG:
         # 对DPR分数进行最小-最大归一化
         normalized_dpr_sorted_scores = min_max_normalize(dpr_sorted_doc_scores)
 
-        # 为每个检索到的段落分配权重
+        # 为每个检索到的内容分配权重
         for i, dpr_sorted_doc_id in enumerate(dpr_sorted_doc_ids.tolist()):
-            passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]  # 获取段落节点键
-            passage_dpr_score = normalized_dpr_sorted_scores[i]  # 获取归一化的DPR分数
-            passage_node_id = self.node_name_to_vertex_idx[passage_node_key]  # 获取段落在图中的节点ID
-            # 设置段落权重（乘以权重因子）
-            passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
-            # 获取段落文本内容
-            passage_node_text = self.chunk_embedding_store.get_row(passage_node_key)["content"]
-            # 将段落文本和分数添加到链接分数映射中
-            linking_score_map[passage_node_text] = passage_dpr_score * passage_node_weight
+            if len(self.all_content_node_keys) > len(self.passage_node_keys):
+                # 使用层次化内容
+                content_node_key = self.all_content_node_keys[dpr_sorted_doc_id]  # 获取内容节点键
+                content_type = self.all_content_node_types[dpr_sorted_doc_id]  # 获取内容类型
+                content_dpr_score = normalized_dpr_sorted_scores[i]  # 获取归一化的DPR分数
+                content_node_id = self.node_name_to_vertex_idx[content_node_key]  # 获取内容在图中的节点ID
+                # 设置内容权重（乘以权重因子）
+                passage_weights[content_node_id] = content_dpr_score * passage_node_weight
+                # 获取内容文本
+                content_text = self._get_content_by_type_and_key(content_type, content_node_key)
+                # 将内容文本和分数添加到链接分数映射中
+                linking_score_map[content_text] = content_dpr_score * passage_node_weight
+            else:
+                # 回退到原始段落处理
+                passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]  # 获取段落节点键
+                passage_dpr_score = normalized_dpr_sorted_scores[i]  # 获取归一化的DPR分数
+                passage_node_id = self.node_name_to_vertex_idx[passage_node_key]  # 获取段落在图中的节点ID
+                # 设置段落权重（乘以权重因子）
+                passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
+                # 获取段落文本内容
+                passage_node_text = self.chunk_embedding_store.get_row(passage_node_key)["content"]
+                # 将段落文本和分数添加到链接分数映射中
+                linking_score_map[passage_node_text] = passage_dpr_score * passage_node_weight
 
-        # 将短语权重和段落权重合并为一个数组用于PPR计算
-        node_weights = phrase_weights + passage_weights
+        # 为相关文件节点分配权重（如果有的话）
+        if top_files and len(top_files) > 0:
+            for file_info in top_files:
+                file_key = file_info.get('key', '')
+                file_score = file_info.get('score', 0.5)
+                
+                # 获取文件在图中的节点ID
+                file_node_id = self.node_name_to_vertex_idx.get(file_key, None)
+                if file_node_id is not None:
+                    # 设置文件权重
+                    file_weights[file_node_id] = file_score * file_node_weight
+                    # 记录到linking_score_map
+                    file_summary = file_info.get('summary', '')[:100]
+                    linking_score_map[f"[文件] {file_summary}"] = file_score * file_node_weight
+                    logger.debug(f"File node {file_key} assigned weight {file_weights[file_node_id]:.4f}")
+
+        # 将短语权重、段落权重和文件权重合并为一个数组用于PPR计算
+        node_weights = phrase_weights + passage_weights + file_weights
 
         # 限制linking_score_map的大小，只保留前30个最高分数的项目
         if len(linking_score_map) > 30:
             linking_score_map = dict(sorted(linking_score_map.items(), key=lambda x: x[1], reverse=True)[:30])
 
         # 确保至少有一些权重大于0，否则PPR算法无法运行
-        assert sum(node_weights) > 0, f'在给定事实的图中未找到短语: {top_k_facts}'
+        if sum(node_weights) <= 0:
+            logger.warning(f'在给定事实的图中未找到短语，尝试仅使用文件权重: {top_k_facts}')
+            # 如果没有实体匹配，但有文件匹配，仍然可以继续
+            if sum(file_weights) <= 0:
+                raise AssertionError(f'在给定事实的图中未找到短语，也没有文件匹配: {top_k_facts}')
 
         # 基于之前分配的段落和短语权重运行PPR算法
         ppr_start = time.time()  # 记录PPR开始时间
@@ -2103,8 +3129,12 @@ class HippoRAG:
         self.ppr_time += (ppr_end - ppr_start)
 
         # 验证返回的文档数量与语料库大小一致
-        assert len(ppr_sorted_doc_ids) == len(
-            self.passage_node_idxs), f"文档概率长度 {len(ppr_sorted_doc_ids)} != 语料库长度 {len(self.passage_node_idxs)}"
+        # 根据是否使用层次化结构选择正确的比较长度
+        if len(self.all_content_node_keys) > len(self.passage_node_keys):
+            expected_length = len(self.all_content_node_idxs)
+        else:
+            expected_length = len(self.passage_node_idxs)
+        assert len(ppr_sorted_doc_ids) == expected_length, f"文档概率长度 {len(ppr_sorted_doc_ids)} != 语料库长度 {expected_length}"
 
         return ppr_sorted_doc_ids, ppr_sorted_doc_scores
 
@@ -2153,7 +3183,9 @@ class HippoRAG:
 
         """
         # 加载配置参数
-        link_top_k: int = self.global_config.linking_top_k
+        link_top_k: int = self.global_config.linking_top_k  # 最终选择的事实数量
+        # 候选事实数量：用于送入LLM重排序的事实数量，应该比link_top_k大以弥补embedding不准确
+        rerank_candidate_k: int = getattr(self.global_config, 'rerank_candidate_k', 50)
         
         # 检查是否有可用的事实进行重排序
         if len(query_fact_scores) == 0 or len(self.fact_node_keys) == 0:
@@ -2161,13 +3193,15 @@ class HippoRAG:
             return [], [], {'facts_before_rerank': [], 'facts_after_rerank': []}
             
         try:
-            # 根据分数获取前k个事实
-            if len(query_fact_scores) <= link_top_k:
+            # 根据分数获取前k个候选事实（使用更大的rerank_candidate_k）
+            if len(query_fact_scores) <= rerank_candidate_k:
                 # 如果事实数量少于请求数量，使用所有事实
                 candidate_fact_indices = np.argsort(query_fact_scores)[::-1].tolist()
             else:
-                # 否则获取前k个事实（按分数降序排列）
-                candidate_fact_indices = np.argsort(query_fact_scores)[-link_top_k:][::-1].tolist()
+                # 否则获取前rerank_candidate_k个事实（按分数降序排列）
+                candidate_fact_indices = np.argsort(query_fact_scores)[-rerank_candidate_k:][::-1].tolist()
+            
+            logger.info(f"Reranking: selecting top {len(candidate_fact_indices)} candidates from {len(query_fact_scores)} facts, will keep top {link_top_k} after reranking")
                 
             # 获取实际的事实ID列表
             real_candidate_fact_ids = [self.fact_node_keys[idx] for idx in candidate_fact_indices]
@@ -2178,7 +3212,7 @@ class HippoRAG:
             # 解析事实内容，将字符串转换为三元组
             candidate_facts = [eval(fact_row_dict[id]['content']) for id in real_candidate_fact_ids]
             
-            # 使用DSPy过滤器对事实进行重排序
+            # 使用DSPy过滤器对事实进行重排序，最终保留link_top_k个
             top_k_fact_indices, top_k_facts, reranker_dict = self.rerank_filter(query,
                                                                                 candidate_facts,
                                                                                 candidate_fact_indices,
@@ -2241,11 +3275,884 @@ class HippoRAG:
             implementation='prpack'
         )
 
-        doc_scores = np.array([pagerank_scores[idx] for idx in self.passage_node_idxs])
-        sorted_doc_ids = np.argsort(doc_scores)[::-1]
-        sorted_doc_scores = doc_scores[sorted_doc_ids.tolist()]
+        # 优先使用所有内容节点，如果没有则回退到段落节点
+        if len(self.all_content_node_keys) > len(self.passage_node_keys):
+            # 使用所有内容节点索引
+            content_scores = np.array([pagerank_scores[idx] for idx in self.all_content_node_idxs])
+            sorted_content_ids = np.argsort(content_scores)[::-1]
+            sorted_content_scores = content_scores[sorted_content_ids.tolist()]
+            return sorted_content_ids, sorted_content_scores
+        else:
+            # 回退到原始段落节点
+            doc_scores = np.array([pagerank_scores[idx] for idx in self.passage_node_idxs])
+            sorted_doc_ids = np.argsort(doc_scores)[::-1]
+            sorted_doc_scores = doc_scores[sorted_doc_ids.tolist()]
+            return sorted_doc_ids, sorted_doc_scores
 
-        return sorted_doc_ids, sorted_doc_scores
+    def run_ppr_by_type(self,
+                        reset_prob: np.ndarray,
+                        damping: float = 0.5) -> Dict[str, Tuple[np.ndarray, np.ndarray, List[str]]]:
+        """
+        分类型的个性化PageRank算法：分别返回 chunk、table、code 的排序结果
+        
+        在知识图谱上运行个性化PageRank算法，然后按内容类型分别排序。
+        
+        Args:
+            reset_prob (np.ndarray): 重置概率分布，指定每个节点的初始权重
+            damping (float, optional): 阻尼因子，默认0.5
+                
+        Returns:
+            Dict[str, Tuple[np.ndarray, np.ndarray, List[str]]]: 
+                各类型的排序结果，键为类型名 ('chunk', 'table', 'code')
+                值为元组 (sorted_ids, sorted_scores, node_keys)
+                - sorted_ids: 该类型内按分数降序排列的局部索引
+                - sorted_scores: 对应的PPR分数
+                - node_keys: 对应的节点键列表
+        """
+        if damping is None: 
+            damping = 0.5
+        reset_prob = np.where(np.isnan(reset_prob) | (reset_prob < 0), 0, reset_prob)
+        
+        # 运行PPR算法
+        pagerank_scores = self.graph.personalized_pagerank(
+            vertices=range(len(self.node_name_to_vertex_idx)),
+            damping=damping,
+            directed=False,
+            weights='weight',
+            reset=reset_prob,
+            implementation='prpack'
+        )
+        
+        results = {}
+        
+        # 为每种内容类型分别提取和排序分数
+        for content_type in ['chunk', 'code', 'table']:
+            start_idx, end_idx = self.content_type_ranges.get(content_type, (0, 0))
+            
+            if start_idx >= end_idx:
+                # 该类型没有数据
+                results[content_type] = (np.array([]), np.array([]), [])
+                continue
+            
+            # 获取该类型的节点键和图索引
+            type_node_keys = self.all_content_node_keys[start_idx:end_idx]
+            type_graph_idxs = self.all_content_node_idxs[start_idx:end_idx]
+            
+            # 提取该类型节点的PPR分数
+            type_scores = np.array([pagerank_scores[idx] for idx in type_graph_idxs])
+            
+            # 在该类型内按分数排序
+            sorted_local_ids = np.argsort(type_scores)[::-1]
+            sorted_scores = type_scores[sorted_local_ids]
+            sorted_node_keys = [type_node_keys[i] for i in sorted_local_ids]
+            
+            results[content_type] = (sorted_local_ids, sorted_scores, sorted_node_keys)
+        
+        return results
+
+    def graph_neighbor_rerank(self, query: str,
+                               top_k_facts: List[Tuple],
+                               top_files: List[Dict] = None,
+                               chunk_candidate_k: int = 50,
+                               table_candidate_k: int = 20,
+                               code_candidate_k: int = 20,
+                               chunk_top_k: int = 10,
+                               table_top_k: int = 5,
+                               code_top_k: int = 5,
+                               max_hop: int = 2,
+                               verbose: bool = False) -> Dict[str, Tuple[List[str], np.ndarray, List[str]]]:
+        """
+        图邻居搜索 + LLM重排序：基于事实和文件在图中找到相邻节点，然后分类型重排序
+        
+        流程:
+        1. 从 rerank 得到的事实中提取实体节点
+        2. 从 rerank 得到的文件中获取文件节点
+        3. 在图中搜索与这些节点相邻的 chunk/table/code 节点（支持多跳）
+        4. 收集各类型的候选节点
+        5. 对每种类型的候选分别进行 LLM rerank
+        
+        Args:
+            query (str): 输入查询字符串
+            top_k_facts (List[Tuple]): 重排序后的事实列表
+            top_files (List[Dict]): 重排序后的文件列表
+            chunk_candidate_k (int): chunk 候选数量
+            table_candidate_k (int): table 候选数量
+            code_candidate_k (int): code 候选数量
+            chunk_top_k (int): chunk 最终保留数量
+            table_top_k (int): table 最终保留数量
+            code_top_k (int): code 最终保留数量
+            max_hop (int): 图搜索的最大跳数
+            verbose (bool): 是否输出详细信息
+            
+        Returns:
+            Dict[str, Tuple[List[str], np.ndarray, List[str]]]:
+                各类型的排序结果，键为类型名 ('chunk', 'table', 'code')
+                值为元组 (contents, scores, node_keys)
+        """
+        search_start = time.time()
+        
+        # ====== 步骤1: 提取起始节点 ======
+        seed_node_ids = set()  # 图节点ID集合
+        
+        # 1.1 从事实中提取实体节点
+        for fact in top_k_facts:
+            subject_phrase = fact[0].lower()
+            object_phrase = fact[2].lower()
+            
+            for phrase in [subject_phrase, object_phrase]:
+                phrase_key = compute_mdhash_id(content=phrase, prefix="entity-")
+                phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
+                if phrase_id is not None:
+                    seed_node_ids.add(phrase_id)
+        
+        # 1.2 从文件中获取文件节点
+        if top_files:
+            for file_info in top_files:
+                file_key = file_info.get('key', '')
+                file_id = self.node_name_to_vertex_idx.get(file_key, None)
+                if file_id is not None:
+                    seed_node_ids.add(file_id)
+        
+        if verbose:
+            print(f"\n  🌱 起始节点数: {len(seed_node_ids)}")
+        
+        if len(seed_node_ids) == 0:
+            logger.warning("No seed nodes found for graph neighbor search")
+            return {
+                'chunk': ([], np.array([]), []),
+                'table': ([], np.array([]), []),
+                'code': ([], np.array([]), [])
+            }
+        
+        # ====== 步骤2: 图邻居搜索 ======
+        # 收集各类型的候选节点
+        chunk_candidates = {}  # key -> distance
+        table_candidates = {}
+        code_candidates = {}
+        
+        # 创建节点键到类型的映射
+        chunk_keys_set = set(self.passage_node_keys)
+        code_keys_set = set(self.code_node_keys) if hasattr(self, 'code_node_keys') else set()
+        table_keys_set = set(self.table_node_keys) if hasattr(self, 'table_node_keys') else set()
+        
+        # BFS搜索相邻节点
+        visited = set(seed_node_ids)
+        current_level = seed_node_ids
+        
+        for hop in range(max_hop):
+            next_level = set()
+            
+            for node_id in current_level:
+                # 获取邻居节点
+                neighbors = self.graph.neighbors(node_id, mode='all')
+                
+                for neighbor_id in neighbors:
+                    if neighbor_id in visited:
+                        continue
+                    
+                    visited.add(neighbor_id)
+                    next_level.add(neighbor_id)
+                    
+                    # 获取节点键
+                    node_key = self.graph.vs[neighbor_id]['name']
+                    distance = hop + 1  # 距离 = 跳数
+                    
+                    # 根据节点键类型分类
+                    if node_key in chunk_keys_set:
+                        if node_key not in chunk_candidates:
+                            chunk_candidates[node_key] = distance
+                    elif node_key in code_keys_set:
+                        if node_key not in code_candidates:
+                            code_candidates[node_key] = distance
+                    elif node_key in table_keys_set:
+                        if node_key not in table_candidates:
+                            table_candidates[node_key] = distance
+            
+            current_level = next_level
+            
+            if len(next_level) == 0:
+                break
+        
+        if verbose:
+            print(f"  🔍 图邻居搜索 (max_hop={max_hop}):")
+            print(f"      - Chunk候选: {len(chunk_candidates)}")
+            print(f"      - Table候选: {len(table_candidates)}")
+            print(f"      - Code候选: {len(code_candidates)}")
+        
+        search_time = time.time() - search_start
+        
+        # ====== 步骤3: 分类型LLM重排序 ======
+        results = {}
+        
+        for content_type, candidates, candidate_k, top_k in [
+            ('chunk', chunk_candidates, chunk_candidate_k, chunk_top_k),
+            ('table', table_candidates, table_candidate_k, table_top_k),
+            ('code', code_candidates, code_candidate_k, code_top_k)
+        ]:
+            if len(candidates) == 0:
+                results[content_type] = ([], np.array([]), [])
+                continue
+            
+            # 按距离排序，选取前 candidate_k 个
+            sorted_candidates = sorted(candidates.items(), key=lambda x: x[1])[:candidate_k]
+            candidate_keys = [k for k, _ in sorted_candidates]
+            
+            # 获取内容
+            candidate_contents = []
+            for key in candidate_keys:
+                content = self._get_content_by_type_and_key(content_type, key)
+                candidate_contents.append(content)
+            
+            if verbose:
+                print(f"\n  📋 {content_type.upper()} 重排序: {len(candidate_keys)}个候选 -> {top_k}个")
+            
+            # LLM重排序
+            if len(candidate_contents) > 0:
+                rerank_start = time.time()
+                top_indices, top_contents, _ = self._rerank_contents(
+                    query, candidate_contents, candidate_keys, 
+                    content_type=content_type, 
+                    len_after_rerank=top_k
+                )
+                rerank_time = time.time() - rerank_start
+                
+                # 构建结果
+                top_keys = [candidate_keys[i] for i in top_indices]
+                # 使用重排序后的顺序作为分数（越靠前分数越高）
+                scores = np.array([1.0 - i * 0.1 for i in range(len(top_keys))])
+                
+                if verbose:
+                    print(f"      重排序耗时: {rerank_time:.3f}s")
+                
+                results[content_type] = (top_contents, scores, top_keys)
+            else:
+                results[content_type] = ([], np.array([]), [])
+        
+        total_time = time.time() - search_start
+        if verbose:
+            print(f"\n  ⏱️ 图邻居搜索+重排序总耗时: {total_time:.3f}s")
+        
+        return results
+
+    def weighted_graph_search(self, query: str,
+                               top_k_facts: List[Tuple],
+                               top_files: List[Dict] = None,
+                               candidate_k: int = 100,
+                               max_hop: int = 3,
+                               alpha: float = 0.3,  # 边权重系数
+                               beta: float = 0.4,   # 节点相似度系数
+                               gamma: float = 0.2,  # 路径衰减系数
+                               delta: float = 0.1,  # 边类型加成系数
+                               verbose: bool = False) -> Dict[str, List[Tuple[str, float, str]]]:
+        """
+        加权图搜索：综合点权、边权和多种因素选出最佳候选
+        
+        基于Dijkstra变体的加权搜索算法，综合考虑：
+        1. 点权（Node Weight）：节点与query的语义相似度
+        2. 边权（Edge Weight）：图中存储的边权重
+        3. 路径衰减：距离种子节点的跳数惩罚
+        4. 边类型加成：不同类型边的权重加成
+        
+        算法流程:
+        1. 从 rerank 得到的事实和文件中提取种子节点
+        2. 预计算所有节点的点权（与query的相似度）
+        3. 使用优先队列按综合得分进行扩展搜索
+        4. 返回综合得分最高的 candidate_k 个内容节点
+        
+        综合得分公式:
+        score = α * path_edge_weight + β * node_similarity + γ * hop_decay + δ * edge_type_bonus
+        
+        其中:
+        - path_edge_weight: 路径上边权的累积（归一化）
+        - node_similarity: 节点内容与query的相似度
+        - hop_decay: 1/(hop+1)，距离衰减
+        - edge_type_bonus: 边类型加成（semantic > synonymy > passage > structural）
+        
+        Args:
+            query (str): 输入查询字符串
+            top_k_facts (List[Tuple]): 重排序后的事实列表
+            top_files (List[Dict]): 重排序后的文件列表
+            candidate_k (int): 最终返回的候选数量（默认100）
+            max_hop (int): 图搜索的最大跳数（默认3）
+            alpha (float): 边权重系数（默认0.3）
+            beta (float): 节点相似度系数（默认0.4）
+            gamma (float): 路径衰减系数（默认0.2）
+            delta (float): 边类型加成系数（默认0.1）
+            verbose (bool): 是否输出详细信息
+            
+        Returns:
+            Dict[str, List[Tuple[str, float, str]]]:
+                各类型的候选结果，键为类型名 ('chunk', 'table', 'code')
+                值为列表 [(node_key, score, content), ...]，按score降序排列
+        """
+        import heapq
+        search_start = time.time()
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🔍 加权图搜索 (Weighted Graph Search)")
+            print(f"   参数: α={alpha}, β={beta}, γ={gamma}, δ={delta}")
+            print(f"   max_hop={max_hop}, candidate_k={candidate_k}")
+            print(f"{'='*60}")
+        
+        # ====== 步骤1: 预计算节点点权（与query的相似度）======
+        precompute_start = time.time()
+        
+        # 获取query的嵌入向量
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        
+        # 预计算实体节点的点权（实体与query的相似度）
+        entity_node_weights = {}
+        if len(self.entity_embeddings) > 0:
+            entity_scores = np.dot(self.entity_embeddings, query_embedding.T)
+            entity_scores = np.squeeze(entity_scores) if entity_scores.ndim == 2 else entity_scores
+            entity_scores = min_max_normalize(entity_scores)
+            for i, key in enumerate(self.entity_node_keys):
+                entity_node_weights[key] = entity_scores[i]
+        
+        # 预计算内容节点的点权（内容与query的相似度）
+        content_node_weights = {}
+        
+        # 段落节点
+        if len(self.passage_embeddings) > 0:
+            passage_scores = np.dot(self.passage_embeddings, query_embedding.T)
+            passage_scores = np.squeeze(passage_scores) if passage_scores.ndim == 2 else passage_scores
+            passage_scores = min_max_normalize(passage_scores)
+            for i, key in enumerate(self.passage_node_keys):
+                content_node_weights[key] = passage_scores[i]
+        
+        # 代码节点
+        if hasattr(self, 'code_node_keys') and self.code_node_keys:
+            try:
+                code_embeddings = np.array(self.code_embedding_store.get_embeddings(self.code_node_keys))
+                if len(code_embeddings) > 0:
+                    code_scores = np.dot(code_embeddings, query_embedding.T)
+                    code_scores = np.squeeze(code_scores) if code_scores.ndim == 2 else code_scores
+                    code_scores = min_max_normalize(code_scores)
+                    for i, key in enumerate(self.code_node_keys):
+                        content_node_weights[key] = code_scores[i]
+            except Exception as e:
+                logger.debug(f"Failed to compute code node weights: {e}")
+        
+        # 表格节点
+        if hasattr(self, 'table_node_keys') and self.table_node_keys:
+            try:
+                table_embeddings = np.array(self.table_embedding_store.get_embeddings(self.table_node_keys))
+                if len(table_embeddings) > 0:
+                    table_scores = np.dot(table_embeddings, query_embedding.T)
+                    table_scores = np.squeeze(table_scores) if table_scores.ndim == 2 else table_scores
+                    table_scores = min_max_normalize(table_scores)
+                    for i, key in enumerate(self.table_node_keys):
+                        content_node_weights[key] = table_scores[i]
+            except Exception as e:
+                logger.debug(f"Failed to compute table node weights: {e}")
+        
+        precompute_time = time.time() - precompute_start
+        
+        if verbose:
+            print(f"\n  📊 预计算点权完成:")
+            print(f"      - 实体节点点权: {len(entity_node_weights)}")
+            print(f"      - 内容节点点权: {len(content_node_weights)}")
+            print(f"      - 耗时: {precompute_time:.3f}s")
+        
+        # ====== 步骤2: 提取种子节点并初始化 ======
+        seed_node_ids = set()
+        seed_node_scores = {}  # 种子节点的初始分数
+        
+        # 2.1 从事实中提取实体节点，并用事实相关性作为初始分数
+        fact_scores = self.get_fact_scores(query) if len(self.fact_embeddings) > 0 else np.array([])
+        
+        for fact_idx, fact in enumerate(top_k_facts):
+            subject_phrase = fact[0].lower()
+            object_phrase = fact[2].lower()
+            
+            # 获取该事实的相关性分数（如果可用）
+            fact_score = 1.0  # 默认分数
+            
+            for phrase in [subject_phrase, object_phrase]:
+                phrase_key = compute_mdhash_id(content=phrase, prefix="entity-")
+                phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
+                if phrase_id is not None:
+                    seed_node_ids.add(phrase_id)
+                    # 使用实体相似度和事实排名作为初始分数
+                    entity_sim = entity_node_weights.get(phrase_key, 0.5)
+                    rank_bonus = 1.0 / (fact_idx + 1)  # 排名靠前的事实加成更高
+                    seed_node_scores[phrase_id] = max(
+                        seed_node_scores.get(phrase_id, 0),
+                        entity_sim * 0.5 + rank_bonus * 0.5
+                    )
+        
+        # 2.2 从文件中获取文件节点
+        if top_files:
+            for file_idx, file_info in enumerate(top_files):
+                file_key = file_info.get('key', '')
+                file_id = self.node_name_to_vertex_idx.get(file_key, None)
+                if file_id is not None:
+                    seed_node_ids.add(file_id)
+                    rank_bonus = 1.0 / (file_idx + 1)
+                    seed_node_scores[file_id] = max(
+                        seed_node_scores.get(file_id, 0),
+                        rank_bonus
+                    )
+        
+        if verbose:
+            print(f"\n  🌱 种子节点数: {len(seed_node_ids)}")
+        
+        if len(seed_node_ids) == 0:
+            logger.warning("No seed nodes found for weighted graph search")
+            return {
+                'chunk': [],
+                'table': [],
+                'code': []
+            }
+        
+        # ====== 步骤3: 定义边类型权重 ======
+        edge_type_weights = {
+            'semantic': 1.0,      # 语义边（实体关系）权重最高
+            'synonymy': 0.8,      # 同义词边（相似实体）
+            'passage': 0.6,       # 段落边（段落-实体）
+            'structural': 0.4,    # 结构性边（层次关系）
+            'unknown': 0.3        # 未知类型
+        }
+        
+        # ====== 步骤4: 加权图搜索（优先队列） ======
+        # 使用最大堆，存储 (-score, node_id, hop, path_edge_weight_sum)
+        # 注意：heapq是最小堆，所以用负分数
+        
+        chunk_keys_set = set(self.passage_node_keys)
+        code_keys_set = set(self.code_node_keys) if hasattr(self, 'code_node_keys') else set()
+        table_keys_set = set(self.table_node_keys) if hasattr(self, 'table_node_keys') else set()
+        
+        # 结果字典：node_key -> (score, content_type)
+        candidate_scores = {}
+        
+        # 初始化优先队列：从种子节点开始
+        pq = []
+        visited_with_score = {}  # node_id -> best_score
+        
+        for seed_id in seed_node_ids:
+            initial_score = seed_node_scores.get(seed_id, 0.5)
+            heapq.heappush(pq, (-initial_score, seed_id, 0, 0.0, []))  # (neg_score, node_id, hop, path_edge_sum, path_types)
+            visited_with_score[seed_id] = initial_score
+        
+        search_iterations = 0
+        max_iterations = len(self.graph.vs) * 2  # 防止无限循环
+        
+        while pq and search_iterations < max_iterations:
+            search_iterations += 1
+            neg_score, node_id, hop, path_edge_sum, path_types = heapq.heappop(pq)
+            current_score = -neg_score
+            
+            # 如果已经访问过且当前分数不比之前好，跳过
+            if node_id in visited_with_score and visited_with_score[node_id] > current_score:
+                continue
+            
+            # 获取节点键
+            node_key = self.graph.vs[node_id]['name']
+            
+            # 如果是内容节点（chunk/code/table），记录候选
+            if node_key in chunk_keys_set:
+                if node_key not in candidate_scores or candidate_scores[node_key][0] < current_score:
+                    candidate_scores[node_key] = (current_score, 'chunk')
+            elif node_key in code_keys_set:
+                if node_key not in candidate_scores or candidate_scores[node_key][0] < current_score:
+                    candidate_scores[node_key] = (current_score, 'code')
+            elif node_key in table_keys_set:
+                if node_key not in candidate_scores or candidate_scores[node_key][0] < current_score:
+                    candidate_scores[node_key] = (current_score, 'table')
+            
+            # 超过最大跳数则不再扩展
+            if hop >= max_hop:
+                continue
+            
+            # 获取邻居节点并扩展
+            neighbors = self.graph.neighbors(node_id, mode='all')
+            
+            for neighbor_id in neighbors:
+                # 获取边信息
+                try:
+                    edge_id = self.graph.get_eid(node_id, neighbor_id, error=False)
+                    if edge_id < 0:
+                        edge_id = self.graph.get_eid(neighbor_id, node_id, error=False)
+                    
+                    if edge_id >= 0:
+                        edge_weight = self.graph.es[edge_id]['weight'] if 'weight' in self.graph.es.attributes() else 1.0
+                        edge_type = self.graph.es[edge_id]['type'] if 'type' in self.graph.es.attributes() else 'unknown'
+                    else:
+                        edge_weight = 1.0
+                        edge_type = 'unknown'
+                except:
+                    edge_weight = 1.0
+                    edge_type = 'unknown'
+                
+                # 归一化边权重（假设边权重范围在0-10之间）
+                normalized_edge_weight = min(edge_weight / 10.0, 1.0) if edge_weight > 1 else edge_weight
+                
+                # 获取邻居节点的点权（与query的相似度）
+                neighbor_key = self.graph.vs[neighbor_id]['name']
+                
+                # 确定节点类型并获取相似度
+                if neighbor_key in entity_node_weights:
+                    node_similarity = entity_node_weights[neighbor_key]
+                elif neighbor_key in content_node_weights:
+                    node_similarity = content_node_weights[neighbor_key]
+                else:
+                    node_similarity = 0.3  # 默认相似度
+                
+                # 计算边类型加成
+                edge_type_bonus = edge_type_weights.get(edge_type, 0.3)
+                
+                # 计算新的累积路径边权
+                new_path_edge_sum = path_edge_sum + normalized_edge_weight
+                new_path_types = path_types + [edge_type]
+                
+                # 计算综合得分
+                new_hop = hop + 1
+                hop_decay = 1.0 / (new_hop + 1)  # 距离衰减
+                avg_path_edge_weight = new_path_edge_sum / new_hop if new_hop > 0 else 0
+                
+                # 综合得分公式
+                new_score = (
+                    alpha * avg_path_edge_weight +      # 边权贡献
+                    beta * node_similarity +             # 节点相似度贡献
+                    gamma * hop_decay +                  # 距离衰减贡献
+                    delta * edge_type_bonus              # 边类型加成
+                )
+                
+                # 如果新分数更好，加入队列
+                if neighbor_id not in visited_with_score or visited_with_score[neighbor_id] < new_score:
+                    visited_with_score[neighbor_id] = new_score
+                    heapq.heappush(pq, (-new_score, neighbor_id, new_hop, new_path_edge_sum, new_path_types))
+        
+        search_time = time.time() - search_start - precompute_time
+        
+        if verbose:
+            print(f"\n  🔍 加权搜索完成:")
+            print(f"      - 搜索迭代次数: {search_iterations}")
+            print(f"      - 候选节点总数: {len(candidate_scores)}")
+            print(f"      - 搜索耗时: {search_time:.3f}s")
+        
+        # ====== 步骤5: 按类型整理结果 ======
+        results = {
+            'chunk': [],
+            'table': [],
+            'code': []
+        }
+        
+        for node_key, (score, content_type) in candidate_scores.items():
+            results[content_type].append((node_key, score))
+        
+        # 每种类型按分数排序，取前 candidate_k 个
+        for content_type in results:
+            results[content_type] = sorted(results[content_type], key=lambda x: x[1], reverse=True)[:candidate_k]
+            
+            # 获取内容
+            results_with_content = []
+            for node_key, score in results[content_type]:
+                content = self._get_content_by_type_and_key(content_type, node_key)
+                results_with_content.append((node_key, score, content))
+            results[content_type] = results_with_content
+        
+        total_time = time.time() - search_start
+        
+        if verbose:
+            print(f"\n  📋 最终结果:")
+            print(f"      - Chunk候选: {len(results['chunk'])}")
+            print(f"      - Table候选: {len(results['table'])}")
+            print(f"      - Code候选: {len(results['code'])}")
+            print(f"\n  ⏱️ 总耗时: {total_time:.3f}s")
+            
+            # 打印每种类型的top-5
+            for content_type in ['chunk', 'table', 'code']:
+                if results[content_type]:
+                    print(f"\n  📄 {content_type.upper()} Top-5:")
+                    for i, (key, score, content) in enumerate(results[content_type][:5]):
+                        preview = content[:80] + "..." if len(content) > 80 else content
+                        preview = preview.replace('\n', ' ')
+                        print(f"      [{i+1}] score={score:.4f} | {preview}")
+        
+        return results
+
+    def graph_neighbor_rerank_v2(self, query: str,
+                                  top_k_facts: List[Tuple],
+                                  top_files: List[Dict] = None,
+                                  candidate_k: int = 100,
+                                  chunk_top_k: int = 10,
+                                  table_top_k: int = 5,
+                                  code_top_k: int = 5,
+                                  max_hop: int = 3,
+                                  use_llm_rerank: bool = True,
+                                  alpha: float = 0.3,
+                                  beta: float = 0.4,
+                                  gamma: float = 0.2,
+                                  delta: float = 0.1,
+                                  verbose: bool = False) -> Dict[str, Tuple[List[str], np.ndarray, List[str]]]:
+        """
+        图邻居搜索 V2：结合加权图搜索 + 可选LLM重排序
+        
+        改进版的图邻居搜索，使用加权搜索算法替代简单BFS：
+        1. 使用weighted_graph_search获取综合得分最高的候选
+        2. 可选择性地使用LLM对候选进行最终重排序
+        
+        Args:
+            query (str): 输入查询字符串
+            top_k_facts (List[Tuple]): 重排序后的事实列表
+            top_files (List[Dict]): 重排序后的文件列表
+            candidate_k (int): 从图搜索中获取的候选数量（默认100）
+            chunk_top_k (int): chunk最终保留数量
+            table_top_k (int): table最终保留数量
+            code_top_k (int): code最终保留数量
+            max_hop (int): 图搜索的最大跳数
+            use_llm_rerank (bool): 是否使用LLM重排序（默认True）
+            alpha (float): 边权重系数
+            beta (float): 节点相似度系数
+            gamma (float): 路径衰减系数
+            delta (float): 边类型加成系数
+            verbose (bool): 是否输出详细信息
+            
+        Returns:
+            Dict[str, Tuple[List[str], np.ndarray, List[str]]]:
+                各类型的排序结果，键为类型名 ('chunk', 'table', 'code')
+                值为元组 (contents, scores, node_keys)
+        """
+        search_start = time.time()
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🚀 图邻居搜索 V2 (Weighted Search + Optional LLM Rerank)")
+            print(f"{'='*60}")
+        
+        # ====== 步骤1: 加权图搜索 ======
+        weighted_results = self.weighted_graph_search(
+            query=query,
+            top_k_facts=top_k_facts,
+            top_files=top_files,
+            candidate_k=candidate_k,
+            max_hop=max_hop,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            delta=delta,
+            verbose=verbose
+        )
+        
+        # ====== 步骤2: 可选LLM重排序 ======
+        results = {}
+        
+        for content_type, top_k in [('chunk', chunk_top_k), ('table', table_top_k), ('code', code_top_k)]:
+            candidates = weighted_results.get(content_type, [])
+            
+            if len(candidates) == 0:
+                results[content_type] = ([], np.array([]), [])
+                continue
+            
+            candidate_keys = [item[0] for item in candidates]
+            candidate_scores = [item[1] for item in candidates]
+            candidate_contents = [item[2] for item in candidates]
+            
+            if use_llm_rerank and len(candidates) > top_k:
+                # 使用LLM重排序
+                if verbose:
+                    print(f"\n  🔄 {content_type.upper()} LLM重排序: {len(candidates)}个候选 -> {top_k}个")
+                
+                rerank_start = time.time()
+                try:
+                    top_indices, top_contents_list, _ = self._rerank_contents(
+                        query, candidate_contents, candidate_keys,
+                        content_type=content_type,
+                        len_after_rerank=top_k
+                    )
+                    rerank_time = time.time() - rerank_start
+                    
+                    # 构建结果
+                    top_keys = [candidate_keys[i] for i in top_indices]
+                    top_contents = [candidate_contents[i] for i in top_indices]
+                    # 结合原始加权分数和重排序位置
+                    scores = np.array([candidate_scores[i] * (1.0 - j * 0.05) for j, i in enumerate(top_indices)])
+                    
+                    if verbose:
+                        print(f"      LLM重排序耗时: {rerank_time:.3f}s")
+                    
+                    results[content_type] = (top_contents, scores, top_keys)
+                except Exception as e:
+                    logger.warning(f"LLM rerank failed for {content_type}: {e}, falling back to weighted scores")
+                    # 回退到加权分数排序
+                    top_contents = candidate_contents[:top_k]
+                    top_keys = candidate_keys[:top_k]
+                    scores = np.array(candidate_scores[:top_k])
+                    results[content_type] = (top_contents, scores, top_keys)
+            else:
+                # 直接使用加权分数排序的结果
+                top_contents = candidate_contents[:top_k]
+                top_keys = candidate_keys[:top_k]
+                scores = np.array(candidate_scores[:top_k])
+                results[content_type] = (top_contents, scores, top_keys)
+        
+        total_time = time.time() - search_start
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"  ✅ V2搜索完成:")
+            print(f"      - Chunk: {len(results['chunk'][0])}个")
+            print(f"      - Table: {len(results['table'][0])}个")
+            print(f"      - Code: {len(results['code'][0])}个")
+            print(f"  ⏱️ 总耗时: {total_time:.3f}s")
+            print(f"{'='*60}\n")
+        
+        return results
+
+    def _rerank_contents(self, query: str, contents: List[str], keys: List[str], 
+                         content_type: str, len_after_rerank: int) -> Tuple[List[int], List[str], dict]:
+        """
+        对内容进行LLM重排序
+        
+        Args:
+            query: 查询字符串
+            contents: 内容列表
+            keys: 键列表
+            content_type: 内容类型
+            len_after_rerank: 重排序后保留的数量
+            
+        Returns:
+            (top_indices, top_contents, rerank_log)
+        """
+        try:
+            # 准备候选内容（截断太长的内容）
+            truncated_contents = []
+            for content in contents:
+                if len(content) > 2000:
+                    content = content[:2000] + "..."
+                truncated_contents.append(content)
+            
+            # 调用重排序过滤器
+            top_indices, top_contents_list, reranker_dict = self.rerank_filter.rerank_contents(
+                query=query,
+                contents=truncated_contents,
+                content_type=content_type,
+                len_after_rerank=len_after_rerank
+            )
+            
+            # 返回原始完整内容
+            top_full_contents = [contents[i] for i in top_indices]
+            
+            return top_indices, top_full_contents, reranker_dict
+            
+        except Exception as e:
+            logger.error(f"Error in _rerank_contents: {str(e)}")
+            # 降级：直接返回前 top_k 个
+            top_k = min(len_after_rerank, len(contents))
+            return list(range(top_k)), contents[:top_k], {'error': str(e)}
+
+    def graph_search_by_type(self, query: str,
+                              link_top_k: int,
+                              query_fact_scores: np.ndarray,
+                              top_k_facts: List[Tuple],
+                              top_k_fact_indices: List[str],
+                              passage_node_weight: float = 0.05,
+                              top_files: List[Dict] = None,
+                              file_node_weight: float = 0.1) -> Dict[str, Tuple[np.ndarray, np.ndarray, List[str]]]:
+        """
+        分类型图搜索：分别返回 chunk、table、code 的排序结果（PPR版本，已弃用）
+        
+        与 graph_search_with_fact_entities 类似，但返回分类型的结果。
+        建议使用 graph_neighbor_rerank 方法替代。
+        
+        Args:
+            query (str): 输入查询字符串
+            link_top_k (int): 从链接分数映射中包含的顶级短语数量
+            query_fact_scores (np.ndarray): 事实-查询相似性的分数数组
+            top_k_facts (List[Tuple]): 顶级事实列表
+            top_k_fact_indices (List[str]): 顶级事实索引
+            passage_node_weight (float): 段落分数权重
+            top_files (List[Dict]): 相关文件列表
+            file_node_weight (float): 文件节点权重
+            
+        Returns:
+            Dict[str, Tuple[np.ndarray, np.ndarray, List[str]]]:
+                各类型的排序结果，键为类型名 ('chunk', 'table', 'code')
+        """
+        # 复用原有的权重计算逻辑
+        linking_score_map = {}
+        phrase_scores = {}
+        phrase_weights = np.zeros(len(self.graph.vs['name']))
+        passage_weights = np.zeros(len(self.graph.vs['name']))
+        file_weights = np.zeros(len(self.graph.vs['name']))
+
+        # 遍历顶级事实，为相关短语分配权重
+        for rank, f in enumerate(top_k_facts):
+            subject_phrase = f[0].lower()
+            predicate_phrase = f[1].lower()
+            object_phrase = f[2].lower()
+            
+            fact_score = query_fact_scores[
+                top_k_fact_indices[rank]] if query_fact_scores.ndim > 0 else query_fact_scores
+                
+            for phrase in [subject_phrase, object_phrase]:
+                phrase_key = compute_mdhash_id(content=phrase, prefix="entity-")
+                phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
+
+                if phrase_id is not None:
+                    phrase_weights[phrase_id] = fact_score
+                    if self.ent_node_to_chunk_ids is not None and len(self.ent_node_to_chunk_ids.get(phrase_key, set())) > 0:
+                        phrase_weights[phrase_id] /= len(self.ent_node_to_chunk_ids[phrase_key])
+                    if phrase not in phrase_scores:
+                        phrase_scores[phrase] = []
+                    phrase_scores[phrase].append(fact_score)
+
+        for phrase, scores in phrase_scores.items():
+            linking_score_map[phrase] = float(np.mean(scores))
+
+        if link_top_k:
+            phrase_weights, linking_score_map = self.get_top_k_weights(link_top_k, phrase_weights, linking_score_map)
+
+        # DPR分数
+        dpr_sorted_doc_ids, dpr_sorted_doc_scores = self.dense_passage_retrieval(query)
+        normalized_dpr_sorted_scores = min_max_normalize(dpr_sorted_doc_scores)
+
+        for i, dpr_sorted_doc_id in enumerate(dpr_sorted_doc_ids.tolist()):
+            if len(self.all_content_node_keys) > len(self.passage_node_keys):
+                content_node_key = self.all_content_node_keys[dpr_sorted_doc_id]
+                content_dpr_score = normalized_dpr_sorted_scores[i]
+                content_node_id = self.node_name_to_vertex_idx[content_node_key]
+                passage_weights[content_node_id] = content_dpr_score * passage_node_weight
+            else:
+                passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]
+                passage_dpr_score = normalized_dpr_sorted_scores[i]
+                passage_node_id = self.node_name_to_vertex_idx[passage_node_key]
+                passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
+
+        # 文件权重
+        if top_files and len(top_files) > 0:
+            for file_info in top_files:
+                file_key = file_info.get('key', '')
+                file_score = file_info.get('score', 0.5)
+                file_node_id = self.node_name_to_vertex_idx.get(file_key, None)
+                if file_node_id is not None:
+                    file_weights[file_node_id] = file_score * file_node_weight
+
+        node_weights = phrase_weights + passage_weights + file_weights
+
+        if sum(node_weights) <= 0:
+            logger.warning(f'No weights found for graph search')
+            if sum(file_weights) <= 0:
+                # 返回空结果
+                return {
+                    'chunk': (np.array([]), np.array([]), []),
+                    'table': (np.array([]), np.array([]), []),
+                    'code': (np.array([]), np.array([]), [])
+                }
+
+        # 运行分类型PPR
+        ppr_start = time.time()
+        results = self.run_ppr_by_type(node_weights, damping=self.global_config.damping)
+        ppr_end = time.time()
+        self.ppr_time += (ppr_end - ppr_start)
+
+        return results
 
     def index_from_json(self, json_structure: Dict[str, Any]):
         """
@@ -2303,7 +4210,13 @@ class HippoRAG:
         # 对各类节点进行向量化编码 
         logger.info(f"Encoding files") # 7348
         if all_files:
-            self.file_embedding_store.insert_strings([file[0] for file in all_files], [file[1] for file in all_files], [file[2] for file in all_files])
+            # all_files 格式: [(node_id, content, abstract, file_path), ...]
+            self.file_embedding_store.insert_strings(
+                hash_ids=[file[0] for file in all_files], 
+                contents=[file[1] for file in all_files], 
+                summaries=[file[2] for file in all_files],
+                file_paths=[file[3] if len(file) > 3 else '' for file in all_files]
+            )
             
         logger.info(f"Encoding chunks") # 68225
         if all_chunks:
@@ -2349,7 +4262,7 @@ class HippoRAG:
         print(self.get_graph_info())
 
     def _extract_nodes_from_json(self, json_structure: Dict[str, Any], 
-                                all_files: List[Tuple[str, str, str]], all_chunks: List[Tuple[str, str, str]],
+                                all_files: List[Tuple[str, str, str, str]], all_chunks: List[Tuple[str, str, str]],
                                 all_codes: List[Tuple[str, str, str]], all_tables: List[Tuple[str, str, str]],
                                 all_entities: List[Tuple[str, str, str]], all_facts: List[Triple],
                                 structure_edges: List[Tuple[str, str, str, float]],
@@ -2360,7 +4273,12 @@ class HippoRAG:
         
         Args:
             json_structure: JSON结构
-            all_*: 各类节点的收集列表
+            all_files: 文件节点列表 [(node_id, content, abstract, file_path), ...]
+            all_chunks: 段落节点列表
+            all_codes: 代码节点列表
+            all_tables: 表格节点列表
+            all_entities: 实体节点列表
+            all_facts: 事实三元组列表
             structure_edges: 结构性边列表 (source_id, target_id, edge_type, weight)
             semantic_edges: 语义边列表 (三元组)
             parent_id: 父节点ID
@@ -2370,8 +4288,10 @@ class HippoRAG:
                 # 处理文件节点
                 file_abstract = node_data.get('abstract', '')
                 file_content = node_data.get('content','')
+                file_path = node_data.get('file_path', '')  # 提取文件路径
                 if file_abstract and file_content:
-                    all_files.append((node_id, file_content, file_abstract))
+                    # 存储为4元组: (node_id, content, abstract, file_path)
+                    all_files.append((node_id, file_content, file_abstract, file_path))
                     
                 # 处理文件的chunk子节点
                 chunks_data = node_data.get('chunks', {})
@@ -2518,3 +4438,39 @@ class HippoRAG:
                 # 添加双向连接（无向图）
                 self.node_to_node_stats[(subject_id, obj_id)] = self.node_to_node_stats.get((subject_id, obj_id), 0.0) + 1
                 self.node_to_node_stats[(obj_id, subject_id)] = self.node_to_node_stats.get((obj_id, subject_id), 0.0) + 1
+
+    def hierarchical_rag_qa_example(self, json_structure: Dict[str, Any], queries: List[str]):
+        """
+        层次化RAG问答的完整使用示例
+        
+        此方法展示了如何使用HippoRAG处理层次化JSON结构并进行问答。
+        适用于包含文件、段落、代码、表格等多种内容类型的复杂文档结构。
+        
+        Args:
+            json_structure: 层次化的JSON文档结构
+            queries: 查询列表
+            
+        Returns:
+            问答结果
+            
+        使用流程:
+        1. 使用index_from_json索引层次化结构
+        2. 使用rag_qa进行多类型内容的问答
+        """
+        logger.info("Starting hierarchical RAG-QA example")
+        
+        # 步骤1: 索引层次化JSON结构
+        logger.info("Indexing hierarchical JSON structure...")
+        self.index_from_json(json_structure)
+        
+        # 步骤2: 执行RAG问答
+        logger.info("Performing RAG-QA on hierarchical content...")
+        query_solutions, response_messages, metadata = self.rag_qa(queries)
+        
+        # 打印结果摘要
+        logger.info(f"Completed {len(queries)} queries")
+        for i, (query, solution) in enumerate(zip(queries, query_solutions)):
+            logger.info(f"Query {i+1}: {query}")
+            logger.info(f"Answer: {solution.answer}")
+            
+        return query_solutions, response_messages, metadata

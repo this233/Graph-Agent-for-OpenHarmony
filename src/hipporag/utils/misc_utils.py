@@ -51,6 +51,58 @@ class QuerySolution:
             "gold_docs": self.gold_docs,
         }
 
+
+@dataclass
+class TypedContentResult:
+    """单一类型内容的检索结果"""
+    content_type: str  # 'chunk', 'table', 'code'
+    contents: List[str]  # 内容文本列表
+    scores: np.ndarray  # 对应的分数
+    keys: List[str]  # 对应的节点键
+    
+    def to_dict(self, top_k: int = 5):
+        return {
+            "content_type": self.content_type,
+            "count": len(self.contents),
+            "top_contents": self.contents[:top_k],
+            "top_scores": [round(v, 6) for v in self.scores.tolist()[:top_k]] if len(self.scores) > 0 else [],
+            "top_keys": self.keys[:top_k]
+        }
+
+
+@dataclass
+class TypedQuerySolution:
+    """分类型的查询结果，包含 chunk、table、code 的独立排序结果"""
+    question: str
+    chunks: TypedContentResult  # chunk 的检索结果
+    tables: TypedContentResult  # table 的检索结果
+    codes: TypedContentResult   # code 的检索结果
+    answer: str = None
+    gold_answers: List[str] = None
+    gold_docs: Optional[List[str]] = None
+    
+    def to_dict(self, top_k: int = 5):
+        return {
+            "question": self.question,
+            "answer": self.answer,
+            "gold_answers": self.gold_answers,
+            "chunks": self.chunks.to_dict(top_k) if self.chunks else None,
+            "tables": self.tables.to_dict(top_k) if self.tables else None,
+            "codes": self.codes.to_dict(top_k) if self.codes else None,
+            "gold_docs": self.gold_docs,
+        }
+    
+    def get_all_contents(self, chunk_k: int = 5, table_k: int = 3, code_k: int = 3) -> List[str]:
+        """获取合并后的所有内容（用于传递给LLM）"""
+        all_contents = []
+        if self.chunks and len(self.chunks.contents) > 0:
+            all_contents.extend(self.chunks.contents[:chunk_k])
+        if self.tables and len(self.tables.contents) > 0:
+            all_contents.extend(self.tables.contents[:table_k])
+        if self.codes and len(self.codes.contents) > 0:
+            all_contents.extend(self.codes.contents[:code_k])
+        return all_contents
+
 def text_processing(text):
     """
     文本预处理函数，支持中文和其他语言字符

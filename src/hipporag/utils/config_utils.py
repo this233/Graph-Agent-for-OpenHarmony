@@ -173,6 +173,18 @@ class BaseConfig:
         default=5,
         metadata={"help": "The number of linked nodes at each retrieval step"}
     )
+    rerank_candidate_k: int = field(
+        default=50,
+        metadata={"help": "The number of candidate facts to send to LLM for reranking. Should be larger than linking_top_k to compensate for embedding inaccuracy."}
+    )
+    file_rerank_candidate_k: int = field(
+        default=50,
+        metadata={"help": "The number of candidate files to send to LLM for reranking."}
+    )
+    file_linking_top_k: int = field(
+        default=5,
+        metadata={"help": "The number of files to keep after reranking for graph search."}
+    )
     retrieval_top_k: int = field(
         default=200,
         metadata={"help": "Retrieving k documents at each step"}

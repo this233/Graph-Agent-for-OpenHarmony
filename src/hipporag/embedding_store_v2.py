@@ -115,7 +115,7 @@ class EmbeddingStoreV2:
         # 返回缺失的数据字典
         return {h: {"hash_id": h, "content": nodes_dict[h]["content"], "summary": nodes_dict[h]["summary"]} for h in missing_ids}
 
-    def insert_strings(self, hash_ids: List[str], contents: List[str], summaries: List[str]):
+    def insert_strings(self, hash_ids: List[str], contents: List[str], summaries: List[str], file_paths: List[str] = None):
         """
         批量插入文本字符串及其嵌入向量
         
@@ -123,6 +123,7 @@ class EmbeddingStoreV2:
             hash_ids: 外部传入的哈希ID列表
             contents: 完整内容列表
             summaries: 摘要列表（用于计算embedding）
+            file_paths: 文件路径列表（可选，用于文件类型的数据）
             
         功能说明:
         - 使用外部传入的哈希ID
@@ -135,10 +136,15 @@ class EmbeddingStoreV2:
         if not (len(hash_ids) == len(contents) == len(summaries)):
             raise ValueError("hash_ids, contents, and summaries must have the same length")
         
-        # 为每个哈希ID创建内容和摘要映射
+        # 如果提供了 file_paths，也需要验证长度
+        if file_paths is not None and len(file_paths) != len(hash_ids):
+            raise ValueError("file_paths must have the same length as hash_ids")
+        
+        # 为每个哈希ID创建内容、摘要和文件路径映射
         nodes_dict = {}
-        for hash_id, content, summary in zip(hash_ids, contents, summaries):
-            nodes_dict[hash_id] = {'content': content, 'summary': summary}
+        for i, (hash_id, content, summary) in enumerate(zip(hash_ids, contents, summaries)):
+            fp = file_paths[i] if file_paths else ''
+            nodes_dict[hash_id] = {'content': content, 'summary': summary, 'file_path': fp}
 
         # 获取所有哈希ID
         all_hash_ids = list(nodes_dict.keys())
@@ -161,12 +167,14 @@ class EmbeddingStoreV2:
         summaries_to_encode = [nodes_dict[hash_id]["summary"] for hash_id in missing_ids]
         # 准备要保存的完整内容
         contents_to_save = [nodes_dict[hash_id]["content"] for hash_id in missing_ids]
+        # 准备要保存的文件路径
+        file_paths_to_save = [nodes_dict[hash_id]["file_path"] for hash_id in missing_ids]
 
         # 使用嵌入模型批量生成向量（基于摘要）
         missing_embeddings = self._batch_encode_texts(summaries_to_encode)
 
         # 插入新数据
-        self._upsert(missing_ids, contents_to_save, summaries_to_encode, missing_embeddings)
+        self._upsert(missing_ids, contents_to_save, summaries_to_encode, missing_embeddings, file_paths_to_save)
 
     def _load_data(self):
         """
@@ -177,6 +185,7 @@ class EmbeddingStoreV2:
         - 构建各种索引映射（哈希ID到索引、哈希ID到行数据等）
         - 如果文件不存在，则初始化空的数据结构
         - 验证数据完整性（哈希ID、文本、摘要、嵌入向量数量一致）
+        - 支持可选的 file_path 字段（向后兼容）
         """
         if os.path.exists(self.filename):
             # 读取parquet文件
@@ -192,21 +201,28 @@ class EmbeddingStoreV2:
                 # 如果没有摘要字段，使用内容作为摘要以保持兼容性
                 self.summaries = self.texts.copy()
             
+            # 处理 file_path 字段（新增，向后兼容）
+            if "file_path" in df.columns:
+                self.file_paths = df["file_path"].values.tolist()
+            else:
+                # 如果没有 file_path 字段，初始化为空字符串列表
+                self.file_paths = [''] * len(self.hash_ids)
+            
             # 构建各种索引映射，提高查询效率
             self.hash_id_to_idx = {h: idx for idx, h in enumerate(self.hash_ids)}
             self.hash_id_to_row = {
-                h: {"hash_id": h, "content": t, "summary": s}
-                for h, t, s in zip(self.hash_ids, self.texts, self.summaries)
+                h: {"hash_id": h, "content": t, "summary": s, "file_path": fp}
+                for h, t, s, fp in zip(self.hash_ids, self.texts, self.summaries, self.file_paths)
             }
             self.hash_id_to_text = {h: self.texts[idx] for idx, h in enumerate(self.hash_ids)}
             self.text_to_hash_id = {self.texts[idx]: h  for idx, h in enumerate(self.hash_ids)}
             
             # 验证数据完整性
-            assert len(self.hash_ids) == len(self.texts) == len(self.summaries) == len(self.embeddings)
+            assert len(self.hash_ids) == len(self.texts) == len(self.summaries) == len(self.embeddings) == len(self.file_paths)
             logger.info(f"Loaded {len(self.hash_ids)} records from {self.filename}")
         else:
             # 初始化空的数据结构
-            self.hash_ids, self.texts, self.summaries, self.embeddings = [], [], [], []
+            self.hash_ids, self.texts, self.summaries, self.embeddings, self.file_paths = [], [], [], [], []
             self.hash_id_to_idx, self.hash_id_to_row = {}, {}
 
     def _save_data(self):
@@ -218,27 +234,32 @@ class EmbeddingStoreV2:
         - 保存为parquet格式文件
         - 重新构建索引映射，确保一致性
         - 记录保存的数据条数
+        - 支持可选的 file_path 字段
         """
         # 构造DataFrame
         data_to_save = pd.DataFrame({
             "hash_id": self.hash_ids,
             "content": self.texts,
             "summary": self.summaries,
-            "embedding": self.embeddings
+            "embedding": self.embeddings,
+            "file_path": self.file_paths
         })
         
         # 保存为parquet文件
         data_to_save.to_parquet(self.filename, index=False)
         
         # 重新构建索引映射
-        self.hash_id_to_row = {h: {"hash_id": h, "content": t, "summary": s} for h, t, s, e in zip(self.hash_ids, self.texts, self.summaries, self.embeddings)}
+        self.hash_id_to_row = {
+            h: {"hash_id": h, "content": t, "summary": s, "file_path": fp} 
+            for h, t, s, fp in zip(self.hash_ids, self.texts, self.summaries, self.file_paths)
+        }
         self.hash_id_to_idx = {h: idx for idx, h in enumerate(self.hash_ids)}
         self.hash_id_to_text = {h: self.texts[idx] for idx, h in enumerate(self.hash_ids)}
         self.text_to_hash_id = {self.texts[idx]: h for idx, h in enumerate(self.hash_ids)}
         
         logger.info(f"Saved {len(self.hash_ids)} records to {self.filename}")
 
-    def _upsert(self, hash_ids, texts, summaries, embeddings):
+    def _upsert(self, hash_ids, texts, summaries, embeddings, file_paths=None):
         """
         内部方法：插入或更新数据
         
@@ -247,16 +268,22 @@ class EmbeddingStoreV2:
             texts: 文本列表
             summaries: 摘要列表
             embeddings: 嵌入向量列表
+            file_paths: 文件路径列表（可选，默认为空字符串）
             
         功能说明:
         - 将新数据添加到内存中的列表
         - 调用保存方法持久化数据
         """
+        # 如果没有提供 file_paths，使用空字符串填充
+        if file_paths is None:
+            file_paths = [''] * len(hash_ids)
+        
         # 扩展数据列表
         self.embeddings.extend(embeddings)
         self.hash_ids.extend(hash_ids)
         self.texts.extend(texts)
         self.summaries.extend(summaries)
+        self.file_paths.extend(file_paths)
 
         logger.info(f"Saving new records.")
         # 持久化到文件
@@ -288,6 +315,7 @@ class EmbeddingStoreV2:
             self.texts.pop(idx)
             self.summaries.pop(idx)
             self.embeddings.pop(idx)
+            self.file_paths.pop(idx)
 
         logger.info(f"Saving record after deletion.")
         # 保存更新后的数据
