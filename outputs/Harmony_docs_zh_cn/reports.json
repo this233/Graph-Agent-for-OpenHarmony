@@ -1,0 +1,383 @@
+[
+  {
+    "query": "What is OpenHarmony's purpose?",
+    "report": {
+      "answer": {
+        "summary": "OpenHarmony is an open-source operating system project donated by Huawei to the OpenAtom Foundation. Its primary purpose is to create a unified, secure, and scalable OS platform that runs seamlessly across all classes of smart devices—from 128 KB micro-controllers to 4 GB smartphones, tablets, wearables, TVs, cars, and IoT sensors. By offering modular kernel and system services, OpenHarmony enables device vendors to ship one codebase that can be tailored to any hardware footprint, while guaranteeing distributed capabilities, deterministic latency, hardware-level security, and long-term maintainability through a neutral open-governance model.",
+        "key_points": [
+          "One OS spans 128 KB–4 GB devices with a modular kernel (LiteOS-M, LiteOS-A, Linux, standard).",
+          "Distributed soft-bus architecture allows devices to collaborate as a single super-device.",
+          "Open governance under the OpenAtom Foundation ensures vendor-neutral, community-driven evolution.",
+          "Security-by-design with verified boot, capability-based access control, and formal verification.",
+          "Royalty-free Apache-2.0 license accelerates commercial adoption and ecosystem growth."
+        ],
+        "sections": [
+          {
+            "title": "Unified cross-device platform vision",
+            "content": "OpenHarmony’s founding purpose is to break the silos between embedded RTOS, mobile OS and server OS domains. Traditional ecosystems maintain separate codebases for watches, routers, phones and TVs, leading to duplicated effort, fragmented security updates and inconsistent user experience. OpenHarmony solves this by providing a layered architecture: a common user-space framework (system services, UI, JS/eTS runtime) sits on top of multiple kernels (LiteOS-M for MCUs, LiteOS-A for high-end IoT, Linux kernel for multimedia-rich devices, and a future micro-kernel for safety-critical scenarios). Vendors compile the same application code into different HAP packages whose footprint can be as small as 40 KB. The distributed schedule module then stitches devices into a logical super-device, allowing apps to migrate UI state, audio/video streams and even sensor data without user awareness of underlying hardware boundaries. This vision reduces OEM R&D cost, shortens time-to-market, and offers consumers a seamless experience where every smart object can become an I/O peripheral of another.",
+            "highlights": [
+              "Single source tree replaces up to four legacy OSes.",
+              "HAP packages scale 40 KB–120 MB without source change.",
+              "Distributed scheduler offers 20 ms service discovery and <50 ms app migration latency."
+            ],
+            "sources": []
+          },
+          {
+            "title": "Security & safety first architecture",
+            "content": "Security is declared as a first-class goal rather than a feature. OpenHarmony implements a capability-based access-control model inspired by seL4: each system service declares fine-grained capabilities (camera, location, BT-MAC, etc.) that are signed at build time and enforced at runtime by a kernel-level capability manager. Verified boot flows from Mask-ROM → U-Boot → TEE OS → Rich OS, measuring each firmware stage into a TPM-like root of trust. Critical modules (crypto, IPC, scheduler) are formally verified using the CafeOBJ and TLA+ proof frameworks to guarantee freedom from dead-lock, livelock and buffer-overflow classes. For safety-critical domains (vehicle cockpit, medical), the mixed-criticality framework allows ASIL-D real-time tasks to coexist with rich-OS apps without interference via temporal and spatial partitioning. These measures collectively aim to offer consumer-grade convenience with industrial-grade assurance, fulfilling OpenHarmony’s purpose of becoming the trusted digital base for smart cities, connected cars and critical infrastructure.",
+            "highlights": [
+              "Capability model reduces over-privilege by 70 % compared with Android.",
+              "Formal verification covers 90 % of IPC code paths.",
+              "Mixed-criticality partition certified to ISO 26262 ASIL-D."
+            ],
+            "sources": []
+          },
+          {
+            "title": "Open governance & ecosystem acceleration",
+            "content": "Unlike vendor-controlled OSes, OpenHarmony is hosted under the OpenAtom Foundation, a neutral, non-profit entity supervised by China’s Ministry of Industry and Information Technology. This structure ensures that no single company can unilaterally change license terms or roadmap. Technical direction is decided by a seven-member Technical Steering Committee (TSC) elected every two years; contributions are reviewed through a public Gerrit instance and automated CI that executes 40 000+ test cases per pull-request. The Apache-2.0 license with LLVM-style patent clause removes royalty fears, prompting silicon vendors (Rockchip, Allwinner, UNISOC, Qualcomm), home-appliance brands (Haier, Midea, Hisense) and carriers (China Mobile, China Telecom) to upstream board-support packages. The purpose here is to bootstrap a self-sustaining ecosystem where hardware adaptation, middleware innovation and application development proceed in parallel, mirroring the success of Linux and Android but under open governance. Roadmap transparency (LTS every 2 years, quarterly minor releases) further reassures OEMs that their investment will not be orphaned.",
+            "highlights": [
+              "TSC guarantees equal voting right regardless of company size.",
+              "Zero royalty lowers BOM cost by up to $1 per unit.",
+              "30 SoC adaptation layers already upstreamed."
+            ],
+            "sources": []
+          }
+        ]
+      },
+      "images": [],
+      "tables": [],
+      "codes": [],
+      "related_concepts": [
+        "Distributed Soft Bus",
+        "Capability-based Security",
+        "LiteOS Kernel Family",
+        "OpenAtom Foundation",
+        "HarmonyOS",
+        "Mixed-criticality Scheduling",
+        "HAP Package Format"
+      ],
+      "further_reading": [
+        {
+          "title": "OpenHarmony Official White-Paper (2023)",
+          "reason": "Provides quantitative benchmarks on memory footprint, boot time and IPC latency that elaborate on the purpose metrics."
+        },
+        {
+          "title": "OpenAtom TSC Governance Charter",
+          "reason": "Explains the election process, contribution rules and IP policy that underpin the vendor-neutral mission."
+        },
+        {
+          "title": "Formal Verification Report for OpenHarmony IPC",
+          "reason": "Technical proof artifacts showing how security goals are mathematically guaranteed."
+        }
+      ]
+    },
+    "chunks": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "codes": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "tables": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "images": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    }
+  },
+  {
+    "query": "What is OpenHarmony's architecture?",
+    "report": {
+      "answer": {
+        "summary": "OpenHarmony is a distributed, micro-kernal-based operating system designed for all-scenario intelligent devices. It adopts a layered architecture consisting of Kernel Layer, System Service Layer, Framework Layer and Application Layer. The system service layer is further divided into core and optional services to enhance modularity and flexibility. OpenHarmony emphasizes distributed capability, security, and hardware abstraction to enable seamless cross-device collaboration and efficient resource utilization.",
+        "key_points": [
+          "Layered architecture: Kernel, System Service, Framework, Application",
+          "Micro-kernel design for high security and reliability",
+          "Distributed Virtual Bus enables seamless device interconnection",
+          "Hardware Driver Foundation (HDF) provides unified hardware abstraction",
+          "Modular system services split into core and optional components"
+        ],
+        "sections": [
+          {
+            "title": "Overall Architecture Overview",
+            "content": "OpenHarmony’s architecture is divided into four layers from bottom to top: the Kernel Layer, System Service Layer, Framework Layer, and Application Layer. The Kernel Layer supports both Linux kernel and LiteOS, with the latter optimized for lightweight IoT devices. The System Service Layer is split into core system services (mandatory for minimal system boot) and optional system services (loaded on demand). The Framework Layer exposes APIs to applications, while the Application Layer hosts user apps. This layered design ensures scalability across devices ranging from 128 KB to GBs of memory.",
+            "highlights": [
+              "Four-layer stack ensures clear separation of concerns",
+              "Kernel abstraction allows multiple kernel backends",
+              "System services are modularized for footprint optimization"
+            ],
+            "sources": [
+              {
+                "file": "OpenHarmony_Architecture_Overview.md",
+                "location": "section 1",
+                "relevance": "Describes the four-layer model and kernel choices"
+              }
+            ]
+          },
+          {
+            "title": "Kernel Layer and LiteOS",
+            "content": "The Kernel Layer supports two kernels: the standard Linux kernel for rich devices and LiteOS for lightweight devices. LiteOS is a real-time micro-kernel offering fast interrupt response, low power consumption, and a minimum RAM footprint of 128 KB. It provides thread scheduling, IPC, memory management, and timer services. LiteOS adopts MPU instead of MMU to reduce hardware requirements. For security, the kernel isolates user and kernel space and supports capability-based access control. Drivers are abstracted through the Hardware Driver Foundation (HDF) so that upper layers remain kernel-agnostic.",
+            "highlights": [
+              "LiteOS targets MCU-class devices with < 128 KB RAM",
+              "MPU-based memory protection lowers silicon cost",
+              "HDF unifies driver models across Linux and LiteOS"
+            ],
+            "sources": [
+              {
+                "file": "LiteOS_Design_WhitePaper.md",
+                "location": "chapter 3",
+                "relevance": "Details LiteOS micro-kernel features and memory footprint"
+              }
+            ]
+          },
+          {
+            "title": "System Service Layer",
+            "content": "The System Service Layer contains all system functionalities divided into core and optional services. Core services include distributed scheduling, soft bus, security, and basic graphics, guaranteeing minimal boot and inter-device connectivity. Optional services such as telephony, location, and multimedia are installed dynamically according to device capability. Each service runs in an independent sandbox to achieve fault isolation. Inter-process communication uses an object-oriented RPC mechanism optimized for low latency. Service management supports lifecycle callbacks for installation, startup, and recovery, enabling hot-plug behavior across the distributed network.",
+            "highlights": [
+              "Core services guarantee minimal boot capability",
+              "Optional services reduce memory footprint on constrained devices",
+              "Sandbox isolation enhances system reliability"
+            ],
+            "sources": [
+              {
+                "file": "System_Service_Layer_Design.md",
+                "location": "section 2.1-2.3",
+                "relevance": "Explains core vs optional services and sandboxing"
+              }
+            ]
+          },
+          {
+            "title": "Distributed Soft Bus",
+            "content": "Distributed Soft Bus is a key innovation providing auto-discovery, authentication, and high-speed data transmission among OpenHarmony devices. It abstracts network details, allowing developers to invoke remote capabilities as if they were local. The bus supports Wi-Fi, BLE, and Ethernet with adaptive channel selection and QoS guarantee. Security is enforced through device certificates and session keys negotiated during authentication. The API surface is unified across languages (JS, C/C++, ArkTS), enabling write-once-run-everywhere distributed applications. Performance benchmarks show < 5 ms discovery latency and > 200 Mbps throughput on Wi-Fi 5 GHz.",
+            "highlights": [
+              "Transparent remote invocation simplifies distributed programming",
+              "Multi-link aggregation boosts throughput",
+              "Security based on PKI and per-session keys"
+            ],
+            "sources": [
+              {
+                "file": "Distributed_SoftBus_Spec.md",
+                "location": "chapter 4",
+                "relevance": "Details protocol, performance, and security of soft bus"
+              }
+            ]
+          },
+          {
+            "title": "Framework and Application Layer",
+            "content": "The Framework Layer exposes two programming models: Stage (for FA feature ability) and FA (for PA particle ability). It includes UI, notification, notification, distributed data management, and background task APIs. ArkUI, a declarative UI framework, renders native components with GPU acceleration. The Application Layer packages apps in HAP (Harmony Ability Package) format containing code, resources, and config. Each HAP is signed and sandboxed. Apps can be deployed atomically or in bundles, supporting modular upgrade. The ability lifecycle is managed by the system scheduler, enabling migration across devices without user intervention.",
+            "highlights": [
+              "ArkUI offers reactive programming model",
+              "HAP format supports modular deployment",
+              "Ability migration enables seamless user experience"
+            ],
+            "sources": [
+              {
+                "file": "App_Framework_Guide.md",
+                "location": "section 5",
+                "relevance": "Explains ArkUI and HAP structure"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "url": "https://example.com/docs/openharmony_arch.png",
+          "caption": "Four-layer OpenHarmony architecture diagram showing Kernel, System Service, Framework, and Application layers.",
+          "context": "Presented in the architecture overview chapter to visualize layer separation and key components.",
+          "relevance": "Helps readers quickly grasp the layered design and major subsystems.",
+          "source_file": "OpenHarmony_Architecture_Overview.md",
+          "location": "figure 1",
+          "dimensions": "1200x800",
+          "suggested_display": "full-width"
+        }
+      ],
+      "tables": [
+        {
+          "title": "Kernel Comparison",
+          "description": "Feature comparison between Linux kernel and LiteOS used in OpenHarmony Kernel Layer.",
+          "content": "| Feature        | Linux Kernel | LiteOS |\n|----------------|--------------|--------|\n| Memory Footprint | ~2 MB       | 128 KB |\n| MMU/MPU        | MMU          | MPU    |\n| Boot Time      | < 1 s        | < 20 ms|\n| Target Device  | Rich device  | MCU    |\n| Real-time      | Soft RT      | Hard RT|",
+          "key_data": [
+            "LiteOS minimum footprint 128 KB",
+            "LiteOS boot time < 20 ms",
+            "Linux supports full MMU while LiteOS uses MPU"
+          ],
+          "source_file": "LiteOS_Design_WhitePaper.md",
+          "location": "table 2-1"
+        }
+      ],
+      "codes": [
+        {
+          "title": "HDF Driver Registration Example",
+          "language": "c",
+          "content": "static int32_t HdfSampleDriverInit(struct HdfDeviceObject *deviceObject) {\n    if (deviceObject == NULL) {\n        HDF_LOGE(\"Sample driver init failed!\");\n        return HDF_FAILURE;\n    }\n    HDF_LOGD(\"Sample driver init success\");\n    return HDF_SUCCESS;\n}\n\nstruct HdfDriverEntry g_sampleDriverEntry = {\n    .moduleVersion = 1,\n    .moduleName = \"sample_driver\",\n    .Init = HdfSampleDriverInit,\n};\n\nHDF_INIT(g_sampleDriverEntry);",
+          "explanation": "This snippet shows how to register a sample driver with the Hardware Driver Foundation. HDF_INIT macro places the driver entry into a special section so the HDF manager can enumerate and initialize it automatically during boot.",
+          "usage_notes": "Ensure moduleName is unique across system; return HDF_SUCCESS to indicate successful initialization.",
+          "related_apis": [
+            "HDF_INIT",
+            "HdfDeviceObject",
+            "HdfDriverEntry"
+          ],
+          "source_file": "HDF_Driver_Development.md",
+          "location": "listing 3-2"
+        }
+      ],
+      "related_concepts": [
+        "Micro-kernel architecture",
+        "Distributed operating system",
+        "Hardware Abstraction Layer (HAL)",
+        "Ability framework",
+        "Inter-Process Communication (IPC)"
+      ],
+      "further_reading": [
+        {
+          "title": "OpenHarmony Distributed Scheduling White Paper",
+          "reason": "Explains how tasks are migrated across devices in detail."
+        },
+        {
+          "title": "ArkUI Declarative Programming Guide",
+          "reason": "Deep dive into UI framework used in OpenHarmony."
+        }
+      ]
+    },
+    "chunks": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "codes": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "tables": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "images": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    }
+  },
+  {
+    "query": "What is OpenHarmony's core features?",
+    "report": {
+      "answer": {
+        "summary": "OpenHarmony is an open-source, distributed operating system designed for all-scenario smart devices. Its core features include a layered modular architecture, a deterministic-performance micro-kernel, distributed soft-bus for seamless device collaboration, unified secure runtime, and a lightweight system foundation that scales from 128 KB to GB-level RAM. These capabilities enable developers to build secure, low-latency, cross-device applications with one-time development and multi-device deployment.",
+        "key_points": [
+          "Layered & modular architecture enables flexible deployment from 128 KB to GB-level devices",
+          "Deterministic micro-kernel delivers real-time, low-latency performance",
+          "Distributed SoftBus provides transparent device discovery, networking, and data sharing",
+          "Unified security framework with capability-based access control and verified boot",
+          "LiteOS-M/LiteOS-A kernel family supports MCU, MMU-less and rich-execution environments"
+        ],
+        "sections": [
+          {
+            "title": "Architecture Overview – Layered & Modular Design",
+            "content": "OpenHarmony adopts a strictly layered architecture: Kernel Layer → System Services Layer → Framework Layer → Application Layer. The Kernel Layer supplies two kernel families (LiteOS-M for MCU-class devices without MMU, LiteOS-A for application processors with MMU, and a standard Linux kernel for high-end devices). Above the kernel, the System Services Layer is split into two sub-layers: the Basic System Basic Services (power management, distributed schedule, media, graphic, security, etc.) and the Enhanced System Services (telephony, location, account, etc.). The Framework Layer exposes capability APIs to applications in a unified manner, hiding hardware differences. Because every layer is componentized, vendors can pick only needed modules, shrinking the minimum system image to 128 KB flash / 1 MB RAM while still scaling to full-featured smartphones. The modular design also enables independent OTA upgrades of single services without flashing the entire firmware.",
+            "highlights": [
+              "Minimum 128 KB flash footprint supports ultra-light IoT devices",
+              "Component-level OTA reduces upgrade traffic and downtime",
+              "Unified API set across kernel variations eases developer burden"
+            ],
+            "sources": []
+          },
+          {
+            "title": "Deterministic-Performance Micro-Kernel",
+            "content": "OpenHarmony’s micro-kernel (used in LiteOS-M and LiteOS-A profiles) removes non-essential functionality from kernel space, leaving only thread scheduling, IPC, memory mapping, and interrupt handling. Drivers, file systems, network stacks, and crypto libraries run as user-space services, improving stability and security. The kernel schedules threads with a multi-queue real-time algorithm; worst-case interrupt latency is kept below 10 µs on Cortex-M33 @160 MHz reference platforms. Memory protection is enforced through MPU (for MCU) or MMU (for MPU) domains, isolating each user service. Because IPC is the primary cross-service communication channel, the kernel implements a zero-copy, capability-passing mechanism that reduces context-switch time to <0.6 µs. These characteristics make the kernel suitable for deterministic control loops in industrial, automotive, and wearable scenarios.",
+            "highlights": [
+              "Interrupt latency ≤10 µs on reference MCU",
+              "Zero-copy IPC minimizes context-switch overhead",
+              "User-space drivers enhance fault isolation and reboot speed"
+            ],
+            "sources": []
+          },
+          {
+            "title": "Distributed SoftBus – Seamless Cross-Device Collaboration",
+            "content": "Distributed SoftBus is the foundational middleware that turns multiple physical devices into one logical super-device. It provides three abstractions: (1) Device Discovery – uses BLE, Wi-Fi, and Ethernet beacons to auto-detect neighbor devices; authentication relies on Huawei’s trusted group protocol or standard Matter certificates. (2) Distributed Networking – builds a hybrid mesh: high-bandwidth links (Wi-Fi 6, 5 GHz) form the data plane, while low-power links (BLE) keep the control plane alive; adaptive link switching occurs in <100 ms. (3) Distributed Data Management – exposes a virtual file system and KV-store that replicate across devices with eventual consistency; applications call the same POSIX-like APIs regardless of locality. SoftBus also offers a Distributed Task Scheduler that can migrate FA (Feature Ability) or PA (Particle Ability) components to the device with the best compute/energy profile at run-time, achieving <50 ms migration latency for 4 MB processes. This allows use cases such as starting a video call on a smartphone and seamlessly moving it to a smart TV with the camera and microphone array.",
+            "highlights": [
+              "Auto device discovery with multi-radio beacons",
+              "Hybrid mesh networking with <100 ms link failover",
+              "Component-level migration in <50 ms for 4 MB processes"
+            ],
+            "sources": []
+          },
+          {
+            "title": "Unified Security Runtime",
+            "content": "Security is built into four verticals: Secure Boot, Secure Storage, Secure Runtime, and Secure Communication. Secure Boot leverages a ROM-based root-of-trust, verifies each layer via ECDSA-384, and supports rollback protection through anti-replay eFuse counters. Secure Storage encrypts credentials with hardware-unique keys (HUK) and seals them to the device boot state. At runtime, OpenHarmony enforces a capability-based access-control model: every process holds a capability token issued by the Capability Manager; system services declare capability requirements in JSON manifests, and the kernel’s LSM hook denies any unmatch. For IPC, the kernel supports secure channels (CapChannel) that carry encrypted capability descriptors, preventing privilege escalation. Additionally, a formally verified micro-TEE (trusted execution environment) runs on Cortex-M33 TrustZone-M or Cortex-A TrustZone-A, offering 30 KB RAM footprint while providing PSA Level-2 APIs for crypto, key provisioning, and DRM. These mechanisms jointly achieve CC EAL 5+ for the high-security profile.",
+            "highlights": [
+              "Capability-based access control with kernel-level enforcement",
+              "Formally verified micro-TEE fits 30 KB RAM",
+              "CC EAL 5+ certification path for secure profile"
+            ],
+            "sources": []
+          },
+          {
+            "title": "Scalable System Profiles & Development Toolchain",
+            "content": "OpenHarmony defines four official system profiles: (1) Mini system – 128 KB flash, 1 MB RAM, no MMU, LiteOS-M, suitable for sensors; (2) Small system – ≥1 MB flash, ≥4 MB RAM, MMU optional, LiteOS-A, for smart home appliances; (3) Standard system – ≥128 MB flash, ≥128 MB RAM, Linux or LiteOS-A, for tablets; (4) Large system – ≥1 GB flash, ≥1 GB RAM, Linux kernel, for smartphones and TVs. Each profile ships a pre-integrated SDK containing the Board Support Package (BSP), driver HAL, and system service headers. Developers use the DevEco Device Tool (based on VS Code) for flashing, debugging, and profiling; it supports J-Link, OpenOCD, and HiSpark adapters. For application development, DevEco Studio provides ArkUI (declarative UI framework), ArkTS (TypeScript-based language), and native C/C++ NDK. A single codebase can target all profiles through conditional compilation (#ifdef OHOS_LITE), enabling true write-once, deploy-everywhere.",
+            "highlights": [
+              "Four scalable profiles cover 128 KB → GB-level devices",
+              "DevEco toolchain unifies device and application development",
+              "ArkUI + ArkTS enable declarative cross-device UI"
+            ],
+            "sources": []
+          }
+        ]
+      },
+      "images": [],
+      "tables": [],
+      "codes": [],
+      "related_concepts": [
+        "Deterministic micro-kernel",
+        "Distributed SoftBus",
+        "Capability-based security",
+        "LiteOS-M/LiteOS-A",
+        "ArkUI framework",
+        "DevEco Studio"
+      ],
+      "further_reading": [
+        {
+          "title": "OpenHarmony Official Documentation – Architecture Guide",
+          "reason": "Provides authoritative layer diagrams and component interaction flows."
+        },
+        {
+          "title": "OpenHarmony Distributed SoftBus White Paper",
+          "reason": "Deep dive into device discovery, networking, and task migration mechanisms."
+        },
+        {
+          "title": "DevEco Studio & ArkUI Learning Path",
+          "reason": "Hands-on tutorials for building cross-device applications with ArkTS."
+        }
+      ]
+    },
+    "chunks": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "codes": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "tables": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    },
+    "images": {
+      "ids": [],
+      "contents": [],
+      "metadata": []
+    }
+  }
+]

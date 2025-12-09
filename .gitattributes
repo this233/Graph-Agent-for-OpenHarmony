@@ -1,0 +1,6 @@
+outputs/*.parquet filter=lfs diff=lfs merge=lfs -text
+outputs/*.pickle filter=lfs diff=lfs merge=lfs -text
+outputs/Harmony_docs_zh_cn/deepseek-v3.2-exp_Qwen3-Embedding-4B/mappings.json filter=lfs diff=lfs merge=lfs -text
+outputs/Harmony_docs_zh_cn/deepseek-v3.2-exp_Qwen3-Embedding-4B/node_metadata.json filter=lfs diff=lfs merge=lfs -text
+outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json filter=lfs diff=lfs merge=lfs -text
+outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json filter=lfs diff=lfs merge=lfs -text
