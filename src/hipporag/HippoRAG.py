@@ -288,10 +288,26 @@ class HippoRAG:
         #         embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
         #                                                                       embedding_model_name=self.global_config.embedding_model_name)
         
-        self.embedding_model = LLM(model="../Qwen3-Embedding-4B", task="embed",dtype=torch.float16)
+        # 初始化嵌入模型，启用多GPU tensor并行
+        # tensor_parallel_size: 使用所有可用GPU进行张量并行计算
+        # 这样embedding计算会自动分布到所有GPU上
+        os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+        
+        num_gpus = torch.cuda.device_count()
+        logger.info(f"初始化Embedding模型，检测到 {num_gpus} 个GPU")
+        
+        self.embedding_model = LLM(
+            model="../Qwen3-Embedding-4B", 
+            task="embed",
+            dtype=torch.float16,
+            tensor_parallel_size=num_gpus,  # 使用所有GPU进行张量并行
+            gpu_memory_utilization=0.8,  # GPU显存利用率
+            trust_remote_code=True,
+            max_model_len=8192,  # 根据模型支持的最大长度设置
+        )
 
 
-        # 初始化五个嵌入存储器：文件、段落、代码、表格、实体、事实
+        # 初始化七个嵌入存储器：文件、段落、代码、表格、图片、实体、事实
         self.file_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                    os.path.join(self.working_dir, "file_embeddings"),
                                                    self.global_config.embedding_batch_size, 'file') # file_id,摘要,embedding
@@ -304,6 +320,9 @@ class HippoRAG:
         self.table_embedding_store = EmbeddingStoreV2(self.embedding_model,
                                                      os.path.join(self.working_dir, "table_embeddings"),
                                                      self.global_config.embedding_batch_size, 'table') # table_id,表格摘要,embedding
+        self.image_embedding_store = EmbeddingStoreV2(self.embedding_model,
+                                                     os.path.join(self.working_dir, "image_embeddings"),
+                                                     self.global_config.embedding_batch_size, 'image') # image_id,caption,embedding
         self.entity_embedding_store = EmbeddingStoreV2(self.embedding_model, 
                                                      os.path.join(self.working_dir, "entity_embeddings"),
                                                      self.global_config.embedding_batch_size, 'entity') # entity_id,实体,embedding
@@ -331,6 +350,81 @@ class HippoRAG:
 
         # 实体到段落映射（用于增量更新）
         self.ent_node_to_chunk_ids: Optional[Dict[str, set]] = None
+        
+        # 事实到段落映射（fact_id → chunk_id，fact来源的chunk）
+        self.fact_to_chunk_id: Dict[str, str] = {}
+        
+        # 事实到实体映射（fact_id → (subject_entity_id, object_entity_id)）
+        self.fact_to_entities: Dict[str, Tuple[str, str]] = {}
+        
+        # 节点元信息映射（node_id → metadata dict），用于存储面包屑导航等信息
+        # 格式: {node_id: {"breadcrumb": "h1标题 > h2标题 > h3标题", "metadata": {...}}}
+        self.node_id_to_metadata: Dict[str, Dict[str, Any]] = {}
+        self._load_node_metadata()  # 尝试加载已保存的元信息
+
+    def _get_node_metadata_path(self) -> str:
+        """获取节点元信息保存路径"""
+        return os.path.join(self.working_dir, "node_metadata.json")
+    
+    def _load_node_metadata(self):
+        """从文件加载节点元信息"""
+        metadata_path = self._get_node_metadata_path()
+        if os.path.exists(metadata_path):
+            try:
+                import json
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    self.node_id_to_metadata = json.load(f)
+                logger.info(f"Loaded {len(self.node_id_to_metadata)} node metadata entries from {metadata_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load node metadata: {e}")
+                self.node_id_to_metadata = {}
+        else:
+            self.node_id_to_metadata = {}
+    
+    def _save_node_metadata(self):
+        """保存节点元信息到文件"""
+        metadata_path = self._get_node_metadata_path()
+        try:
+            import json
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(self.node_id_to_metadata, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved {len(self.node_id_to_metadata)} node metadata entries to {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save node metadata: {e}")
+    
+    def _build_breadcrumb(self, metadata: Dict[str, str]) -> str:
+        """
+        从metadata构建面包屑导航字符串
+        
+        Args:
+            metadata: 包含h1, h2, h3...的字典
+            
+        Returns:
+            str: 面包屑字符串，如 "一级标题 > 二级标题 > 三级标题"
+        """
+        if not metadata:
+            return ""
+        
+        breadcrumb_parts = []
+        for level in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+            if level in metadata:
+                breadcrumb_parts.append(metadata[level])
+        
+        return " > ".join(breadcrumb_parts) if breadcrumb_parts else ""
+    
+    def get_node_breadcrumb(self, node_id: str) -> str:
+        """
+        获取节点的面包屑导航
+        
+        Args:
+            node_id: 节点ID
+            
+        Returns:
+            str: 面包屑字符串
+        """
+        if node_id in self.node_id_to_metadata:
+            return self.node_id_to_metadata[node_id].get('breadcrumb', '')
+        return ''
 
     def initialize_graph(self):
         """
@@ -365,6 +459,36 @@ class HippoRAG:
                 f"Loaded graph from {self._graph_pickle_filename} with {preloaded_graph.vcount()} nodes, {preloaded_graph.ecount()} edges"
             )
             return preloaded_graph
+
+    def _convert_to_gitee_url(self, local_path: str, base_local: str = "/root/code/docs") -> str:
+        """
+        将本地路径转换为 Gitee URL
+        
+        Args:
+            local_path: 本地文件路径
+            base_local: 本地基础路径
+            
+        Returns:
+            str: Gitee URL
+            
+        示例:
+            /root/code/docs/zh-cn/figures/1.png 
+            -> https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png
+        """
+        if local_path.startswith(('http://', 'https://', 'ftp://')):
+            return local_path  # 已经是远程路径，直接返回
+        
+        # 提取相对路径部分
+        if local_path.startswith(base_local):
+            relative_path = local_path[len(base_local):].lstrip('/')
+        else:
+            # 如果不是以 base_local 开头，尝试提取 docs 之后的部分
+            if '/docs/' in local_path:
+                relative_path = local_path.split('/docs/', 1)[1]
+            else:
+                relative_path = local_path
+        
+        return f"https://gitee.com/openharmony/docs/raw/master/{relative_path}"
 
     def _batch_encode_texts(self, texts, instruction=None, norm=True):
         """
@@ -1076,6 +1200,1654 @@ class HippoRAG:
         print(f"  PPR总耗时: {self.ppr_time:.2f}s")
         
         return retrieval_results
+
+    def retrieve_v2(
+        self,
+        queries: List[str],
+        fact_candidate_k: int = 100,
+        file_candidate_k: int = 50,
+        chunk_candidate_k: int = 50,
+        fact_top_k: int = 10,
+        file_top_k: int = 5,
+        chunk_top_k: int = 5,
+        spread_chunk_k: int = 15,
+        spread_code_k: int = 10,
+        spread_table_k: int = 10,
+        spread_image_k: int = 10,
+        final_chunk_k: int = 10,
+        final_code_k: int = 3,
+        final_table_k: int = 3,
+        final_image_k: int = 3,
+        generate_report: bool = False,
+        verbose: bool = True
+    ) -> List[Dict]:
+        """
+        新版检索流程 v2：基于图扩散的检索
+        
+        流程:
+        1. Embedding候选获取: Fact(100), File(50), Chunk(50)
+        2. LLM Rerank: Fact(10), File(5), Chunk(5)
+        3. 图扩散: 必选Chunk + 扩散候选
+        4. 最终LLM Rerank: Chunk(10), Code(3), Table(3), Image(3)
+        5. (可选) LLM报告生成: 整合所有信息生成结构化报告
+        
+        Args:
+            queries: 查询列表
+            fact_candidate_k: Fact候选数量
+            file_candidate_k: File候选数量
+            chunk_candidate_k: Chunk候选数量
+            fact_top_k: Fact重排后保留数量
+            file_top_k: File重排后保留数量
+            chunk_top_k: Chunk重排后保留数量
+            spread_chunk_k: 扩散Chunk上限
+            spread_code_k: 扩散Code上限
+            spread_table_k: 扩散Table上限
+            spread_image_k: 扩散Image上限
+            final_chunk_k: 最终Chunk数量
+            final_code_k: 最终Code数量
+            final_table_k: 最终Table数量
+            final_image_k: 最终Image数量
+            generate_report: 是否生成LLM整合报告（供前端页面生成器使用）
+            verbose: 是否输出详细信息
+            
+        Returns:
+            List[Dict]: 每个查询的检索结果，如果generate_report=True则包含report字段
+        """
+        retrieve_start = time.time()
+        
+        if not self.ready_to_retrieve:
+            if verbose:
+                print("🔧 准备检索对象...")
+            self.prepare_retrieval_objects()
+        
+        # 获取查询嵌入
+        self.get_query_embeddings(queries)
+        
+        results = []
+        
+        for q_idx, query in enumerate(queries):
+            if verbose:
+                print(f"\n{'#'*70}")
+                print(f"# 查询 {q_idx + 1}/{len(queries)}: {query}")
+                print(f"{'#'*70}")
+            
+            query_result = self._retrieve_single_v2(
+                query=query,
+                fact_candidate_k=fact_candidate_k,
+                file_candidate_k=file_candidate_k,
+                chunk_candidate_k=chunk_candidate_k,
+                fact_top_k=fact_top_k,
+                file_top_k=file_top_k,
+                chunk_top_k=chunk_top_k,
+                spread_chunk_k=spread_chunk_k,
+                spread_code_k=spread_code_k,
+                spread_table_k=spread_table_k,
+                spread_image_k=spread_image_k,
+                final_chunk_k=final_chunk_k,
+                final_code_k=final_code_k,
+                final_table_k=final_table_k,
+                final_image_k=final_image_k,
+                verbose=verbose
+            )
+            
+            # ========== 阶段5: LLM报告生成 (可选) ==========
+            if generate_report:
+                report_result = self._generate_report(
+                    query=query,
+                    chunks_data=query_result['chunks'],
+                    codes_data=query_result['codes'],
+                    tables_data=query_result['tables'],
+                    images_data=query_result['images'],
+                    verbose=verbose
+                )
+                query_result['report'] = report_result
+                query_result['timing']['stage5_report'] = report_result.get('timing', 0)
+                query_result['timing']['total'] += report_result.get('timing', 0)
+            
+            results.append(query_result)
+        
+        total_time = time.time() - retrieve_start
+        if verbose:
+            print(f"\n{'='*70}")
+            print(f"📈 检索总体统计")
+            print(f"{'='*70}")
+            print(f"  查询数量: {len(queries)}")
+            print(f"  总耗时: {total_time:.2f}s")
+            print(f"  平均每查询: {total_time/len(queries):.2f}s")
+            if generate_report:
+                print(f"  包含LLM报告生成: 是")
+        
+        return results
+    
+    def _retrieve_single_v2(
+        self,
+        query: str,
+        fact_candidate_k: int,
+        file_candidate_k: int,
+        chunk_candidate_k: int,
+        fact_top_k: int,
+        file_top_k: int,
+        chunk_top_k: int,
+        spread_chunk_k: int,
+        spread_code_k: int,
+        spread_table_k: int,
+        spread_image_k: int,
+        final_chunk_k: int,
+        final_code_k: int,
+        final_table_k: int,
+        final_image_k: int,
+        verbose: bool
+    ) -> Dict:
+        """单个查询的v2检索实现"""
+        
+        # ========== 阶段1: Embedding候选获取 ==========
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🔍 阶段1: Embedding候选获取")
+            print(f"{'='*60}")
+        
+        stage1_start = time.time()
+        
+        # 1.1 Fact检索
+        query_fact_scores = self.get_fact_scores(query)
+        if len(query_fact_scores) > 0:
+            fact_top_indices = np.argsort(query_fact_scores)[-fact_candidate_k:][::-1]
+            fact_candidate_ids = [self.fact_node_keys[i] for i in fact_top_indices]
+            fact_candidate_scores = query_fact_scores[fact_top_indices]
+        else:
+            fact_candidate_ids = []
+            fact_candidate_scores = np.array([])
+        
+        # 1.2 File检索
+        if hasattr(self, 'file_node_keys') and len(self.file_node_keys) > 0:
+            query_file_scores, file_keys = self.get_file_scores(query)
+            if len(query_file_scores) > 0:
+                file_top_indices = np.argsort(query_file_scores)[-file_candidate_k:][::-1]
+                file_candidate_ids = [file_keys[i] for i in file_top_indices]
+                file_candidate_scores = query_file_scores[file_top_indices]
+            else:
+                file_candidate_ids = []
+                file_candidate_scores = np.array([])
+        else:
+            file_candidate_ids = []
+            file_candidate_scores = np.array([])
+        
+        # 1.3 Chunk检索
+        query_chunk_scores = self.get_passage_scores(query)
+        if len(query_chunk_scores) > 0:
+            chunk_top_indices = np.argsort(query_chunk_scores)[-chunk_candidate_k:][::-1]
+            chunk_candidate_ids = [self.passage_node_keys[i] for i in chunk_top_indices]
+            chunk_candidate_scores = query_chunk_scores[chunk_top_indices]
+        else:
+            chunk_candidate_ids = []
+            chunk_candidate_scores = np.array([])
+        
+        stage1_time = time.time() - stage1_start
+        
+        if verbose:
+            print(f"\n  📊 阶段1统计: 耗时 {stage1_time:.3f}s")
+            
+            # Fact候选详情
+            print(f"\n  📋 Fact候选: {len(fact_candidate_ids)}个 (top-{fact_candidate_k})")
+            print(f"  {'-'*60}")
+            for i, (fid, score) in enumerate(zip(fact_candidate_ids[:10], fact_candidate_scores[:10] if len(fact_candidate_scores) > 0 else [])):
+                try:
+                    fact_row = self.fact_embedding_store.get_row(fid)
+                    fact_content = fact_row.get('content', fact_row.get('summary', ''))
+                    print(f"    [{i+1}] score={score:.4f}")
+                    print(f"        ID: {fid}")
+                    print(f"        内容: {fact_content}")
+                except Exception as e:
+                    print(f"    [{i+1}] score={score:.4f} | ID: {fid} | (获取失败: {e})")
+            if len(fact_candidate_ids) > 10:
+                print(f"    ... 还有 {len(fact_candidate_ids) - 10} 个")
+            
+            # File候选详情
+            print(f"\n  📂 File候选: {len(file_candidate_ids)}个 (top-{file_candidate_k})")
+            print(f"  {'-'*60}")
+            for i, (fid, score) in enumerate(zip(file_candidate_ids[:5], file_candidate_scores[:5] if len(file_candidate_scores) > 0 else [])):
+                try:
+                    file_row = self.file_embedding_store.get_row(fid)
+                    file_path = file_row.get('file_path', '')
+                    summary = file_row.get('summary', file_row.get('content', ''))
+                    print(f"    [{i+1}] score={score:.4f}")
+                    print(f"        ID: {fid}")
+                    print(f"        路径: {file_path}")
+                    print(f"        摘要: {summary[:500]}{'...' if len(summary) > 500 else ''}")
+                except Exception as e:
+                    print(f"    [{i+1}] score={score:.4f} | ID: {fid} | (获取失败: {e})")
+            if len(file_candidate_ids) > 5:
+                print(f"    ... 还有 {len(file_candidate_ids) - 5} 个")
+            
+            # Chunk候选详情
+            print(f"\n  📄 Chunk候选: {len(chunk_candidate_ids)}个 (top-{chunk_candidate_k})")
+            print(f"  {'-'*60}")
+            for i, (cid, score) in enumerate(zip(chunk_candidate_ids[:5], chunk_candidate_scores[:5] if len(chunk_candidate_scores) > 0 else [])):
+                try:
+                    chunk_row = self.chunk_embedding_store.get_row(cid)
+                    summary = chunk_row.get('summary', '')
+                    content = chunk_row.get('content', '')
+                    print(f"    [{i+1}] score={score:.4f}")
+                    print(f"        ID: {cid}")
+                    print(f"        摘要: {summary[:300]}{'...' if len(summary) > 300 else ''}")
+                    print(f"        内容预览: {content[:200].replace(chr(10), ' ')}{'...' if len(content) > 200 else ''}")
+                except Exception as e:
+                    print(f"    [{i+1}] score={score:.4f} | ID: {cid} | (获取失败: {e})")
+            if len(chunk_candidate_ids) > 5:
+                print(f"    ... 还有 {len(chunk_candidate_ids) - 5} 个")
+        
+        # ========== 阶段2: LLM Rerank ==========
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🔍 阶段2: LLM Rerank")
+            print(f"{'='*60}")
+        
+        stage2_start = time.time()
+        
+        # 2.1 Fact重排序
+        top_k_fact_indices, top_k_facts, _ = self.rerank_facts(query, query_fact_scores)
+        top_k_facts = top_k_facts[:fact_top_k]
+        top_k_fact_ids = [self.fact_node_keys[i] for i in top_k_fact_indices[:fact_top_k]]
+        
+        if verbose:
+            print(f"\n  📋 LLM重排序后的Fact ({len(top_k_facts)}个，目标保留{fact_top_k}个):")
+            print(f"  {'-'*60}")
+            for i, (fact, fact_id) in enumerate(zip(top_k_facts, top_k_fact_ids)):
+                print(f"    [{i+1}] ID: {fact_id}")
+                print(f"        三元组: {fact}")
+                # 获取源chunk
+                source_chunk = self.fact_to_chunk_id.get(fact_id, '未知')
+                print(f"        来源Chunk: {source_chunk}")
+            if len(top_k_facts) == 0:
+                print(f"    (无)")
+        
+        # 2.2 File重排序
+        if len(file_candidate_ids) > 0:
+            _, top_files, _ = self.rerank_files(query, np.array(file_candidate_scores), file_candidate_ids)
+            top_files = top_files[:file_top_k]
+        else:
+            top_files = []
+        
+        if verbose:
+            print(f"\n  📂 LLM重排序后的File ({len(top_files)}个，目标保留{file_top_k}个):")
+            print(f"  {'-'*60}")
+            for i, f in enumerate(top_files):
+                print(f"    [{i+1}] Key: {f.get('key', '')}")
+                print(f"        路径: {f.get('file_path', '')}")
+                print(f"        分数: {f.get('score', 0):.4f}")
+                summary = f.get('summary', '')
+                print(f"        摘要: {summary[:400]}{'...' if len(summary) > 400 else ''}")
+            if len(top_files) == 0:
+                print(f"    (无)")
+        
+        # 2.3 Chunk重排序
+        if len(chunk_candidate_ids) > 0:
+            # 获取候选chunk的内容
+            chunk_contents = []
+            for chunk_id in chunk_candidate_ids[:chunk_candidate_k]:
+                try:
+                    row = self.chunk_embedding_store.get_row(chunk_id)
+                    content = row.get('content', row.get('summary', ''))
+                    chunk_contents.append(content)
+                except:
+                    chunk_contents.append('')
+            
+            # LLM重排序
+            top_chunk_indices, top_chunk_contents, _ = self._rerank_contents(
+                query, chunk_contents, chunk_candidate_ids[:chunk_candidate_k],
+                content_type='chunk', len_after_rerank=chunk_top_k
+            )
+            top_chunk_ids = [chunk_candidate_ids[i] for i in top_chunk_indices]
+        else:
+            top_chunk_ids = []
+            top_chunk_contents = []
+        
+        if verbose:
+            print(f"\n  📄 LLM重排序后的Chunk ({len(top_chunk_ids)}个，目标保留{chunk_top_k}个):")
+            print(f"  {'-'*60}")
+            for i, (chunk_id, content) in enumerate(zip(top_chunk_ids, top_chunk_contents)):
+                print(f"    [{i+1}] ID: {chunk_id}")
+                print(f"        长度: {len(content)}字符")
+                # 显示摘要和内容预览
+                content_preview = content[:300].replace('\n', ' ')
+                print(f"        内容预览: {content_preview}{'...' if len(content) > 300 else ''}")
+            if len(top_chunk_ids) == 0:
+                print(f"    (无)")
+        
+        stage2_time = time.time() - stage2_start
+        if verbose:
+            print(f"\n  📊 阶段2统计: 耗时 {stage2_time:.3f}s")
+            print(f"      Fact重排: {len(top_k_facts)}个")
+            print(f"      File重排: {len(top_files)}个")
+            print(f"      Chunk重排: {len(top_chunk_ids)}个")
+        
+        # ========== 阶段3: 图扩散 ==========
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🔍 阶段3: 图扩散")
+            print(f"{'='*60}")
+        
+        stage3_start = time.time()
+        
+        # 3.1 必选Chunk（Fact来源 + 阶段2高质量Chunk）
+        must_have_chunks = set()
+        
+        # 从Fact获取源Chunk
+        for fact_id in top_k_fact_ids:
+            source_chunk = self.fact_to_chunk_id.get(fact_id)
+            if source_chunk:
+                must_have_chunks.add(source_chunk)
+        
+        # 添加阶段2的高质量Chunk
+        must_have_chunks.update(top_chunk_ids)
+        
+        if verbose:
+            print(f"\n  📌 必选Chunk: {len(must_have_chunks)}个")
+            print(f"  {'-'*60}")
+            fact_source_count = len([fid for fid in top_k_fact_ids if self.fact_to_chunk_id.get(fid)])
+            print(f"      - Fact来源: {fact_source_count}个")
+            print(f"      - 阶段2高质量: {len(top_chunk_ids)}个")
+            print(f"\n      必选Chunk列表:")
+            for i, chunk_id in enumerate(list(must_have_chunks)[:10]):
+                try:
+                    row = self.chunk_embedding_store.get_row(chunk_id)
+                    summary = row.get('summary', row.get('content', ''))[:200]
+                    print(f"        [{i+1}] {chunk_id}")
+                    print(f"            摘要: {summary}...")
+                except:
+                    print(f"        [{i+1}] {chunk_id}")
+            if len(must_have_chunks) > 10:
+                print(f"        ... 还有 {len(must_have_chunks) - 10} 个")
+        
+        # 3.2 构建种子节点
+        seed_entities = []
+        for fact_id in top_k_fact_ids:
+            entity_tuple = self.fact_to_entities.get(fact_id)
+            if entity_tuple:
+                subject_id, object_id = entity_tuple
+                if subject_id:
+                    seed_entities.append((subject_id, 0.8))
+                if object_id:
+                    seed_entities.append((object_id, 0.8))
+        
+        # 去重
+        seed_entities = list(set(seed_entities))
+        
+        seed_files = [(f.get('key'), 0.9) for f in top_files if f.get('key')]
+        
+        if verbose:
+            print(f"\n  🌱 种子节点:")
+            print(f"  {'-'*60}")
+            print(f"      Entity种子: {len(seed_entities)}个 (权重0.8)")
+            for i, (ent_id, weight) in enumerate(seed_entities[:10]):
+                try:
+                    ent_row = self.entity_embedding_store.get_row(ent_id)
+                    ent_name = ent_row.get('content', ent_row.get('summary', ent_id))
+                    print(f"        [{i+1}] {ent_name} (ID: {ent_id})")
+                except:
+                    print(f"        [{i+1}] {ent_id}")
+            if len(seed_entities) > 10:
+                print(f"        ... 还有 {len(seed_entities) - 10} 个")
+            
+            print(f"\n      File种子: {len(seed_files)}个 (权重0.9)")
+            for i, (file_key, weight) in enumerate(seed_files):
+                try:
+                    file_row = self.file_embedding_store.get_row(file_key)
+                    file_path = file_row.get('file_path', file_key)
+                    print(f"        [{i+1}] {file_path}")
+                except:
+                    print(f"        [{i+1}] {file_key}")
+        
+        # 3.3 图扩散
+        query_embedding = self.query_to_embedding['passage'].get(query)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query)
+        query_embedding = np.array(query_embedding)
+        
+        spread_candidates = self.graph_spread_with_similarity(
+            query=query,
+            query_embedding=query_embedding,
+            must_have_chunks=must_have_chunks,
+            seed_entities=seed_entities,
+            seed_files=seed_files,
+            max_cost=1.0,
+            max_chunk_candidates=spread_chunk_k,
+            max_code_candidates=spread_code_k,
+            max_table_candidates=spread_table_k,
+            max_image_candidates=spread_image_k,
+            verbose=verbose
+        )
+        
+        stage3_time = time.time() - stage3_start
+        if verbose:
+            print(f"\n  📊 阶段3统计: 耗时 {stage3_time:.3f}s")
+            print(f"  {'='*80}")
+            print(f"      图扩散结果汇总:")
+            print(f"        - Chunk扩散: {len(spread_candidates.get('chunk', []))}个 (上限{spread_chunk_k})")
+            print(f"        - Code扩散: {len(spread_candidates.get('code', []))}个 (上限{spread_code_k})")
+            print(f"        - Table扩散: {len(spread_candidates.get('table', []))}个 (上限{spread_table_k})")
+            print(f"        - Image扩散: {len(spread_candidates.get('image', []))}个 (上限{spread_image_k})")
+            
+            # 详细展示所有扩散Chunk结果（含文件路径和面包屑）
+            print(f"\n      扩散Chunk详情 (共{len(spread_candidates.get('chunk', []))}个):")
+            print(f"      {'-'*70}")
+            for i, (cid, score) in enumerate(spread_candidates.get('chunk', [])):
+                try:
+                    row = self.chunk_embedding_store.get_row(cid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')[:200]
+                    content = row.get('content', '')[:300]
+                    breadcrumb = self.get_node_breadcrumb(cid)
+                    print(f"        [{i+1}] 分数={score:.4f}")
+                    print(f"            ID: {cid}")
+                    print(f"            文件路径: {file_path}")
+                    print(f"            📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                    print(f"            摘要: {summary}...")
+                    print(f"            内容预览: {content.replace(chr(10), ' ')[:200]}...")
+                except:
+                    print(f"        [{i+1}] 分数={score:.4f} | ID: {cid} | (获取详情失败)")
+            
+            # 详细展示所有扩散Code结果（含文件路径和面包屑）
+            print(f"\n      扩散Code详情 (共{len(spread_candidates.get('code', []))}个):")
+            print(f"      {'-'*70}")
+            for i, (cid, score) in enumerate(spread_candidates.get('code', [])):
+                try:
+                    row = self.code_embedding_store.get_row(cid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')[:200]
+                    content = row.get('content', '')[:300]
+                    breadcrumb = self.get_node_breadcrumb(cid)
+                    print(f"        [{i+1}] 分数={score:.4f}")
+                    print(f"            ID: {cid}")
+                    print(f"            文件路径: {file_path}")
+                    print(f"            📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                    print(f"            摘要: {summary}...")
+                    print(f"            代码预览: {content.replace(chr(10), ' ')[:200]}...")
+                except:
+                    print(f"        [{i+1}] 分数={score:.4f} | ID: {cid} | (获取详情失败)")
+            
+            # 详细展示所有扩散Table结果（含文件路径和面包屑）
+            print(f"\n      扩散Table详情 (共{len(spread_candidates.get('table', []))}个):")
+            print(f"      {'-'*70}")
+            for i, (tid, score) in enumerate(spread_candidates.get('table', [])):
+                try:
+                    row = self.table_embedding_store.get_row(tid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')[:200]
+                    content = row.get('content', '')[:300]
+                    breadcrumb = self.get_node_breadcrumb(tid)
+                    print(f"        [{i+1}] 分数={score:.4f}")
+                    print(f"            ID: {tid}")
+                    print(f"            文件路径: {file_path}")
+                    print(f"            📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                    print(f"            摘要: {summary}...")
+                    print(f"            表格预览: {content.replace(chr(10), ' ')[:200]}...")
+                except:
+                    print(f"        [{i+1}] 分数={score:.4f} | ID: {tid} | (获取详情失败)")
+            
+            # 详细展示所有扩散Image结果（含文件路径和面包屑）
+            print(f"\n      扩散Image详情 (共{len(spread_candidates.get('image', []))}个):")
+            print(f"      {'-'*70}")
+            for i, (iid, score) in enumerate(spread_candidates.get('image', [])):
+                try:
+                    row = self.image_embedding_store.get_row(iid)
+                    file_path = row.get('file_path', '')  # gitee_url
+                    absolute_path = row.get('content', '')  # 本地绝对路径
+                    caption = row.get('summary', '')
+                    breadcrumb = self.get_node_breadcrumb(iid)
+                    # 获取来源信息
+                    meta_info = self.node_id_to_metadata.get(iid, {})
+                    md_file_path = meta_info.get('md_file_path', '')
+                    parent_chunk_id = meta_info.get('parent_chunk_id', '')
+                    print(f"        [{i+1}] 分数={score:.4f}")
+                    print(f"            ID: {iid}")
+                    print(f"            图片Gitee URL: {file_path}")
+                    print(f"            图片本地路径: {absolute_path}")
+                    print(f"            📄 来源MD文件: {md_file_path}")
+                    print(f"            📦 来源Chunk ID: {parent_chunk_id}")
+                    print(f"            📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                    print(f"            Caption: {caption}")
+                except:
+                    print(f"        [{i+1}] 分数={score:.4f} | ID: {iid} | (获取详情失败)")
+        
+        # ========== 阶段4: 最终LLM Rerank ==========
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"🔍 阶段4: 最终LLM Rerank")
+            print(f"{'='*60}")
+        
+        stage4_start = time.time()
+        
+        # 4.1 合并Chunk候选
+        all_chunk_ids = list(must_have_chunks) + [c[0] for c in spread_candidates['chunk']]
+        all_chunk_ids = list(dict.fromkeys(all_chunk_ids))  # 去重保持顺序
+        
+        if verbose:
+            print(f"\n  📄 Chunk候选汇总: {len(all_chunk_ids)}个 (去重后)")
+            print(f"      - 必选: {len(must_have_chunks)}个")
+            print(f"      - 扩散: {len(spread_candidates['chunk'])}个")
+            print(f"\n      待重排Chunk ID列表:")
+            for i, cid in enumerate(all_chunk_ids[:8]):
+                print(f"        [{i+1}] {cid}")
+            if len(all_chunk_ids) > 8:
+                print(f"        ... 还有 {len(all_chunk_ids) - 8} 个")
+        
+        # Chunk重排序
+        if len(all_chunk_ids) > 0:
+            chunk_contents = []
+            for chunk_id in all_chunk_ids:
+                try:
+                    row = self.chunk_embedding_store.get_row(chunk_id)
+                    content = row.get('content', row.get('summary', ''))
+                    chunk_contents.append(content)
+                except:
+                    chunk_contents.append('')
+            
+            final_chunk_indices, final_chunk_contents, _ = self._rerank_contents(
+                query, chunk_contents, all_chunk_ids,
+                content_type='chunk', len_after_rerank=final_chunk_k
+            )
+            final_chunk_ids = [all_chunk_ids[i] for i in final_chunk_indices]
+        else:
+            final_chunk_ids = []
+            final_chunk_contents = []
+        
+        # 4.2 Code重排序
+        all_code_ids = [c[0] for c in spread_candidates['code']]
+        if len(all_code_ids) > 0:
+            code_contents = []
+            for code_id in all_code_ids:
+                try:
+                    row = self.code_embedding_store.get_row(code_id)
+                    content = row.get('content', row.get('summary', ''))
+                    code_contents.append(content)
+                except:
+                    code_contents.append('')
+            
+            final_code_indices, final_code_contents, _ = self._rerank_contents(
+                query, code_contents, all_code_ids,
+                content_type='code', len_after_rerank=final_code_k
+            )
+            final_code_ids = [all_code_ids[i] for i in final_code_indices]
+        else:
+            final_code_ids = []
+            final_code_contents = []
+        
+        # 4.3 Table重排序
+        all_table_ids = [t[0] for t in spread_candidates['table']]
+        if len(all_table_ids) > 0:
+            table_contents = []
+            for table_id in all_table_ids:
+                try:
+                    row = self.table_embedding_store.get_row(table_id)
+                    content = row.get('content', row.get('summary', ''))
+                    table_contents.append(content)
+                except:
+                    table_contents.append('')
+            
+            final_table_indices, final_table_contents, _ = self._rerank_contents(
+                query, table_contents, all_table_ids,
+                content_type='table', len_after_rerank=final_table_k
+            )
+            final_table_ids = [all_table_ids[i] for i in final_table_indices]
+        else:
+            final_table_ids = []
+            final_table_contents = []
+        
+        # 4.4 Image重排序
+        all_image_ids = [img[0] for img in spread_candidates['image']]
+        if len(all_image_ids) > 0:
+            image_contents = []
+            for image_id in all_image_ids:
+                try:
+                    row = self.image_embedding_store.get_row(image_id)
+                    content = row.get('summary', row.get('content', ''))  # image用summary
+                    image_contents.append(content)
+                except:
+                    image_contents.append('')
+            
+            final_image_indices, final_image_contents, _ = self._rerank_contents(
+                query, image_contents, all_image_ids,
+                content_type='image', len_after_rerank=final_image_k
+            )
+            final_image_ids = [all_image_ids[i] for i in final_image_indices]
+        else:
+            final_image_ids = []
+            final_image_contents = []
+        
+        stage4_time = time.time() - stage4_start
+        
+        if verbose:
+            print(f"\n  📊 阶段4统计: 耗时 {stage4_time:.3f}s")
+            
+            # Chunk最终结果详情（含文件路径和面包屑）
+            print(f"\n  📄 最终Chunk结果 ({len(final_chunk_ids)}个):")
+            print(f"  {'='*80}")
+            for i, (cid, content) in enumerate(zip(final_chunk_ids, final_chunk_contents)):
+                # 获取文件路径
+                try:
+                    row = self.chunk_embedding_store.get_row(cid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')
+                except:
+                    file_path = '(未找到)'
+                    summary = ''
+                
+                # 获取面包屑导航
+                breadcrumb = self.get_node_breadcrumb(cid)
+                
+                print(f"    [{i+1}] ====== Chunk ======")
+                print(f"        ID: {cid}")
+                print(f"        文件路径: {file_path}")
+                print(f"        📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                print(f"        摘要: {summary}")
+                print(f"        内容长度: {len(content)}字符")
+                print(f"        完整内容:")
+                print(f"        {'-'*70}")
+                # 显示完整内容（用于日志调试）
+                content_lines = content.split('\n')
+                for line in content_lines:
+                    print(f"        | {line}")
+                print(f"        {'-'*70}")
+                print()
+            
+            # Code最终结果详情（含文件路径和面包屑）
+            print(f"\n  💻 最终Code结果 ({len(final_code_ids)}个):")
+            print(f"  {'='*80}")
+            for i, (cid, content) in enumerate(zip(final_code_ids, final_code_contents)):
+                # 获取文件路径
+                try:
+                    row = self.code_embedding_store.get_row(cid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')
+                except:
+                    file_path = '(未找到)'
+                    summary = ''
+                
+                # 获取面包屑导航
+                breadcrumb = self.get_node_breadcrumb(cid)
+                
+                print(f"    [{i+1}] ====== Code ======")
+                print(f"        ID: {cid}")
+                print(f"        文件路径: {file_path}")
+                print(f"        📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                print(f"        摘要: {summary}")
+                print(f"        内容长度: {len(content)}字符")
+                print(f"        完整代码:")
+                print(f"        {'-'*70}")
+                content_lines = content.split('\n')
+                for line in content_lines:
+                    print(f"        | {line}")
+                print(f"        {'-'*70}")
+                print()
+            
+            # Table最终结果详情（含文件路径和面包屑）
+            print(f"\n  📊 最终Table结果 ({len(final_table_ids)}个):")
+            print(f"  {'='*80}")
+            for i, (tid, content) in enumerate(zip(final_table_ids, final_table_contents)):
+                # 获取文件路径
+                try:
+                    row = self.table_embedding_store.get_row(tid)
+                    file_path = row.get('file_path', '')
+                    summary = row.get('summary', '')
+                except:
+                    file_path = '(未找到)'
+                    summary = ''
+                
+                # 获取面包屑导航
+                breadcrumb = self.get_node_breadcrumb(tid)
+                
+                print(f"    [{i+1}] ====== Table ======")
+                print(f"        ID: {tid}")
+                print(f"        文件路径: {file_path}")
+                print(f"        📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                print(f"        摘要: {summary}")
+                print(f"        内容长度: {len(content)}字符")
+                print(f"        完整表格:")
+                print(f"        {'-'*70}")
+                content_lines = content.split('\n')
+                for line in content_lines:
+                    print(f"        | {line}")
+                print(f"        {'-'*70}")
+                print()
+            
+            # Image最终结果详情（含文件路径、面包屑和来源信息）
+            print(f"\n  🖼️ 最终Image结果 ({len(final_image_ids)}个):")
+            print(f"  {'='*80}")
+            for i, (iid, content) in enumerate(zip(final_image_ids, final_image_contents)):
+                # 获取文件路径
+                try:
+                    row = self.image_embedding_store.get_row(iid)
+                    file_path = row.get('file_path', '')  # gitee_url
+                    absolute_path = row.get('content', '')  # 本地绝对路径
+                except:
+                    file_path = '(未找到)'
+                    absolute_path = ''
+                
+                # 获取面包屑导航和来源信息
+                breadcrumb = self.get_node_breadcrumb(iid)
+                meta_info = self.node_id_to_metadata.get(iid, {})
+                md_file_path = meta_info.get('md_file_path', '')
+                parent_chunk_id = meta_info.get('parent_chunk_id', '')
+                gitee_md_url = meta_info.get('file_path', '')  # md文件的gitee url
+                
+                print(f"    [{i+1}] ====== Image ======")
+                print(f"        ID: {iid}")
+                print(f"        图片Gitee URL: {file_path}")
+                print(f"        图片本地路径: {absolute_path}")
+                print(f"        📄 来源MD文件: {md_file_path}")
+                print(f"        📄 MD文件Gitee URL: {gitee_md_url}")
+                print(f"        📦 来源Chunk ID: {parent_chunk_id}")
+                print(f"        📍 定位: {breadcrumb if breadcrumb else '(无层级信息)'}")
+                print(f"        Caption/摘要: {content}")
+                print()
+            
+            # 总耗时汇总
+            total_time = stage1_time + stage2_time + stage3_time + stage4_time
+            print(f"\n  {'='*60}")
+            print(f"  ⏱️ 本查询耗时汇总:")
+            print(f"      阶段1 (Embedding候选): {stage1_time:.3f}s")
+            print(f"      阶段2 (LLM Rerank): {stage2_time:.3f}s")
+            print(f"      阶段3 (图扩散): {stage3_time:.3f}s")
+            print(f"      阶段4 (最终Rerank): {stage4_time:.3f}s")
+            print(f"      总计: {total_time:.3f}s")
+        
+        # 构建返回结果（不含报告，报告在retrieve_v2中统一生成）
+        return {
+            'query': query,
+            'chunks': {
+                'ids': final_chunk_ids,
+                'contents': final_chunk_contents,
+                'metadata': self._get_chunks_metadata(final_chunk_ids)
+            },
+            'codes': {
+                'ids': final_code_ids,
+                'contents': final_code_contents,
+                'metadata': self._get_codes_metadata(final_code_ids)
+            },
+            'tables': {
+                'ids': final_table_ids,
+                'contents': final_table_contents,
+                'metadata': self._get_tables_metadata(final_table_ids)
+            },
+            'images': {
+                'ids': final_image_ids,
+                'contents': final_image_contents,
+                'metadata': self._get_images_metadata(final_image_ids)
+            },
+            'timing': {
+                'stage1_embedding': stage1_time,
+                'stage2_rerank': stage2_time,
+                'stage3_spread': stage3_time,
+                'stage4_final_rerank': stage4_time,
+                'total': stage1_time + stage2_time + stage3_time + stage4_time
+            }
+        }
+    
+    def _get_chunks_metadata(self, chunk_ids: List[str]) -> List[Dict]:
+        """获取chunks的元数据"""
+        metadata_list = []
+        for cid in chunk_ids:
+            try:
+                row = self.chunk_embedding_store.get_row(cid)
+                breadcrumb = self.get_node_breadcrumb(cid)
+                metadata_list.append({
+                    'id': cid,
+                    'file_path': row.get('file_path', ''),
+                    'summary': row.get('summary', ''),
+                    'breadcrumb': breadcrumb or ''
+                })
+            except:
+                metadata_list.append({'id': cid, 'file_path': '', 'summary': '', 'breadcrumb': ''})
+        return metadata_list
+    
+    def _get_codes_metadata(self, code_ids: List[str]) -> List[Dict]:
+        """获取codes的元数据"""
+        metadata_list = []
+        for cid in code_ids:
+            try:
+                row = self.code_embedding_store.get_row(cid)
+                breadcrumb = self.get_node_breadcrumb(cid)
+                metadata_list.append({
+                    'id': cid,
+                    'file_path': row.get('file_path', ''),
+                    'summary': row.get('summary', ''),
+                    'breadcrumb': breadcrumb or ''
+                })
+            except:
+                metadata_list.append({'id': cid, 'file_path': '', 'summary': '', 'breadcrumb': ''})
+        return metadata_list
+    
+    def _get_tables_metadata(self, table_ids: List[str]) -> List[Dict]:
+        """获取tables的元数据"""
+        metadata_list = []
+        for tid in table_ids:
+            try:
+                row = self.table_embedding_store.get_row(tid)
+                breadcrumb = self.get_node_breadcrumb(tid)
+                metadata_list.append({
+                    'id': tid,
+                    'file_path': row.get('file_path', ''),
+                    'summary': row.get('summary', ''),
+                    'breadcrumb': breadcrumb or ''
+                })
+            except:
+                metadata_list.append({'id': tid, 'file_path': '', 'summary': '', 'breadcrumb': ''})
+        return metadata_list
+    
+    def _get_images_metadata(self, image_ids: List[str]) -> List[Dict]:
+        """获取images的元数据，包括图片尺寸信息"""
+        metadata_list = []
+        for iid in image_ids:
+            try:
+                row = self.image_embedding_store.get_row(iid)
+                meta_info = self.node_id_to_metadata.get(iid, {})
+                breadcrumb = self.get_node_breadcrumb(iid)
+                local_path = row.get('content', '')  # 本地绝对路径
+                
+                # 获取图片尺寸信息
+                image_size = self._get_image_size(local_path)
+                
+                metadata_list.append({
+                    'id': iid,
+                    'gitee_url': row.get('file_path', ''),  # 图片的gitee URL
+                    'local_path': local_path,
+                    'caption': row.get('summary', ''),       # 图片caption
+                    'md_file_path': meta_info.get('md_file_path', ''),
+                    'parent_chunk_id': meta_info.get('parent_chunk_id', ''),
+                    'breadcrumb': breadcrumb or '',
+                    'width': image_size.get('width'),
+                    'height': image_size.get('height'),
+                    'format': image_size.get('format', ''),
+                    'file_size_kb': image_size.get('file_size_kb')
+                })
+            except:
+                metadata_list.append({
+                    'id': iid, 'gitee_url': '', 'local_path': '', 
+                    'caption': '', 'md_file_path': '', 'parent_chunk_id': '', 'breadcrumb': '',
+                    'width': None, 'height': None, 'format': '', 'file_size_kb': None
+                })
+        return metadata_list
+    
+    def _get_image_size(self, image_path: str) -> Dict:
+        """
+        获取图片的尺寸信息
+        
+        Args:
+            image_path: 图片的本地路径
+            
+        Returns:
+            Dict: 包含width, height, format, file_size_kb的字典
+        """
+        result = {'width': None, 'height': None, 'format': '', 'file_size_kb': None}
+        
+        if not image_path or not os.path.exists(image_path):
+            return result
+        
+        try:
+            # 获取文件大小
+            file_size = os.path.getsize(image_path)
+            result['file_size_kb'] = round(file_size / 1024, 2)
+            
+            # 尝试使用PIL获取图片尺寸
+            try:
+                from PIL import Image
+                with Image.open(image_path) as img:
+                    result['width'] = img.width
+                    result['height'] = img.height
+                    result['format'] = img.format or ''
+            except ImportError:
+                # PIL未安装，尝试使用其他方法
+                # 对于常见格式，读取文件头获取尺寸
+                result.update(self._get_image_size_from_header(image_path))
+            except Exception as e:
+                logger.debug(f"无法使用PIL读取图片 {image_path}: {e}")
+                result.update(self._get_image_size_from_header(image_path))
+                
+        except Exception as e:
+            logger.debug(f"获取图片信息失败 {image_path}: {e}")
+        
+        return result
+    
+    def _get_image_size_from_header(self, image_path: str) -> Dict:
+        """
+        从文件头读取图片尺寸（不依赖PIL）
+        支持 PNG, JPEG, GIF 格式
+        """
+        result = {'width': None, 'height': None, 'format': ''}
+        
+        try:
+            with open(image_path, 'rb') as f:
+                header = f.read(32)
+                
+                # PNG
+                if header[:8] == b'\x89PNG\r\n\x1a\n':
+                    result['format'] = 'PNG'
+                    if len(header) >= 24:
+                        result['width'] = int.from_bytes(header[16:20], 'big')
+                        result['height'] = int.from_bytes(header[20:24], 'big')
+                        
+                # JPEG
+                elif header[:2] == b'\xff\xd8':
+                    result['format'] = 'JPEG'
+                    f.seek(0)
+                    f.read(2)  # Skip SOI
+                    while True:
+                        marker = f.read(2)
+                        if len(marker) < 2:
+                            break
+                        if marker[0] != 0xff:
+                            break
+                        if marker[1] == 0xc0 or marker[1] == 0xc2:  # SOF0 or SOF2
+                            f.read(3)  # Skip length and precision
+                            height_bytes = f.read(2)
+                            width_bytes = f.read(2)
+                            if len(height_bytes) == 2 and len(width_bytes) == 2:
+                                result['height'] = int.from_bytes(height_bytes, 'big')
+                                result['width'] = int.from_bytes(width_bytes, 'big')
+                            break
+                        else:
+                            length_bytes = f.read(2)
+                            if len(length_bytes) < 2:
+                                break
+                            length = int.from_bytes(length_bytes, 'big')
+                            f.seek(length - 2, 1)
+                            
+                # GIF
+                elif header[:6] in (b'GIF87a', b'GIF89a'):
+                    result['format'] = 'GIF'
+                    result['width'] = int.from_bytes(header[6:8], 'little')
+                    result['height'] = int.from_bytes(header[8:10], 'little')
+                    
+                # WebP
+                elif header[:4] == b'RIFF' and header[8:12] == b'WEBP':
+                    result['format'] = 'WEBP'
+                    # WebP 格式解析较复杂，这里只标记格式
+                    
+        except Exception as e:
+            logger.debug(f"从文件头读取图片尺寸失败 {image_path}: {e}")
+        
+        return result
+
+    def _call_report_llm(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        verbose: bool = True
+    ) -> Tuple[str, Dict]:
+        """
+        调用专门的报告生成模型 qwen3-235b-a22b
+        
+        使用华为 ModelArts MaaS API v2 直接调用，而不是使用默认的 LLM 模型
+        
+        Args:
+            system_prompt: 系统提示
+            user_prompt: 用户提示
+            verbose: 是否输出详细信息
+            
+        Returns:
+            Tuple[str, Dict]: (响应内容, 元数据)
+        """
+        import requests
+        import json
+        import urllib3
+        
+        # 禁用 SSL 警告（因为使用 verify=False）
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        url = "https://api.modelarts-maas.com/v2/chat/completions"  # API v2
+        api_key = os.environ.get('OPENAI_API_KEY', '')
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
+        
+        data = {
+            "model": "Kimi-K2",  # 使用 DeepSeek-R1 模型生成报告
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+        
+        if verbose:
+            print(f"  🤖 使用报告专用模型: Kimi-K2")
+        
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data), verify=False, timeout=600)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            response_content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+            
+            metadata = {
+                'prompt_tokens': result.get('usage', {}).get('prompt_tokens', 0),
+                'completion_tokens': result.get('usage', {}).get('completion_tokens', 0),
+                'model': 'Kimi-K2'
+            }
+            
+            return response_content, metadata
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"报告生成模型调用失败: {e}")
+            raise RuntimeError(f"报告生成模型调用失败: {e}")
+
+    def _generate_report(
+        self,
+        query: str,
+        chunks_data: Dict,
+        codes_data: Dict,
+        tables_data: Dict,
+        images_data: Dict,
+        verbose: bool = True
+    ) -> Dict:
+        """
+        阶段5: 调用LLM整合所有检索信息，生成用于前端页面生成的prompt
+        
+        输出格式：直接可用于前端生成器的Markdown格式prompt，包含：
+        1. 用户问题和核心回答
+        2. 详细内容章节（带来源引用）
+        3. 相关图片（URL + 描述 + 来源）
+        4. 相关表格（完整内容 + 来源）
+        5. 相关代码（完整内容 + 来源）
+        
+        所有内容围绕用户问题筛选，无关内容会被LLM丢弃。
+        使用专门的 qwen3-235b-a22b 模型来生成高质量报告。
+        """
+        from .utils.llm_utils import TextChatMessage
+        import json
+        import re
+        
+        stage5_start = time.time()
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"📝 阶段5: LLM报告生成（前端Prompt格式）")
+            print(f"{'='*60}")
+        
+        # ========== 第一步：调用LLM筛选和整合内容 ==========
+        # 构建检索上下文
+        context_parts = []
+        
+        # Chunk内容
+        if chunks_data['ids']:
+            context_parts.append("=== 文档内容 ===")
+            for i, (cid, content, meta) in enumerate(zip(
+                chunks_data['ids'], chunks_data['contents'], chunks_data['metadata']
+            )):
+                context_parts.append(f"\n[DOC-{i+1}]")
+                context_parts.append(f"ID: {cid}")
+                context_parts.append(f"文件: {meta.get('file_path', '')}")
+                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
+                context_parts.append(f"内容:\n{content[:3000]}")
+        
+        # Code内容
+        if codes_data['ids']:
+            context_parts.append("\n\n=== 代码 ===")
+            for i, (cid, content, meta) in enumerate(zip(
+                codes_data['ids'], codes_data['contents'], codes_data['metadata']
+            )):
+                context_parts.append(f"\n[CODE-{i+1}]")
+                context_parts.append(f"ID: {cid}")
+                context_parts.append(f"文件: {meta.get('file_path', '')}")
+                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
+                context_parts.append(f"摘要: {meta.get('summary', '')}")
+                context_parts.append(f"代码:\n```\n{content}\n```")
+        
+        # Table内容  
+        if tables_data['ids']:
+            context_parts.append("\n\n=== 表格 ===")
+            for i, (tid, content, meta) in enumerate(zip(
+                tables_data['ids'], tables_data['contents'], tables_data['metadata']
+            )):
+                context_parts.append(f"\n[TABLE-{i+1}]")
+                context_parts.append(f"ID: {tid}")
+                context_parts.append(f"文件: {meta.get('file_path', '')}")
+                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
+                context_parts.append(f"摘要: {meta.get('summary', '')}")
+                context_parts.append(f"表格:\n{content}")
+        
+        # Image信息（含图片元信息）
+        if images_data['ids']:
+            context_parts.append("\n\n=== 图片 ===")
+            for i, (iid, content, meta) in enumerate(zip(
+                images_data['ids'], images_data['contents'], images_data['metadata']
+            )):
+                context_parts.append(f"\n[IMG-{i+1}]")
+                context_parts.append(f"ID: {iid}")
+                context_parts.append(f"URL: {meta.get('gitee_url', '')}")
+                context_parts.append(f"来源文件: {meta.get('md_file_path', '')}")
+                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
+                context_parts.append(f"描述: {meta.get('caption', content)}")
+                # 添加图片元信息
+                width = meta.get('width')
+                height = meta.get('height')
+                if width and height:
+                    context_parts.append(f"尺寸: {width}x{height}像素")
+                img_format = meta.get('format', '')
+                if img_format:
+                    context_parts.append(f"格式: {img_format}")
+                file_size_kb = meta.get('file_size_kb')
+                if file_size_kb:
+                    context_parts.append(f"文件大小: {file_size_kb}KB")
+        
+        context_text = "\n".join(context_parts)
+        
+        # 构建LLM Prompt - 要求输出用于前端生成的结构化内容
+        # 前端生成器的唯一信息来源，所以要尽量丰富
+        system_prompt = """你是技术文档分析助手。任务：筛选相关内容，生成详细丰富的JSON报告，这将作为前端页面生成器的**唯一信息来源**。
+
+输出JSON格式：
+{
+    "answer": {
+        "summary": "核心回答摘要（200-300字，全面概括问题的答案）",
+        "key_points": ["关键要点1", "关键要点2", "..."],
+        "sections": [
+            {
+                "title": "章节标题",
+                "content": "详细内容（500-800字，尽量详尽）",
+                "highlights": ["本章节要点1", "本章节要点2"],
+                "sources": [{"file": "文件路径", "location": "定位", "relevance": "说明该来源如何相关"}]
+            }
+        ]
+    },
+    "images": [
+        {
+            "url": "图片URL",
+            "caption": "图片说明（100字内，说明图片展示了什么）",
+            "context": "图片在文档中的上下文说明",
+            "relevance": "图片与问题的相关性说明",
+            "source_file": "来源文件",
+            "location": "定位路径",
+            "dimensions": "尺寸信息（如有）",
+            "suggested_display": "建议显示方式：full-width/inline/thumbnail"
+        }
+    ],
+    "tables": [
+        {
+            "title": "表格标题",
+            "description": "表格说明（描述表格包含什么数据）",
+            "content": "完整的Markdown表格",
+            "key_data": ["表格中的关键数据点1", "关键数据点2"],
+            "source_file": "来源文件",
+            "location": "定位路径"
+        }
+    ],
+    "codes": [
+        {
+            "title": "代码标题",
+            "language": "编程语言",
+            "content": "完整代码",
+            "explanation": "代码功能详细说明（100-200字）",
+            "usage_notes": "使用注意事项",
+            "related_apis": ["涉及的API1", "API2"],
+            "source_file": "来源文件",
+            "location": "定位路径"
+        }
+    ],
+    "related_concepts": ["相关概念1", "相关概念2"],
+    "further_reading": [{"title": "推荐阅读标题", "reason": "推荐理由"}]
+}
+
+规则：
+- 只输出JSON，无其他内容
+- 只保留与问题**相关**的内容，无关的设为空数组[]
+- 内容要**详尽丰富**，这是前端生成器的唯一信息来源
+- sections最多5个，每个content尽量详细（500-800字）
+- 代码content保持完整，不要截断
+- 表格保持原格式，并提取关键数据点
+- 为图片提供充分的上下文说明和显示建议
+- 提取相关概念和进一步阅读建议，帮助用户深入理解"""
+
+        user_prompt = f"""用户问题：{query}
+
+以下是检索到的内容，请筛选并整合与问题相关的信息：
+
+{context_text}
+
+请输出JSON格式的报告。注意：只保留与问题相关的内容。"""
+
+        if verbose:
+            print(f"  📤 上下文长度: {len(context_text)} 字符")
+            print(f"  📤 包含: {len(chunks_data['ids'])}个Chunk, {len(codes_data['ids'])}个Code, {len(tables_data['ids'])}个Table, {len(images_data['ids'])}个Image")
+        
+        try:
+            # 调用专门的报告生成模型 qwen3-235b-a22b
+            response, metadata = self._call_report_llm(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                verbose=verbose
+            )
+            
+            if verbose:
+                print(f"  📥 LLM响应长度: {len(response)} 字符")
+                print(f"  📊 Token: prompt={metadata.get('prompt_tokens', 0)}, completion={metadata.get('completion_tokens', 0)}")
+            
+            # 解析JSON
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = response.strip()
+            
+            # 尝试解析JSON，如果失败则尝试修复
+            try:
+                report_data = json.loads(json_str)
+            except json.JSONDecodeError as parse_error:
+                if verbose:
+                    print(f"  ⚠️ JSON解析失败，尝试修复: {parse_error}")
+                # 尝试修复截断的JSON
+                report_data = self._try_fix_truncated_json(json_str, verbose)
+                if report_data is None:
+                    raise parse_error
+            
+            # ========== 第二步：生成前端Prompt ==========
+            frontend_prompt = self._build_frontend_prompt(query, report_data)
+            
+            stage5_time = time.time() - stage5_start
+            
+            if verbose:
+                print(f"\n  ✅ 报告生成成功!")
+                print(f"  📋 摘要: {report_data.get('answer', {}).get('summary', '')[:150]}...")
+                print(f"  📄 内容章节: {len(report_data.get('answer', {}).get('sections', []))}个")
+                print(f"  🖼️ 相关图片: {len(report_data.get('images', []))}个")
+                print(f"  📊 相关表格: {len(report_data.get('tables', []))}个")
+                print(f"  💻 相关代码: {len(report_data.get('codes', []))}个")
+                print(f"  📝 前端Prompt长度: {len(frontend_prompt)} 字符")
+                print(f"  ⏱️ 阶段5耗时: {stage5_time:.3f}s")
+            
+            return {
+                'success': True,
+                'report': report_data,
+                'frontend_prompt': frontend_prompt,
+                'timing': stage5_time
+            }
+            
+        except json.JSONDecodeError as e:
+            if verbose:
+                print(f"  ❌ JSON解析失败: {e}")
+                print(f"  📄 原始响应: {response[:500]}...")
+            
+            # 即使JSON解析失败，也尝试生成一个基础的前端prompt
+            stage5_time = time.time() - stage5_start
+            fallback_prompt = self._build_fallback_frontend_prompt(query, chunks_data, codes_data, tables_data, images_data)
+            
+            return {
+                'success': False,
+                'error': f'JSON解析失败: {str(e)}',
+                'raw_response': response,
+                'frontend_prompt': fallback_prompt,  # 提供降级的prompt
+                'timing': stage5_time
+            }
+            
+        except Exception as e:
+            if verbose:
+                print(f"  ❌ 报告生成失败: {e}")
+            
+            stage5_time = time.time() - stage5_start
+            fallback_prompt = self._build_fallback_frontend_prompt(query, chunks_data, codes_data, tables_data, images_data)
+            
+            return {
+                'success': False,
+                'error': str(e),
+                'frontend_prompt': fallback_prompt,
+                'timing': stage5_time
+            }
+    
+    def _try_fix_truncated_json(self, json_str: str, verbose: bool = False) -> Optional[Dict]:
+        """
+        尝试修复被截断的JSON字符串
+        """
+        import json
+        
+        # 策略1: 尝试找到最后一个完整的对象/数组
+        # 从末尾向前查找可以闭合的位置
+        brackets = []
+        in_string = False
+        escape_next = False
+        last_valid_pos = 0
+        
+        for i, char in enumerate(json_str):
+            if escape_next:
+                escape_next = False
+                continue
+            if char == '\\':
+                escape_next = True
+                continue
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            
+            if char in '{[':
+                brackets.append((char, i))
+            elif char == '}' and brackets and brackets[-1][0] == '{':
+                brackets.pop()
+                last_valid_pos = i + 1
+            elif char == ']' and brackets and brackets[-1][0] == '[':
+                brackets.pop()
+                last_valid_pos = i + 1
+        
+        # 策略2: 尝试补全缺失的括号
+        if brackets:
+            # 先尝试闭合当前未闭合的字符串
+            fixed_str = json_str
+            if in_string:
+                fixed_str += '"'
+            
+            # 然后逆序闭合所有未闭合的括号
+            for bracket, _ in reversed(brackets):
+                if bracket == '{':
+                    fixed_str += '}'
+                elif bracket == '[':
+                    fixed_str += ']'
+            
+            try:
+                result = json.loads(fixed_str)
+                if verbose:
+                    print(f"  ✅ JSON修复成功（补全括号）")
+                return result
+            except:
+                pass
+        
+        # 策略3: 截取到最后一个完整位置
+        if last_valid_pos > 0:
+            try:
+                result = json.loads(json_str[:last_valid_pos])
+                if verbose:
+                    print(f"  ✅ JSON修复成功（截取完整部分）")
+                return result
+            except:
+                pass
+        
+        return None
+    
+    def _build_fallback_frontend_prompt(
+        self,
+        query: str,
+        chunks_data: Dict,
+        codes_data: Dict,
+        tables_data: Dict,
+        images_data: Dict
+    ) -> str:
+        """
+        当LLM整合失败时，生成降级版本的前端Prompt
+        直接使用原始检索内容，不经过LLM整合
+        """
+        lines = []
+        
+        lines.append("# 用户问题")
+        lines.append(query)
+        lines.append("")
+        
+        lines.append("# 检索到的相关内容")
+        lines.append("")
+        lines.append("> 注：以下内容为原始检索结果，未经LLM整合筛选")
+        lines.append("")
+        
+        # 添加Chunk内容
+        if chunks_data.get('ids'):
+            lines.append("## 相关文档")
+            lines.append("")
+            for i, (cid, content, meta) in enumerate(zip(
+                chunks_data['ids'][:5],  # 限制数量
+                chunks_data['contents'][:5],
+                chunks_data['metadata'][:5]
+            ), 1):
+                lines.append(f"### 文档 {i}")
+                lines.append("")
+                lines.append(content[:1500] + ('...' if len(content) > 1500 else ''))
+                lines.append("")
+                lines.append(f"**来源：** `{meta.get('file_path', '')}`")
+                if meta.get('breadcrumb'):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                lines.append("")
+        
+        # 添加图片（含尺寸信息）
+        if images_data.get('ids'):
+            lines.append("## 相关图片")
+            lines.append("")
+            for i, (iid, content, meta) in enumerate(zip(
+                images_data['ids'],
+                images_data['contents'],
+                images_data['metadata']
+            ), 1):
+                url = meta.get('gitee_url', '')
+                caption = meta.get('caption', content)
+                lines.append(f"### 图片 {i}")
+                lines.append(f"![{caption}]({url})")
+                lines.append("")
+                lines.append(f"**描述：** {caption}")
+                # 添加图片元信息
+                width = meta.get('width')
+                height = meta.get('height')
+                if width and height:
+                    lines.append(f"**尺寸：** {width}x{height}像素")
+                img_format = meta.get('format', '')
+                file_size_kb = meta.get('file_size_kb')
+                if img_format or file_size_kb:
+                    meta_parts = []
+                    if img_format:
+                        meta_parts.append(f"格式: {img_format}")
+                    if file_size_kb:
+                        meta_parts.append(f"大小: {file_size_kb}KB")
+                    lines.append(f"**文件信息：** {', '.join(meta_parts)}")
+                if meta.get('breadcrumb'):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                lines.append(f"**来源：** `{meta.get('md_file_path', '')}`")
+                lines.append("")
+        
+        # 添加表格
+        if tables_data.get('ids'):
+            lines.append("## 相关表格")
+            lines.append("")
+            for i, (tid, content, meta) in enumerate(zip(
+                tables_data['ids'],
+                tables_data['contents'],
+                tables_data['metadata']
+            ), 1):
+                lines.append(f"### 表格 {i}")
+                lines.append("")
+                lines.append(content)
+                lines.append("")
+                lines.append(f"**来源：** `{meta.get('file_path', '')}`")
+                lines.append("")
+        
+        # 添加代码
+        if codes_data.get('ids'):
+            lines.append("## 相关代码")
+            lines.append("")
+            for i, (cid, content, meta) in enumerate(zip(
+                codes_data['ids'],
+                codes_data['contents'],
+                codes_data['metadata']
+            ), 1):
+                lines.append(f"### 代码 {i}")
+                lines.append("")
+                if meta.get('summary'):
+                    lines.append(f"**说明：** {meta.get('summary')}")
+                    lines.append("")
+                lines.append("```")
+                lines.append(content)
+                lines.append("```")
+                lines.append("")
+                lines.append(f"**来源：** `{meta.get('file_path', '')}`")
+                lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _build_frontend_prompt(self, query: str, report_data: Dict) -> str:
+        """
+        将报告数据转换为前端生成器可用的Prompt格式
+        
+        输出一个清晰的Markdown格式文档，包含所有必要信息供前端LLM生成HTML页面
+        这是前端生成器的唯一信息来源，所以尽量详尽
+        """
+        lines = []
+        
+        # ===== 用户问题 =====
+        lines.append("# 用户问题")
+        lines.append(query)
+        lines.append("")
+        
+        # ===== 核心回答 =====
+        answer = report_data.get('answer', {})
+        if answer.get('summary'):
+            lines.append("# 核心回答")
+            lines.append(answer['summary'])
+            lines.append("")
+            
+            # 关键要点
+            key_points = answer.get('key_points', [])
+            if key_points:
+                lines.append("## 关键要点")
+                for kp in key_points:
+                    lines.append(f"- {kp}")
+                lines.append("")
+        
+        # ===== 详细内容 =====
+        sections = answer.get('sections', [])
+        if sections:
+            lines.append("# 详细内容")
+            lines.append("")
+            for i, section in enumerate(sections, 1):
+                lines.append(f"## {i}. {section.get('title', '内容')}")
+                lines.append("")
+                lines.append(section.get('content', ''))
+                lines.append("")
+                
+                # 章节要点
+                highlights = section.get('highlights', [])
+                if highlights:
+                    lines.append("**本节要点：**")
+                    for h in highlights:
+                        lines.append(f"- {h}")
+                    lines.append("")
+                
+                # 来源信息
+                sources = section.get('sources', [])
+                if sources:
+                    lines.append("**来源：**")
+                    for src in sources:
+                        lines.append(f"- 文件: `{src.get('file', '')}`")
+                        if src.get('location'):
+                            lines.append(f"  定位: {src.get('location')}")
+                        if src.get('relevance'):
+                            lines.append(f"  相关性: {src.get('relevance')}")
+                lines.append("")
+        
+        # ===== 相关图片 =====
+        images = report_data.get('images', [])
+        if images:
+            lines.append("# 相关图片")
+            lines.append("")
+            for i, img in enumerate(images, 1):
+                lines.append(f"## 图片 {i}")
+                lines.append(f"![{img.get('caption', '图片')}]({img.get('url', '')})")
+                lines.append("")
+                lines.append(f"**说明：** {img.get('caption', '')}")
+                lines.append("")
+                # 上下文信息
+                if img.get('context'):
+                    lines.append(f"**上下文：** {img.get('context')}")
+                    lines.append("")
+                # 相关性说明
+                if img.get('relevance'):
+                    lines.append(f"**与问题的相关性：** {img.get('relevance')}")
+                    lines.append("")
+                # 尺寸信息
+                if img.get('dimensions'):
+                    lines.append(f"**尺寸：** {img.get('dimensions')}")
+                # 显示建议
+                if img.get('suggested_display'):
+                    lines.append(f"**建议显示方式：** {img.get('suggested_display')}")
+                lines.append("")
+                lines.append(f"**来源文件：** `{img.get('source_file', '')}`")
+                if img.get('location'):
+                    lines.append(f"**定位：** {img.get('location')}")
+                lines.append("")
+        
+        # ===== 相关表格 =====
+        tables = report_data.get('tables', [])
+        if tables:
+            lines.append("# 相关表格")
+            lines.append("")
+            for i, table in enumerate(tables, 1):
+                lines.append(f"## 表格 {i}: {table.get('title', '数据表')}")
+                lines.append("")
+                # 表格描述
+                if table.get('description'):
+                    lines.append(f"**描述：** {table.get('description')}")
+                    lines.append("")
+                lines.append(table.get('content', ''))
+                lines.append("")
+                # 关键数据点
+                key_data = table.get('key_data', [])
+                if key_data:
+                    lines.append("**关键数据：**")
+                    for kd in key_data:
+                        lines.append(f"- {kd}")
+                    lines.append("")
+                lines.append(f"**来源文件：** `{table.get('source_file', '')}`")
+                if table.get('location'):
+                    lines.append(f"**定位：** {table.get('location')}")
+                lines.append("")
+        
+        # ===== 相关代码 =====
+        codes = report_data.get('codes', [])
+        if codes:
+            lines.append("# 相关代码")
+            lines.append("")
+            for i, code in enumerate(codes, 1):
+                lines.append(f"## 代码 {i}: {code.get('title', '示例代码')}")
+                lines.append("")
+                if code.get('explanation'):
+                    lines.append(f"**功能说明：** {code.get('explanation')}")
+                    lines.append("")
+                # 使用注意事项
+                if code.get('usage_notes'):
+                    lines.append(f"**使用注意：** {code.get('usage_notes')}")
+                    lines.append("")
+                # 涉及的API
+                related_apis = code.get('related_apis', [])
+                if related_apis:
+                    lines.append(f"**涉及API：** {', '.join(related_apis)}")
+                    lines.append("")
+                lang = code.get('language', '')
+                lines.append(f"```{lang}")
+                lines.append(code.get('content', ''))
+                lines.append("```")
+                lines.append("")
+                lines.append(f"**来源文件：** `{code.get('source_file', '')}`")
+                if code.get('location'):
+                    lines.append(f"**定位：** {code.get('location')}")
+                lines.append("")
+        
+        # ===== 相关概念 =====
+        related_concepts = report_data.get('related_concepts', [])
+        if related_concepts:
+            lines.append("# 相关概念")
+            lines.append("")
+            for concept in related_concepts:
+                lines.append(f"- {concept}")
+            lines.append("")
+        
+        # ===== 推荐阅读 =====
+        further_reading = report_data.get('further_reading', [])
+        if further_reading:
+            lines.append("# 推荐阅读")
+            lines.append("")
+            for fr in further_reading:
+                if isinstance(fr, dict):
+                    lines.append(f"- **{fr.get('title', '')}**: {fr.get('reason', '')}")
+                else:
+                    lines.append(f"- {fr}")
+            lines.append("")
+        
+        return "\n".join(lines)
 
     def retrieve_by_type(self,
                          queries: List[str],
@@ -2006,6 +3778,7 @@ class HippoRAG:
         - 段落节点：从chunk_embedding_store获取
         - 代码节点：从code_embedding_store获取
         - 表格节点：从table_embedding_store获取
+        - 图片节点：从image_embedding_store获取
         - 实体节点：从entity_embedding_store获取
         - 事实节点：从fact_embedding_store获取
         
@@ -2049,6 +3822,13 @@ class HippoRAG:
                 all_node_stores.append(table_to_row)
         except Exception as e:
             logger.debug(f"No table nodes to add: {e}")
+        
+        try:
+            image_to_row = self.image_embedding_store.get_all_id_to_rows()
+            if image_to_row:
+                all_node_stores.append(image_to_row)
+        except Exception as e:
+            logger.debug(f"No image nodes to add: {e}")
             
         try:
             entity_to_row = self.entity_embedding_store.get_all_id_to_rows()
@@ -2192,10 +3972,11 @@ class HippoRAG:
         Returns:
             str: 边的类型 ('structural', 'semantic', 'synonymy', 'passage')
         """
-        # 结构性边：文件到段落、段落到代码/表格、段落到子段落
+        # 结构性边：文件到段落、段落到代码/表格/图片、段落到子段落
         if ((source_id.startswith('file-') and target_id.startswith('chunk-')) or
             (source_id.startswith('chunk-') and target_id.startswith('code-')) or
             (source_id.startswith('chunk-') and target_id.startswith('table-')) or
+            (source_id.startswith('chunk-') and target_id.startswith('image-')) or
             (source_id.startswith('chunk-') and target_id.startswith('chunk-'))):
             return 'structural'
         
@@ -2225,7 +4006,51 @@ class HippoRAG:
             f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges"
         )
         self.graph.write_pickle(self._graph_pickle_filename)
+        
+        # 保存映射数据
+        self._save_mappings()
+        
         logger.info(f"Saving graph completed!")
+    
+    def _save_mappings(self):
+        """保存各种映射数据到JSON文件"""
+        mappings_path = os.path.join(self.working_dir, "mappings.json")
+        
+        mappings_data = {
+            'fact_to_chunk_id': self.fact_to_chunk_id,
+            'fact_to_entities': self.fact_to_entities,
+            # ent_node_to_chunk_ids 需要将set转换为list
+            'ent_node_to_chunk_ids': {k: list(v) for k, v in (self.ent_node_to_chunk_ids or {}).items()}
+        }
+        
+        with open(mappings_path, 'w', encoding='utf-8') as f:
+            json.dump(mappings_data, f, ensure_ascii=False)
+        
+        logger.info(f"Saved mappings to {mappings_path}: "
+                   f"{len(self.fact_to_chunk_id)} fact->chunk, "
+                   f"{len(self.fact_to_entities)} fact->entities, "
+                   f"{len(self.ent_node_to_chunk_ids or {})} entity->chunks")
+    
+    def _load_mappings(self):
+        """从JSON文件加载映射数据"""
+        mappings_path = os.path.join(self.working_dir, "mappings.json")
+        
+        if os.path.exists(mappings_path):
+            with open(mappings_path, 'r', encoding='utf-8') as f:
+                mappings_data = json.load(f)
+            
+            self.fact_to_chunk_id = mappings_data.get('fact_to_chunk_id', {})
+            self.fact_to_entities = {k: tuple(v) for k, v in mappings_data.get('fact_to_entities', {}).items()}
+            # 将list转换回set
+            ent_to_chunks = mappings_data.get('ent_node_to_chunk_ids', {})
+            self.ent_node_to_chunk_ids = {k: set(v) for k, v in ent_to_chunks.items()}
+            
+            logger.info(f"Loaded mappings from {mappings_path}: "
+                       f"{len(self.fact_to_chunk_id)} fact->chunk, "
+                       f"{len(self.fact_to_entities)} fact->entities, "
+                       f"{len(self.ent_node_to_chunk_ids)} entity->chunks")
+        else:
+            logger.info(f"No mappings file found at {mappings_path}, using empty mappings")
 
     def get_graph_info(self) -> Dict:
         """
@@ -2271,6 +4096,12 @@ class HippoRAG:
             graph_info["num_table_nodes"] = 0
 
         try:
+            image_nodes_keys = self.image_embedding_store.get_all_ids()
+            graph_info["num_image_nodes"] = len(set(image_nodes_keys))
+        except:
+            graph_info["num_image_nodes"] = 0
+
+        try:
             entity_nodes_keys = self.entity_embedding_store.get_all_ids()
             graph_info["num_entity_nodes"] = len(set(entity_nodes_keys))
         except:
@@ -2281,6 +4112,7 @@ class HippoRAG:
                                         graph_info["num_chunk_nodes"] +
                                         graph_info["num_code_nodes"] + 
                                         graph_info["num_table_nodes"] +
+                                        graph_info["num_image_nodes"] +
                                         graph_info["num_entity_nodes"])
 
         # 获取事实数量
@@ -2309,7 +4141,8 @@ class HippoRAG:
             for (node1, node2) in self.node_to_node_stats:
                 # 判断边的类型
                 if (node1.startswith('file-') or node1.startswith('chunk-') or 
-                    node1.startswith('code-') or node1.startswith('table-')):
+                    node1.startswith('code-') or node1.startswith('table-') or
+                    node1.startswith('image-')):
                     structure_edges += 1
                 elif (node1.startswith('entity-') and node2.startswith('entity-')):
                     # 这里可以进一步区分是语义边还是同义词边
@@ -2385,24 +4218,37 @@ class HippoRAG:
             self.table_node_keys: List = list(self.table_embedding_store.get_all_ids()) # 表格节点键列表
         except:
             self.table_node_keys: List = []
+        
+        try:
+            self.image_node_keys: List = list(self.image_embedding_store.get_all_ids()) # 图片节点键列表
+        except:
+            self.image_node_keys: List = []
             
-        # 合并所有内容节点用于检索（文件、段落、代码、表格）
-        self.all_content_node_keys: List = self.file_node_keys + self.passage_node_keys + self.code_node_keys + self.table_node_keys
+        # 合并所有内容节点用于检索（文件、段落、代码、表格、图片）
+        self.all_content_node_keys: List = (self.file_node_keys + self.passage_node_keys + 
+                                           self.code_node_keys + self.table_node_keys + self.image_node_keys)
         self.all_content_node_types: List = (['file'] * len(self.file_node_keys) + 
                                            ['chunk'] * len(self.passage_node_keys) + 
                                            ['code'] * len(self.code_node_keys) + 
-                                           ['table'] * len(self.table_node_keys))
+                                           ['table'] * len(self.table_node_keys) +
+                                           ['image'] * len(self.image_node_keys))
         
         # 记录各类型在 all_content_node_keys 中的索引范围（用于分类型检索）
+        file_end = len(self.file_node_keys)
+        chunk_end = file_end + len(self.passage_node_keys)
+        code_end = chunk_end + len(self.code_node_keys)
+        table_end = code_end + len(self.table_node_keys)
+        image_end = table_end + len(self.image_node_keys)
+        
         self.content_type_ranges = {
-            'file': (0, len(self.file_node_keys)),
-            'chunk': (len(self.file_node_keys), len(self.file_node_keys) + len(self.passage_node_keys)),
-            'code': (len(self.file_node_keys) + len(self.passage_node_keys), 
-                    len(self.file_node_keys) + len(self.passage_node_keys) + len(self.code_node_keys)),
-            'table': (len(self.file_node_keys) + len(self.passage_node_keys) + len(self.code_node_keys),
-                     len(self.all_content_node_keys))
+            'file': (0, file_end),
+            'chunk': (file_end, chunk_end),
+            'code': (chunk_end, code_end),
+            'table': (code_end, table_end),
+            'image': (table_end, image_end)
         }
-        logger.info(f"Content type ranges: file={self.content_type_ranges['file']}, chunk={self.content_type_ranges['chunk']}, code={self.content_type_ranges['code']}, table={self.content_type_ranges['table']}")
+        logger.info(f"Content type ranges: file={self.content_type_ranges['file']}, chunk={self.content_type_ranges['chunk']}, "
+                   f"code={self.content_type_ranges['code']}, table={self.content_type_ranges['table']}, image={self.content_type_ranges['image']}")
 
         # 数据一致性检查：验证图中的节点数量与嵌入存储器中的节点数量是否匹配
         expected_node_count = len(self.entity_node_keys) + len(self.all_content_node_keys)
@@ -2492,6 +4338,9 @@ class HippoRAG:
         
         logger.info(f"Total content embeddings: {len(self.all_content_embeddings)}")
 
+        # 【新增】加载映射数据（fact->chunk, fact->entities, entity->chunks）
+        self._load_mappings()
+        
         # 加载现有的OpenIE结果，用于构建事实到文档的映射关系
         all_openie_info, chunk_keys_to_process = self.load_existing_openie([])
 
@@ -2677,6 +4526,44 @@ class HippoRAG:
         except Exception as e:
             logger.error(f"Error computing file scores: {str(e)}")
             return np.array([]), []
+
+    def get_passage_scores(self, query: str) -> np.ndarray:
+        """
+        计算段落相关性分数：查询与段落的语义匹配
+        
+        通过向量相似度计算查询与段落嵌入之间的标准化相似度分数。
+        
+        Args:
+            query (str): 输入查询文本
+            
+        Returns:
+            np.ndarray: 标准化的相似度分数数组，形状为(#passages,)
+        """
+        if not hasattr(self, 'passage_node_keys') or len(self.passage_node_keys) == 0:
+            logger.warning("No passage nodes available for scoring.")
+            return np.array([])
+        
+        query_embedding = self.query_to_embedding['passage'].get(query, None)
+        if query_embedding is None:
+            query_embedding = self._batch_encode_texts(query,
+                                                       instruction=get_query_instruction('query_to_passage'),
+                                                       norm=True)
+        
+        try:
+            # 使用已加载的passage_embeddings
+            if not hasattr(self, 'passage_embeddings') or self.passage_embeddings is None or len(self.passage_embeddings) == 0:
+                self.passage_embeddings = np.array(self.chunk_embedding_store.get_embeddings(self.passage_node_keys))
+            
+            # 计算相似度
+            query_passage_scores = np.dot(self.passage_embeddings, np.array(query_embedding).T)
+            query_passage_scores = np.squeeze(query_passage_scores) if query_passage_scores.ndim == 2 else query_passage_scores
+            query_passage_scores = min_max_normalize(query_passage_scores)
+            
+            return query_passage_scores
+            
+        except Exception as e:
+            logger.error(f"Error computing passage scores: {str(e)}")
+            return np.array([])
 
     def rerank_files(self, query: str, query_file_scores: np.ndarray, file_keys: List[str]) -> Tuple[List[int], List[Dict], dict]:
         """
@@ -3534,6 +5421,215 @@ class HippoRAG:
         
         return results
 
+    def graph_spread_with_similarity(
+        self,
+        query: str,
+        query_embedding: np.ndarray,
+        must_have_chunks: Set[str],
+        seed_entities: List[Tuple[str, float]],  # [(entity_id, weight), ...]
+        seed_files: List[Tuple[str, float]],     # [(file_id, weight), ...]
+        max_cost: float = 1.0,
+        max_chunk_candidates: int = 15,
+        max_code_candidates: int = 10,
+        max_table_candidates: int = 10,
+        max_image_candidates: int = 10,
+        verbose: bool = False
+    ) -> Dict[str, List[Tuple[str, float]]]:
+        """
+        基于代价和Query相似度的图扩散
+        
+        从种子节点（Entity、File）出发，沿低代价边扩散，
+        综合考虑边代价和节点与Query的相似度进行评分。
+        
+        评分公式: score = similarity(node, query) / (1 + cost) × init_weight
+        
+        Args:
+            query: 查询字符串
+            query_embedding: 查询的embedding向量
+            must_have_chunks: 必选的chunk集合（不参与扩散排序）
+            seed_entities: 种子实体列表 [(entity_id, weight), ...]
+            seed_files: 种子文件列表 [(file_id, weight), ...]
+            max_cost: 最大累积代价
+            max_chunk_candidates: 扩散chunk上限
+            max_code_candidates: 扩散code上限
+            max_table_candidates: 扩散table上限
+            max_image_candidates: 扩散image上限
+            verbose: 是否输出详细信息
+            
+        Returns:
+            Dict[str, List[Tuple[str, float]]]: 各类型候选结果
+                {
+                    'chunk': [(chunk_id, score), ...],
+                    'code': [(code_id, score), ...],
+                    'table': [(table_id, score), ...],
+                    'image': [(image_id, score), ...]
+                }
+        """
+        import heapq
+        
+        start_time = time.time()
+        
+        def get_node_similarity(node_id: str) -> float:
+            """获取节点与Query的相似度"""
+            try:
+                if node_id.startswith('chunk-'):
+                    emb = self.chunk_embedding_store.get_embedding(node_id)
+                elif node_id.startswith('entity-'):
+                    emb = self.entity_embedding_store.get_embedding(node_id)
+                elif node_id.startswith('file-'):
+                    emb = self.file_embedding_store.get_embedding(node_id)
+                elif node_id.startswith('code-'):
+                    emb = self.code_embedding_store.get_embedding(node_id)
+                elif node_id.startswith('table-'):
+                    emb = self.table_embedding_store.get_embedding(node_id)
+                elif node_id.startswith('image-'):
+                    emb = self.image_embedding_store.get_embedding(node_id)
+                else:
+                    return 0.0
+                
+                if emb is None:
+                    return 0.0
+                emb = np.array(emb)
+                return float(np.dot(query_embedding.flatten(), emb.flatten()))
+            except Exception as e:
+                logger.debug(f"Error getting similarity for {node_id}: {e}")
+                return 0.0
+        
+        def get_edge_cost(edge_type: str, edge_weight: float) -> float:
+            """计算边的代价"""
+            if edge_type == 'synonymy':
+                # 同义词边：相似度越高，代价越低
+                return max(0.01, 1.0 - edge_weight)  # 相似度0.95 → 代价0.05
+            elif edge_type == 'semantic':
+                # 语义边：共现次数越多，代价越低
+                return 0.5 / max(edge_weight, 0.1)
+            elif edge_type == 'passage':
+                # chunk-entity边
+                return 0.2
+            elif edge_type == 'structural':
+                # file-chunk, chunk-code等结构边
+                return 0.3
+            else:
+                return 0.5
+        
+        # 候选结果
+        candidates = {
+            'chunk': [],
+            'code': [],
+            'table': [],
+            'image': []
+        }
+        
+        # 优先队列: (-score, node_id, cumulative_cost, init_weight)
+        pq = []
+        visited = set()
+        
+        # 初始化种子节点
+        seed_count = 0
+        for entity_id, weight in seed_entities:
+            vertex_idx = self.node_name_to_vertex_idx.get(entity_id)
+            if vertex_idx is not None:
+                sim = get_node_similarity(entity_id)
+                score = sim * weight
+                heapq.heappush(pq, (-score, entity_id, 0.0, weight))
+                seed_count += 1
+        
+        for file_id, weight in seed_files:
+            vertex_idx = self.node_name_to_vertex_idx.get(file_id)
+            if vertex_idx is not None:
+                sim = get_node_similarity(file_id)
+                score = sim * weight
+                heapq.heappush(pq, (-score, file_id, 0.0, weight))
+                seed_count += 1
+        
+        if verbose:
+            print(f"\n  🌱 扩散种子节点数: {seed_count} (Entity: {len(seed_entities)}, File: {len(seed_files)})")
+        
+        # 扩散
+        expansion_count = 0
+        while pq:
+            neg_score, node_id, cost, init_weight = heapq.heappop(pq)
+            
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            expansion_count += 1
+            
+            current_score = -neg_score
+            
+            # 收集内容节点（排除必选的chunk）
+            if node_id.startswith('chunk-') and node_id not in must_have_chunks:
+                if len(candidates['chunk']) < max_chunk_candidates:
+                    candidates['chunk'].append((node_id, current_score))
+            elif node_id.startswith('code-'):
+                if len(candidates['code']) < max_code_candidates:
+                    candidates['code'].append((node_id, current_score))
+            elif node_id.startswith('table-'):
+                if len(candidates['table']) < max_table_candidates:
+                    candidates['table'].append((node_id, current_score))
+            elif node_id.startswith('image-'):
+                if len(candidates['image']) < max_image_candidates:
+                    candidates['image'].append((node_id, current_score))
+            
+            # 检查是否已收集足够
+            total_candidates = sum(len(v) for v in candidates.values())
+            if total_candidates >= (max_chunk_candidates + max_code_candidates + 
+                                   max_table_candidates + max_image_candidates):
+                break
+            
+            # 扩散到邻居
+            vertex_idx = self.node_name_to_vertex_idx.get(node_id)
+            if vertex_idx is None:
+                continue
+            
+            # 获取所有邻居
+            neighbor_indices = self.graph.neighbors(vertex_idx, mode='all')
+            
+            for neighbor_idx in neighbor_indices:
+                neighbor_id = self.graph.vs[neighbor_idx]['name']
+                
+                if neighbor_id in visited:
+                    continue
+                
+                # 获取边信息
+                edge_id = self.graph.get_eid(vertex_idx, neighbor_idx, error=False)
+                if edge_id < 0:
+                    # 尝试反向查找
+                    edge_id = self.graph.get_eid(neighbor_idx, vertex_idx, error=False)
+                
+                if edge_id >= 0:
+                    edge = self.graph.es[edge_id]
+                    edge_type = edge['type'] if 'type' in edge.attributes() else 'structural'
+                    edge_weight = edge['weight'] if 'weight' in edge.attributes() else 1.0
+                else:
+                    edge_type = 'structural'
+                    edge_weight = 1.0
+                
+                edge_cost = get_edge_cost(edge_type, edge_weight)
+                new_cost = cost + edge_cost
+                
+                if new_cost > max_cost:
+                    continue
+                
+                # 计算新得分
+                neighbor_sim = get_node_similarity(neighbor_id)
+                decay = 1.0 / (1.0 + new_cost)
+                new_score = neighbor_sim * decay * init_weight
+                
+                if new_score > 0.01:  # 过滤低分
+                    heapq.heappush(pq, (-new_score, neighbor_id, new_cost, init_weight))
+        
+        elapsed_time = time.time() - start_time
+        
+        if verbose:
+            print(f"  🔍 扩散完成: 访问{expansion_count}个节点, 耗时{elapsed_time:.3f}s")
+            print(f"      Chunk候选: {len(candidates['chunk'])}")
+            print(f"      Code候选: {len(candidates['code'])}")
+            print(f"      Table候选: {len(candidates['table'])}")
+            print(f"      Image候选: {len(candidates['image'])}")
+        
+        return candidates
+
     def weighted_graph_search(self, query: str,
                                top_k_facts: List[Tuple],
                                top_files: List[Dict] = None,
@@ -4191,6 +6287,7 @@ class HippoRAG:
         all_chunks = []
         all_codes = []
         all_tables = []
+        all_images = []
         all_entities = []
         all_facts = []
         
@@ -4200,37 +6297,68 @@ class HippoRAG:
         
         # 递归处理JSON结构
         self._extract_nodes_from_json(json_structure, all_files, all_chunks, all_codes, 
-                                     all_tables, all_entities, all_facts,
+                                     all_tables, all_images, all_entities, all_facts,
                                      structure_edges, semantic_edges)
         
         logger.info(f"Extracted {len(all_files)} files, {len(all_chunks)} chunks, "
-                   f"{len(all_codes)} codes, {len(all_tables)} tables, "
+                   f"{len(all_codes)} codes, {len(all_tables)} tables, {len(all_images)} images, "
                    f"{len(all_entities)} entities, {len(all_facts)} facts")
 
         # 对各类节点进行向量化编码 
-        logger.info(f"Encoding files") # 7348
+        logger.info(f"Encoding files") # 8275
         if all_files:
             # all_files 格式: [(node_id, content, abstract, file_path), ...]
+            # 将本地文件路径转换为 Gitee URL
+            gitee_file_paths = [self._convert_to_gitee_url(file[3]) if len(file) > 3 else '' for file in all_files]
             self.file_embedding_store.insert_strings(
                 hash_ids=[file[0] for file in all_files], 
                 contents=[file[1] for file in all_files], 
                 summaries=[file[2] for file in all_files],
-                file_paths=[file[3] if len(file) > 3 else '' for file in all_files]
+                file_paths=gitee_file_paths
             )
             
-        logger.info(f"Encoding chunks") # 68225
+        logger.info(f"Encoding chunks") # 71496
         if all_chunks:
-            self.chunk_embedding_store.insert_strings([chunk[0] for chunk in all_chunks], [chunk[1] for chunk in all_chunks], [chunk[2] for chunk in all_chunks])
+            # all_chunks 格式: [(node_id, content, abstract, file_path), ...]
+            self.chunk_embedding_store.insert_strings(
+                hash_ids=[chunk[0] for chunk in all_chunks], 
+                contents=[chunk[1] for chunk in all_chunks], 
+                summaries=[chunk[2] for chunk in all_chunks],
+                file_paths=[chunk[3] if len(chunk) > 3 else '' for chunk in all_chunks]
+            )
             
-        logger.info(f"Encoding codes") # 20776
+        logger.info(f"Encoding codes") # 27776
         if all_codes:
-            self.code_embedding_store.insert_strings([code[0] for code in all_codes], [code[1] for code in all_codes], [code[2] for code in all_codes])
+            # all_codes 格式: [(node_id, content, abstract, file_path), ...]
+            self.code_embedding_store.insert_strings(
+                hash_ids=[code[0] for code in all_codes], 
+                contents=[code[1] for code in all_codes], 
+                summaries=[code[2] for code in all_codes],
+                file_paths=[code[3] if len(code) > 3 else '' for code in all_codes]
+            )
             
-        logger.info(f"Encoding tables") # 17117
+        logger.info(f"Encoding tables") # 18732
         if all_tables:
-            self.table_embedding_store.insert_strings([table[0] for table in all_tables], [table[1] for table in all_tables], [table[2] for table in all_tables])
+            # all_tables 格式: [(node_id, content, abstract, file_path), ...]
+            self.table_embedding_store.insert_strings(
+                hash_ids=[table[0] for table in all_tables], 
+                contents=[table[1] for table in all_tables], 
+                summaries=[table[2] for table in all_tables],
+                file_paths=[table[3] if len(table) > 3 else '' for table in all_tables]
+            )
+        
+        logger.info(f"Encoding images") # 6954
+        if all_images:
+            # all_images 格式: [(node_id, absolute_path, caption/embed_text, gitee_url), ...]
+            # 使用 caption 作为摘要（用于计算embedding），gitee_url 作为 file_path
+            self.image_embedding_store.insert_strings(
+                hash_ids=[img[0] for img in all_images],
+                contents=[img[1] for img in all_images],    # absolute_path (原始内容)
+                summaries=[img[2] for img in all_images],   # caption (用于embedding)
+                file_paths=[img[3] for img in all_images]   # gitee_url
+            )
             
-        logger.info(f"Encoding entities") # 328956
+        logger.info(f"Encoding entities") # 301490
         if all_entities:
             self.entity_embedding_store.insert_strings([entity[0] for entity in all_entities], [entity[1] for entity in all_entities], [entity[2] for entity in all_entities])
             
@@ -4258,30 +6386,38 @@ class HippoRAG:
         self.augment_graph()
         self.save_igraph()
         
+        # 保存节点元信息（面包屑导航等）
+        self._save_node_metadata()
+        logger.info(f"Saved {len(self.node_id_to_metadata)} node metadata entries (breadcrumbs)")
+        
         logger.info(f"Hierarchical indexing completed!")
         print(self.get_graph_info())
 
     def _extract_nodes_from_json(self, json_structure: Dict[str, Any], 
-                                all_files: List[Tuple[str, str, str, str]], all_chunks: List[Tuple[str, str, str]],
-                                all_codes: List[Tuple[str, str, str]], all_tables: List[Tuple[str, str, str]],
+                                all_files: List[Tuple[str, str, str, str]], all_chunks: List[Tuple[str, str, str, str]],
+                                all_codes: List[Tuple[str, str, str, str]], all_tables: List[Tuple[str, str, str, str]],
+                                all_images: List[Tuple[str, str, str, str]],
                                 all_entities: List[Tuple[str, str, str]], all_facts: List[Triple],
                                 structure_edges: List[Tuple[str, str, str, float]],
                                 semantic_edges: List[Triple],
-                                parent_id: str = None):
+                                parent_id: str = None,
+                                current_file_path: str = ''):
         """
         递归提取JSON结构中的所有节点和边信息
         
         Args:
             json_structure: JSON结构
             all_files: 文件节点列表 [(node_id, content, abstract, file_path), ...]
-            all_chunks: 段落节点列表
-            all_codes: 代码节点列表
-            all_tables: 表格节点列表
+            all_chunks: 段落节点列表 [(node_id, content, abstract, file_path), ...]
+            all_codes: 代码节点列表 [(node_id, content, abstract, file_path), ...]
+            all_tables: 表格节点列表 [(node_id, content, abstract, file_path), ...]
+            all_images: 图片节点列表 [(node_id, absolute_path, caption, gitee_url), ...]
             all_entities: 实体节点列表
             all_facts: 事实三元组列表
             structure_edges: 结构性边列表 (source_id, target_id, edge_type, weight)
             semantic_edges: 语义边列表 (三元组)
             parent_id: 父节点ID
+            current_file_path: 当前文件路径（用于chunk/code/table的文件定位）
         """
         for node_id, node_data in json_structure.items():
             if node_id.startswith('file-'):
@@ -4293,22 +6429,37 @@ class HippoRAG:
                     # 存储为4元组: (node_id, content, abstract, file_path)
                     all_files.append((node_id, file_content, file_abstract, file_path))
                     
-                # 处理文件的chunk子节点
+                # 处理文件的chunk子节点，传递文件路径
                 chunks_data = node_data.get('chunks', {})
                 if chunks_data:
                     self._extract_nodes_from_json(chunks_data, all_files, all_chunks,
-                                                 all_codes, all_tables, all_entities, all_facts,
-                                                 structure_edges, semantic_edges, parent_id=node_id)
+                                                 all_codes, all_tables, all_images, all_entities, all_facts,
+                                                 structure_edges, semantic_edges, parent_id=node_id,
+                                                 current_file_path=file_path)
                     
             elif node_id.startswith('chunk-'):
                 # 处理段落节点
                 chunk_abstract = node_data.get('abstract', '')
                 chunk_content = node_data.get('content', '')
                 
+                # 转换为 Gitee URL
+                gitee_file_path = self._convert_to_gitee_url(current_file_path) if current_file_path else ''
+                
+                # 提取并存储 metadata（面包屑导航）
+                chunk_metadata = node_data.get('metadata', {})
+                chunk_breadcrumb = self._build_breadcrumb(chunk_metadata)
+                if chunk_breadcrumb or chunk_metadata:
+                    self.node_id_to_metadata[node_id] = {
+                        'breadcrumb': chunk_breadcrumb,
+                        'metadata': chunk_metadata,
+                        'file_path': gitee_file_path
+                    }
+                
                 # 使用摘要或内容作为嵌入文本
                 # embed_text = chunk_abstract if chunk_abstract else chunk_content
                 if chunk_abstract and chunk_content:
-                    all_chunks.append((node_id, chunk_content, chunk_abstract))
+                    # 存储为4元组: (node_id, content, abstract, file_path)
+                    all_chunks.append((node_id, chunk_content, chunk_abstract, gitee_file_path))
                 
                 # 添加段落到父节点的边
                 if parent_id:
@@ -4319,25 +6470,66 @@ class HippoRAG:
                 for jump_file_id, jump_info in jump_data.items():
                     structure_edges.append((node_id, jump_file_id, 'jump', 1.0))
                 
-                # 处理代码块
+                # 处理代码块（继承父chunk的面包屑）
                 codes_data = node_data.get('codes', {})
                 for code_id, code_info in codes_data.items():
                     code_abstract = code_info.get('abstract', '')
                     code_content = code_info.get('content', '')
                     # embed_text = code_abstract if code_abstract else code_content
                     if code_abstract and code_content:
-                        all_codes.append((code_id,code_content,code_abstract))
+                        # 存储为4元组: (node_id, content, abstract, file_path)
+                        all_codes.append((code_id, code_content, code_abstract, gitee_file_path))
                         structure_edges.append((node_id, code_id, 'contains', 1.0))
+                        # code继承父chunk的面包屑
+                        self.node_id_to_metadata[code_id] = {
+                            'breadcrumb': chunk_breadcrumb,
+                            'metadata': chunk_metadata,
+                            'file_path': gitee_file_path,
+                            'parent_chunk_id': node_id
+                        }
                 
-                # 处理表格
+                # 处理表格（继承父chunk的面包屑）
                 tables_data = node_data.get('tables', {})
                 for table_id, table_info in tables_data.items():
                     table_abstract = table_info.get('abstract', '')
                     table_content = table_info.get('content', '')
                     # embed_text = table_abstract if table_abstract else table_content
                     if table_abstract and table_content:
-                        all_tables.append((table_id,table_content,table_abstract))
+                        # 存储为4元组: (node_id, content, abstract, file_path)
+                        all_tables.append((table_id, table_content, table_abstract, gitee_file_path))
                         structure_edges.append((node_id, table_id, 'contains', 1.0))
+                        # table继承父chunk的面包屑
+                        self.node_id_to_metadata[table_id] = {
+                            'breadcrumb': chunk_breadcrumb,
+                            'metadata': chunk_metadata,
+                            'file_path': gitee_file_path,
+                            'parent_chunk_id': node_id
+                        }
+                
+                # 处理图片（继承父chunk的面包屑）
+                images_data = node_data.get('images', {})
+                for image_id, image_info in images_data.items():
+                    caption = image_info.get('caption', '')
+                    context = image_info.get('context', '')
+                    absolute_path = image_info.get('absolute_path', '')
+                    
+                    # 使用 caption 作为嵌入文本（如果没有caption，使用context）
+                    embed_text = caption if caption else context
+                    if embed_text and absolute_path:
+                        # 转换为 Gitee URL
+                        gitee_url = self._convert_to_gitee_url(absolute_path)
+                        # 存储为4元组: (node_id, absolute_path, caption/embed_text, gitee_url)
+                        all_images.append((image_id, absolute_path, embed_text, gitee_url))
+                        structure_edges.append((node_id, image_id, 'contains', 1.0))
+                        # image继承父chunk的面包屑，并存储来源信息
+                        self.node_id_to_metadata[image_id] = {
+                            'breadcrumb': chunk_breadcrumb,
+                            'metadata': chunk_metadata,
+                            'file_path': gitee_file_path,  # gitee url
+                            'md_file_path': current_file_path,  # 原始md文件路径
+                            'parent_chunk_id': node_id,  # 来源chunk ID
+                            'image_path': absolute_path  # 图片本地路径
+                        }
                 
                 # 处理过滤后的chunk中的实体和关系
                 filter_chunk = node_data.get('filter_chunk', {})
@@ -4392,19 +6584,33 @@ class HippoRAG:
                         if isinstance(triple, list) and len(triple) == 3:
                             processed_triple = (str(triple[0]), str(triple[1]), str(triple[2]))
                             embed_text = str(processed_triple)
-                            all_facts.append((compute_mdhash_id(embed_text, "fact-"), embed_text, embed_text))
+                            fact_id = compute_mdhash_id(embed_text, "fact-")
+                            all_facts.append((fact_id, embed_text, embed_text))
+                            
+                            # 计算实体ID
                             entity_desc_1 = entity_definitions.get(processed_triple[0], '')
                             entity_desc_2 = entity_definitions.get(processed_triple[2], '')
                             embed_text_1 = f"{processed_triple[0]}: {entity_desc_1}" if entity_desc_1 else processed_triple[0]
                             embed_text_2 = f"{processed_triple[2]}: {entity_desc_2}" if entity_desc_2 else processed_triple[2]
-                            semantic_edges.append((compute_mdhash_id(embed_text_1, "entity-"), processed_triple[1], compute_mdhash_id(embed_text_2, "entity-")))
+                            subject_entity_id = compute_mdhash_id(embed_text_1, "entity-")
+                            object_entity_id = compute_mdhash_id(embed_text_2, "entity-")
+                            
+                            # 【新增】记录fact到chunk的映射
+                            self.fact_to_chunk_id[fact_id] = node_id  # node_id是当前的chunk-xxxx
+                            
+                            # 【新增】记录fact到实体的映射
+                            self.fact_to_entities[fact_id] = (subject_entity_id, object_entity_id)
+                            
+                            # 添加语义边
+                            semantic_edges.append((subject_entity_id, processed_triple[1], object_entity_id))
                 
-                # 递归处理子chunks
+                # 递归处理子chunks（继承当前文件路径）
                 sub_chunks = node_data.get('chunks', {})
                 if sub_chunks:
                     self._extract_nodes_from_json(sub_chunks, all_files, all_chunks,
-                                                 all_codes, all_tables, all_entities, all_facts,
-                                                 structure_edges, semantic_edges, parent_id=node_id)
+                                                 all_codes, all_tables, all_images, all_entities, all_facts,
+                                                 structure_edges, semantic_edges, parent_id=node_id,
+                                                 current_file_path=current_file_path)
 
     def _add_structure_edges(self, structure_edges: List[Tuple[str, str, str, float]]):
         """

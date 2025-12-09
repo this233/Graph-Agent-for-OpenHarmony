@@ -59,7 +59,12 @@ class EmbeddingStoreV2:
 
     def _batch_encode_texts(self, texts):
         """
-        使用新的嵌入模型API对文本进行批量编码
+        使用新的嵌入模型API对文本进行批量编码（多GPU优化版本）
+        
+        vLLM的embed方法在初始化时已通过tensor_parallel_size启用多GPU，
+        这里的优化主要是：
+        1. 增大batch_size以充分利用多GPU的并行计算能力
+        2. 减少Python循环开销，让vLLM内部调度最大化GPU利用率
         
         Args:
             texts: 要编码的文本列表或单个文本
@@ -70,10 +75,43 @@ class EmbeddingStoreV2:
         if isinstance(texts, str):
             texts = [texts]
         
-        outputs = self.embedding_model.embed(texts)
-        embeddings = torch.tensor([o.outputs.embedding for o in outputs])
+        if not texts:
+            return []
         
-        return embeddings.tolist()
+        # 对于使用tensor_parallel的vLLM，增大batch_size以充分利用多GPU
+        # vLLM会自动在多GPU之间分配计算负载
+        # 推荐的batch_size：每个GPU约5000-10000条，总计根据GPU数量调整
+        num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        # 增大批次大小以充分利用多GPU并行能力
+        recommended_batch_size = 40000 * num_gpus
+        # batch_size = self.batch_size if self.batch_size else recommended_batch_size
+        batch_size = recommended_batch_size
+
+        # 如果数据量小于batch_size，直接一次性处理（最高效）
+        if len(texts) <= batch_size:
+            logger.info(f"单批次处理 {len(texts)} 条文本 (使用 {num_gpus} GPU tensor并行)")
+            outputs = self.embedding_model.embed(texts)
+            all_embeddings = [o.outputs.embedding for o in outputs]
+            return all_embeddings
+        
+        # 数据量大时分批处理
+        all_embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+        logger.info(f"分 {total_batches} 批处理 {len(texts)} 条文本 (batch_size={batch_size}, 使用 {num_gpus} GPU tensor并行)")
+        
+        for i in tqdm(range(0, len(texts), batch_size), desc=f"Encoding batches ({num_gpus} GPUs)"):
+            batch_texts = texts[i:i + batch_size]
+            outputs = self.embedding_model.embed(batch_texts)
+            batch_embeddings = [o.outputs.embedding for o in outputs]
+            all_embeddings.extend(batch_embeddings)
+            
+            # 显式释放中间变量，帮助垃圾回收
+            del outputs
+            del batch_embeddings
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        return all_embeddings
 
     def get_missing_string_hash_ids(self, hash_ids: List[str], contents: List[str], summaries: List[str]):
         """

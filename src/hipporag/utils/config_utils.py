@@ -126,7 +126,7 @@ class BaseConfig:
         metadata={"help": "Class name indicating which embedding model to use."}
     )
     embedding_batch_size: int = field(
-        default=16,
+        default=10000,
         metadata={"help": "Batch size of calling embedding model."}
     )
     embedding_return_as_normalized: bool = field(
@@ -158,7 +158,7 @@ class BaseConfig:
         metadata={"help": "Batch size for key embeddings for knn retrieval in buiding synonymy edges."}
     )
     synonymy_edge_sim_threshold: float = field(
-        default=0.92,
+        default=0.95,
         metadata={"help": "Similarity threshold to include candidate synonymy nodes."}
     )
     is_directed_graph: bool = field(

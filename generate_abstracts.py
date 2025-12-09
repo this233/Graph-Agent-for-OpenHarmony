@@ -3,17 +3,34 @@
 摘要生成器使用示例脚本
 
 该脚本展示如何使用AbstractGenerator为document_processor生成的JSON结构补充摘要字段。
+
+特点：
+- 使用 deepseek-v3.2-exp 模型（支持深度思考模式）
+- 支持从备份文件中复用已有摘要（调用失败时优先尝试复用）
+- 支持备用配置
 """
 
 import json
 import os
 import argparse
 import logging
+import requests
+import time
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
+# 禁用SSL警告
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-os.environ['OPENAI_API_KEY'] = 'siq3nBr8C75Pv89E0CQaKq4c3KTCpOREj8Umj8OMCM5ByKkBrHxm-IOPiLuFlEOjnU3HFE5Hv-sfLzShM8CCoA'
+# API配置
+MAAS_API_URL = "https://api.modelarts-maas.com/v2/chat/completions"
+MAAS_API_KEY = "BQm_Gkd1EoTcHkJfVf31dTWfMIOsW3_mKIDfM5j-MvvwNM5jNl9XnLOjvNjEOuDiIWoKb-DIphdRWt2gOoNwBw"
+MODEL_NAME = "deepseek-v3.2-exp"
+
+os.environ['OPENAI_API_KEY'] = MAAS_API_KEY
 
 # 设置路径以便导入HippoRAG模块
 import sys
@@ -22,20 +39,95 @@ sys.path.append('src')
 from hipporag.abstract_generator import AbstractGenerator
 from hipporag.utils.config_utils import BaseConfig
 
+def call_maas_api(content: str, content_type: str, max_retries: int = 3, 
+                   enable_thinking: bool = False) -> Optional[str]:
+    """
+    直接调用 MAAS API 生成摘要
+    
+    Args:
+        content: 待生成摘要的内容
+        content_type: 内容类型
+        max_retries: 最大重试次数
+        enable_thinking: 是否启用深度思考模式
+        
+    Returns:
+        str: 生成的摘要，失败返回None
+    """
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {MAAS_API_KEY}'
+    }
+    
+    # 根据内容类型构建提示词
+    type_prompts = {
+        'file': "请为以下文档内容生成一个简洁的摘要（不超过200字），概括主要内容和关键信息：",
+        'chunk': "请为以下文档片段生成一个简洁的摘要（不超过150字），概括主要内容：",
+        'code': "请为以下代码片段生成一个简洁的摘要（不超过100字），说明代码的功能和用途：",
+        'table': "请为以下表格内容生成一个简洁的摘要（不超过100字），概括表格包含的信息："
+    }
+    
+    prompt = type_prompts.get(content_type, type_prompts['chunk'])
+    
+    # 截断过长的内容
+    max_content_length = 8000
+    if len(content) > max_content_length:
+        content = content[:max_content_length] + "\n... [内容已截断]"
+    
+    data = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": "你是一个专业的技术文档摘要助手，擅长提取关键信息并生成简洁准确的摘要。"},
+            {"role": "user", "content": f"{prompt}\n\n{content}"}
+        ],
+        "chat_template_kwargs": {
+            "thinking": enable_thinking
+        },
+        "max_tokens": 300
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                MAAS_API_URL,
+                headers=headers,
+                data=json.dumps(data),
+                verify=False,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'choices' in result and len(result['choices']) > 0:
+                    abstract = result['choices'][0]['message']['content']
+                    return abstract.strip()
+            else:
+                logging.warning(f"API调用失败 (尝试 {attempt + 1}/{max_retries}): {response.status_code}")
+                
+        except Exception as e:
+            logging.warning(f"API调用异常 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
+            
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)
+            
+    return None
+
+
 class FallbackAbstractGenerator(AbstractGenerator):
     """
     带有备用配置的摘要生成器
     
-    当主配置的LLM调用失败时，自动切换到备用配置重试
+    当主配置的LLM调用失败时，优先尝试从备份文件复用，然后切换到备用配置重试
     """
     
-    def __init__(self, primary_config: BaseConfig, fallback_config: Optional[BaseConfig] = None):
+    def __init__(self, primary_config: BaseConfig, fallback_config: Optional[BaseConfig] = None,
+                 backup_file: Optional[str] = None):
         """
         初始化带备用配置的摘要生成器
         
         Args:
             primary_config: 主配置
             fallback_config: 备用配置，当主配置失败时使用
+            backup_file: 备份JSON文件路径，用于复用已有摘要
         """
         super().__init__(global_config=primary_config)
         self.primary_config = primary_config
@@ -49,6 +141,12 @@ class FallbackAbstractGenerator(AbstractGenerator):
         
         # 统计fallback使用次数
         self.fallback_used_count = 0
+        self.backup_used_count = 0
+        
+        # 加载备份摘要
+        self.backup_abstracts = {}
+        if backup_file and os.path.exists(backup_file):
+            self._load_backup_abstracts(backup_file)
         
         if fallback_config:
             try:
@@ -66,10 +164,85 @@ class FallbackAbstractGenerator(AbstractGenerator):
                         
             except Exception as e:
                 self.logger.warning(f"备用配置初始化失败: {str(e)}")
+                
+    def _load_backup_abstracts(self, backup_file: str):
+        """
+        从备份文件加载已有的摘要
+        
+        Args:
+            backup_file: 备份JSON文件路径
+        """
+        try:
+            self.logger.info(f"加载备份文件: {backup_file}")
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+                
+            # 递归收集所有摘要
+            def collect_abstracts(obj: Any, parent_id: str = ""):
+                if isinstance(obj, dict):
+                    # 收集文件级摘要
+                    for key, value in obj.items():
+                        if key.startswith('file-') and isinstance(value, dict):
+                            abstract = value.get('abstract', '')
+                            content = value.get('content', '')
+                            if abstract and content:
+                                content_hash = self._compute_content_hash(content)
+                                self.backup_abstracts[content_hash] = abstract
+                                
+                        # 收集chunk、code、table级摘要
+                        if isinstance(value, dict):
+                            if 'abstract' in value and 'content' in value:
+                                abstract = value.get('abstract', '')
+                                content = value.get('content', '')
+                                if abstract and content:
+                                    content_hash = self._compute_content_hash(content)
+                                    self.backup_abstracts[content_hash] = abstract
+                            collect_abstracts(value, key)
+                    
+                    # 处理 chunks, codes, tables 字典
+                    for dict_key in ['chunks', 'codes', 'tables']:
+                        if dict_key in obj and isinstance(obj[dict_key], dict):
+                            for item_id, item_value in obj[dict_key].items():
+                                if isinstance(item_value, dict):
+                                    abstract = item_value.get('abstract', '')
+                                    content = item_value.get('content', '')
+                                    if abstract and content:
+                                        content_hash = self._compute_content_hash(content)
+                                        self.backup_abstracts[content_hash] = abstract
+                                    collect_abstracts(item_value, item_id)
+                                    
+            collect_abstracts(backup_data)
+            self.logger.info(f"从备份文件加载了 {len(self.backup_abstracts)} 个摘要")
+            
+        except Exception as e:
+            self.logger.warning(f"加载备份文件失败: {str(e)}")
+            
+    def _compute_content_hash(self, content: str) -> str:
+        """计算内容的哈希值"""
+        import hashlib
+        return hashlib.md5(content.encode()).hexdigest()
+        
+    def _get_backup_abstract(self, content: str) -> Optional[str]:
+        """
+        尝试从备份中获取摘要
+        
+        Args:
+            content: 内容
+            
+        Returns:
+            str: 备份中的摘要，如果没有则返回None
+        """
+        content_hash = self._compute_content_hash(content)
+        return self.backup_abstracts.get(content_hash)
     
     def generate_abstract_with_fallback(self, content: str, content_type: str, **kwargs) -> str:
         """
         使用备用配置机制生成摘要
+        
+        优先级：
+        1. 首先尝试主配置（MAAS API）
+        2. 如果失败，尝试从备份文件复用
+        3. 如果备份没有，尝试备用配置
         
         Args:
             content: 待生成摘要的内容
@@ -81,38 +254,38 @@ class FallbackAbstractGenerator(AbstractGenerator):
         """
         primary_failed = False
         
-        # 首先尝试主配置，确保使用主API密钥
+        # 首先尝试主配置（直接调用 MAAS API）
         try:
-            # 确保使用主配置的API密钥
-            if self.primary_api_key:
-                os.environ['OPENAI_API_KEY'] = self.primary_api_key
-            result = self.generate_abstract(content, content_type, **kwargs)
-            # 检查是否是错误结果
-            if not result.startswith("摘要生成失败:"):
+            result = call_maas_api(content, content_type)
+            if result and not result.startswith("摘要生成失败"):
                 return result
             else:
                 primary_failed = True
-                self.logger.warning(f"⚠️  主配置 {content_type} 摘要生成返回错误: {result[:100]}")
+                self.logger.warning(f"⚠️  主配置 {content_type} 摘要生成失败")
         except Exception as e:
             primary_failed = True
             content_preview = content[:100] + "..." if len(content) > 100 else content
             self.logger.warning(f"❌ 主配置 {content_type} 摘要生成异常:")
             self.logger.warning(f"  错误: {str(e)}")
             self.logger.warning(f"  内容长度: {len(content)} 字符")
-            self.logger.warning(f"  内容预览: {content_preview}")
         
-        # 如果主配置失败且有备用配置，则尝试备用配置
+        # 如果主配置失败，尝试从备份复用
+        if primary_failed:
+            backup_result = self._get_backup_abstract(content)
+            if backup_result:
+                self.backup_used_count += 1
+                self.logger.info(f"✅ 从备份复用 {content_type} 摘要")
+                return backup_result
+        
+        # 如果备份也没有，尝试备用配置
         if self.fallback_generator and primary_failed:
             try:
-                # 输出详细的chunk信息到日志
                 content_preview = content[:200] + "..." if len(content) > 200 else content
                 self.logger.info(f"=== 使用备用配置重试 {content_type} 摘要生成 ===")
                 self.logger.info(f"Chunk类型: {content_type}")
                 self.logger.info(f"内容长度: {len(content)} 字符")
-                self.logger.info(f"内容预览: {content_preview}")
                 if 'file_path' in kwargs:
                     self.logger.info(f"文件路径: {kwargs['file_path']}")
-                self.logger.info("=" * 50)
                 
                 # 临时切换到备用API密钥
                 original_key = os.environ.get('OPENAI_API_KEY')
@@ -126,13 +299,10 @@ class FallbackAbstractGenerator(AbstractGenerator):
                         result_preview = result[:100] + "..." if len(result) > 100 else result
                         self.logger.info(f"✅ 备用配置成功生成 {content_type} 摘要")
                         self.logger.info(f"摘要预览: {result_preview}")
-                        self.logger.info("=" * 50)
-                        # 备用配置成功，需要从失败统计中减去1（因为主配置的失败被记录了）
                         if hasattr(self, 'stats') and self.stats['failed_calls'] > 0:
                             self.stats['failed_calls'] -= 1
                         return result
                 finally:
-                    # 恢复原始API密钥
                     if original_key:
                         os.environ['OPENAI_API_KEY'] = original_key
                     
@@ -140,7 +310,7 @@ class FallbackAbstractGenerator(AbstractGenerator):
                 self.logger.warning(f"备用配置调用也失败: {str(e)}")
         
         # 所有配置都失败，返回错误信息
-        return f"摘要生成失败: 主配置和备用配置都无法完成任务"
+        return f"摘要生成失败: 主配置、备份和备用配置都无法完成任务"
     
     def _process_single_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -294,6 +464,11 @@ def main():
         help="禁用备用配置，只使用主配置"
     )
     
+    parser.add_argument(
+        "--backup",
+        help="备份JSON文件路径，调用失败时优先尝试复用已有摘要"
+    )
+    
     args = parser.parse_args()
     
     # 设置日志级别
@@ -349,8 +524,14 @@ def main():
     # 创建摘要生成器
     logger.info("初始化摘要生成器...")
     if fallback_config and not args.disable_fallback:
-        generator = FallbackAbstractGenerator(primary_config=config, fallback_config=fallback_config)
+        generator = FallbackAbstractGenerator(
+            primary_config=config, 
+            fallback_config=fallback_config,
+            backup_file=args.backup
+        )
         logger.info("使用带备用配置的摘要生成器")
+        if args.backup:
+            logger.info(f"备份文件: {args.backup}")
     else:
         generator = AbstractGenerator(global_config=config)
         logger.info("使用标准摘要生成器")
@@ -406,11 +587,14 @@ def main():
         
         # 输出备用配置使用统计
         if isinstance(generator, FallbackAbstractGenerator):
+            backup_count = generator.backup_used_count
             fallback_count = generator.fallback_used_count
+            if backup_count > 0:
+                logger.info(f"  其中备份复用成功: {backup_count} 项")
             if fallback_count > 0:
                 logger.info(f"  其中备用配置成功: {fallback_count} 项")
-                main_success = total_processed - fallback_count
-                logger.info(f"  主配置成功: {main_success} 项")
+            main_success = total_processed - backup_count - fallback_count
+            logger.info(f"  主配置成功: {main_success} 项")
         
     except KeyboardInterrupt:
         logger.warning("用户中断了处理过程")

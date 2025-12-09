@@ -1,9 +1,43 @@
 ### TL;DR
-```
+```bash
 conda activate hipporag
-python src/hipporag/document_processor.py  2>>index.log
-python generate_abstracts.py outputs/Harmony_docs_zh_cn/markdown_parse/structure.json outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json 2>> index.log
-python extract_entities_triples.py outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json outputs/Harmony_docs_zh_cn/markdown_parse/triples.json 2>> index.log
+
+# 步骤1: 提取文档结构（包含图片）
+python src/hipporag/document_processor.py >> index.log 2>&1
+
+# 步骤2: 生成全文摘要（失败时复用备份）
+python generate_abstracts.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/structure.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
+    >> index.log 2>&1
+
+# 步骤3: 生成图片caption
+python generate_image_captions.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
+    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
+    >> index.log 2>&1
+
+python retry_failed_captions.py outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json
+
+# 步骤4: 提取实体和三元组
+python extract_entities_triples.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
+    >> index.log 2>&1
+
+# 步骤5: 去重检查（统计最终数据）
+python diagnose_duplicate_files.py --json-mode \
+    outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
+    > duplicate.log 2>&1
+
+# 步骤6: 构建图索引
+python demo_openai.py > graphv3.log 2>&1
+
+
+#{'num_file_nodes': 8275, 'num_chunk_nodes': 71496, 'num_code_nodes': 27776, 'num_table_nodes': 18732, 'num_image_nodes': 6954, 'num_entity_nodes': 301490, 'num_total_nodes': 434723, 'num_extracted_facts': 508804, 'num_structure_edges': 1803919, 'num_semantic_edges': 1144897, 'num_total_edges': 2948816}
+
 ```
 
 ---
@@ -30,20 +64,87 @@ python src/hipporag/document_processor.py [input_dir] [output_dir] 2>>index.log
 python generate_abstracts.py \
     outputs/Harmony_docs_zh_cn/markdown_parse/structure.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
     2>> index.log
 ```
 
-#### 步骤3: 提取实体和三元组 (Entity and Triple Extraction)
+**参数说明：**
+- `--backup`: 备份文件路径，API调用失败时优先复用已有摘要
+- `--max-workers`: 并发数（默认20）
+- `--disable-fallback`: 禁用备用配置
+
+#### 步骤3: 生成图片Caption (Image Caption Generation)
+使用 `generate_image_captions.py` 为文档中的图片生成描述：
+
+```bash
+python generate_image_captions.py \
+    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
+    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
+    2>> index.log
+```
+
+**特点：**
+- 相同路径的图片只调用一次API，避免重复
+- 支持从备份文件复用已有caption
+- 支持PNG、JPEG、GIF、WEBP格式
+
+**参数说明：**
+- `--backup`: 备份文件路径，用于复用已有caption
+- `--dry-run`: 只分析图片数量，不实际生成
+- `--max-workers`: 并发数（建议为1，避免API限流）
+
+#### 步骤4: 提取实体和三元组 (Entity and Triple Extraction)
 使用 `extract_entities_triples.py` 从文档中提取实体和关系三元组：
 
 ```bash
 python extract_entities_triples.py \
-    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
+    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
     2>> index.log
 ```
 
 该步骤会生成包含实体和三元组的 `triples.json` 文件。
+
+**参数说明：**
+- `--batch-size`: 批处理大小（默认200）
+- `--disable-fallback`: 禁用备用配置
+
+#### 步骤5: 去重检查 (Duplicate Check)
+使用 `diagnose_duplicate_files.py` 检查并统计重复内容：
+
+```bash
+python diagnose_duplicate_files.py --json-mode \
+    outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
+    > duplicate.log
+```
+
+**功能说明：**
+- 统计 file、chunk、code、table 的去重情况
+- 检测内容相同但出现在不同位置的重复项
+- 输出最终的数据统计
+
+**两种模式：**
+```bash
+# 目录模式：扫描源文件重复
+python diagnose_duplicate_files.py /root/code/docs/zh-cn
+
+# JSON模式：检查处理后的重复
+python diagnose_duplicate_files.py --json-mode structure.json
+```
+
+#### 步骤6: 构建图索引 (Graph Indexing)
+使用 `demo_openai.py` 构建知识图谱和向量索引：
+
+```bash
+python demo_openai.py > graph.log 2>&1
+```
+
+该步骤会：
+- 对文件、chunk、代码、表格、实体、事实进行向量编码
+- 构建层次化知识图谱
+- 添加结构边、语义边、同义边
+- 保存图索引到 parquet 文件
 
 ### 检索功能 (Retrieval Functionality)
 

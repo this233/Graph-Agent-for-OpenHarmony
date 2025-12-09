@@ -44,8 +44,9 @@ class DocumentProcessor:
             Dict: 超链接信息字典
         """
         jump_dict = {}
-        # 匹配 [text](link) 格式的链接
-        pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+        # 匹配 [text](link) 格式的链接，但排除图片格式 ![alt](path)
+        # 使用负向后行断言 (?<!!) 确保 [ 前面没有 !
+        pattern = r'(?<!!)\[([^\]]+)\]\(([^)]+)\)'
         matches = re.findall(pattern, content)
         
         for text, link in matches:
@@ -169,6 +170,128 @@ class DocumentProcessor:
         filtered_content = '\n'.join(filtered_lines)
         return codes_dict, filtered_content
 
+    def _extract_image_references(self, line: str) -> List[Tuple[str, str, str]]:
+        """
+        从一行文本中提取所有图片引用，支持路径中包含括号的情况
+        
+        Args:
+            line: 一行文本
+            
+        Returns:
+            List[Tuple[str, str, str]]: [(完整匹配, alt_text, image_path), ...]
+        """
+        results = []
+        
+        # 找到所有 ![...]( 的位置
+        start_pattern = re.compile(r'!\[([^\]]*)\]\(')
+        
+        for match in start_pattern.finditer(line):
+            alt_text = match.group(1)
+            full_match_start = match.start()
+            path_start = match.end()  # ( 后面的位置
+            
+            # 从这个位置开始，找到匹配的 )（考虑括号嵌套）
+            depth = 1
+            pos = path_start
+            
+            while pos < len(line) and depth > 0:
+                char = line[pos]
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth -= 1
+                pos += 1
+            
+            if depth == 0:
+                # 提取路径（不包含最后的 )）
+                image_path = line[path_start:pos-1]
+                # 如果路径包含空格后的引号参数（如 title），只取空格前的部分
+                if ' "' in image_path:
+                    image_path = image_path.split(' "')[0]
+                elif " '" in image_path:
+                    image_path = image_path.split(" '")[0]
+                
+                # 去除路径首尾的空格
+                image_path = image_path.strip()
+                
+                full_match = line[full_match_start:pos]
+                results.append((full_match, alt_text, image_path))
+        
+        return results
+
+    def _extract_images(self, content: str, current_file_path: Optional[str] = None) -> Tuple[Dict[str, Dict[str, str]], str]:
+        """
+        提取图片并返回过滤后的内容
+        
+        Args:
+            content: 文本内容
+            current_file_path: 当前文件路径，用于解析相对路径
+            
+        Returns:
+            Tuple: (图片字典, 移除图片后的内容)
+        """
+        images_dict = {}
+        lines = content.split('\n')
+        filtered_lines = []
+        
+        for i, line in enumerate(lines):
+            # 查找当前行中的所有图片（支持括号嵌套）
+            matches = self._extract_image_references(line)
+            
+            if matches:
+                # 当前行包含图片
+                filtered_line = line
+                
+                for full_match, alt_text, image_path in matches:
+                    
+                    # 处理相对路径，转换为绝对路径
+                    is_remote = image_path.startswith(('http://', 'https://', 'ftp://'))
+                    
+                    if current_file_path and not os.path.isabs(image_path) and not is_remote:
+                        current_dir = os.path.dirname(current_file_path)
+                        absolute_path = os.path.normpath(os.path.join(current_dir, image_path))
+                    else:
+                        absolute_path = image_path
+                    
+                    # 检查本地文件是否存在，不存在则跳过（远程路径保留）
+                    if not is_remote and not os.path.exists(absolute_path):
+                        # 本地文件不存在，跳过保存，但仍从内容中移除图片标记
+                        filtered_line = filtered_line.replace(full_match, '')
+                        continue
+                    
+                    # 提取上下文（前后各 context_lines 行）
+                    context_start = max(0, i - self.context_lines)
+                    context_end = min(len(lines) - 1, i + self.context_lines)
+                    context_lines_list = lines[context_start:context_end + 1]
+                    context_content = '\n'.join(context_lines_list)
+                    
+                    # 生成图片 ID（基于上下文，使同一图片在不同位置有不同ID）
+                    image_id = self._compute_md5_id(absolute_path + alt_text + context_content, "image-")
+                    
+                    images_dict[image_id] = {
+                        "caption": "",  # 预留给 MLLM 填充
+                        "alt_text": alt_text,
+                        "path": image_path,  # 原始路径
+                        "absolute_path": absolute_path,  # 绝对路径
+                        "context": context_content,  # 图片周围的上下文
+                        "is_remote": is_remote  # 标记是否为远程图片
+                    }
+                    
+                    # 从过滤后的行中移除图片标记
+                    filtered_line = filtered_line.replace(full_match, '')
+                
+                # 如果移除图片后行不为空，则保留
+                if filtered_line.strip():
+                    filtered_lines.append(filtered_line)
+                # 否则用空行替代（保持行号对应）
+                else:
+                    filtered_lines.append('')
+            else:
+                filtered_lines.append(line)
+        
+        filtered_content = '\n'.join(filtered_lines)
+        return images_dict, filtered_content
+
     def _extract_tables(self, content: str) -> Tuple[Dict[str, Dict[str, str]], str]:
         """
         提取表格并返回过滤后的内容
@@ -283,7 +406,7 @@ class DocumentProcessor:
 
     def _process_chunk_content(self, content: str, current_file_path: Optional[str] = None) -> Dict[str, Any]:
         """
-        处理单个chunk的内容，提取超链接、代码块、表格等
+        处理单个chunk的内容，提取超链接、代码块、表格、图片等
         
         Args:
             content: chunk内容
@@ -294,8 +417,11 @@ class DocumentProcessor:
         # 提取超链接
         jump_dict = self._extract_hyperlinks(content, current_file_path)
         
+        # 提取图片
+        images_dict, content_without_images = self._extract_images(content, current_file_path)
+        
         # 提取代码块
-        codes_dict, content_without_codes = self._extract_code_blocks(content)
+        codes_dict, content_without_codes = self._extract_code_blocks(content_without_images)
         
         # 从移除代码块后的内容中提取表格
         tables_dict, filtered_content = self._extract_tables(content_without_codes)
@@ -305,6 +431,7 @@ class DocumentProcessor:
             "abstract": "",
             "content": content,
             "jump": jump_dict,
+            "images": images_dict,
             "codes": codes_dict,
             "tables": tables_dict,
             "filter_chunk": {
@@ -588,13 +715,14 @@ class DocumentProcessor:
         if output_file:
             self.save_to_json(all_files_info, output_file)
             
-        # 递归统计chunks、tables、codes字段数量
-        chunks_count, tables_count, codes_count, jump_count = self._count_fields_recursively(all_files_info)
+        # 递归统计chunks、tables、codes、images字段数量
+        chunks_count, tables_count, codes_count, jump_count, images_count = self._count_fields_recursively(all_files_info)
         print(f"Statistics:")
         print(f"  Total chunks: {chunks_count}")
         print(f"  Total tables: {tables_count}")
         print(f"  Total codes: {codes_count}")
         print(f"  Total jump: {jump_count}")
+        print(f"  Total images: {images_count}")
         
         
         
@@ -603,21 +731,22 @@ class DocumentProcessor:
     
     def _count_fields_recursively(self, data: Dict[str, Any]) -> tuple:
         """
-        递归统计chunks、tables、codes字段数量
+        递归统计chunks、tables、codes、images字段数量
         
         Args:
             data: 要统计的数据字典
             
         Returns:
-            tuple: (chunks_count, tables_count, codes_count)
+            tuple: (chunks_count, tables_count, codes_count, jump_count, images_count)
         """
         chunks_count = 0
         tables_count = 0
         codes_count = 0
         jump_count = 0
+        images_count = 0
         
         def _recursive_count(obj):
-            nonlocal chunks_count, tables_count, codes_count, jump_count
+            nonlocal chunks_count, tables_count, codes_count, jump_count, images_count
             
             if isinstance(obj, dict):
                 for key, value in obj.items():
@@ -629,6 +758,8 @@ class DocumentProcessor:
                         codes_count += len(value)
                     elif key == "jump" and isinstance(value, dict):
                         jump_count += len(value)
+                    elif key == "images" and isinstance(value, dict):
+                        images_count += len(value)
                     # 递归处理嵌套的字典和列表
                     _recursive_count(value)
             elif isinstance(obj, list):
@@ -636,7 +767,7 @@ class DocumentProcessor:
                     _recursive_count(item)
         
         _recursive_count(data)
-        return chunks_count, tables_count, codes_count, jump_count
+        return chunks_count, tables_count, codes_count, jump_count, images_count
 
     def save_to_json(self, data: Dict[str, Any], output_file: str):
         """

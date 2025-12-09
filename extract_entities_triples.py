@@ -4,6 +4,10 @@
 
 该脚本展示如何使用OpenIE为document_processor生成的JSON结构补充filter_chunk中的
 extracted_entities和extracted_triples字段。
+
+特点：
+- 使用 deepseek-v3.2-exp 模型（支持深度思考模式）
+- 支持备用配置
 """
 
 import json
@@ -15,6 +19,13 @@ from typing import Dict, List, Any, Tuple, TypedDict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
+# 禁用SSL警告
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# API配置
+MAAS_API_KEY = "BQm_Gkd1EoTcHkJfVf31dTWfMIOsW3_mKIDfM5j-MvvwNM5jNl9XnLOjvNjEOuDiIWoKb-DIphdRWt2gOoNwBw"
+
 # 定义ChunkInfo类型，与HippoRAG保持一致
 class ChunkInfo(TypedDict):
     num_tokens: int
@@ -23,7 +34,7 @@ class ChunkInfo(TypedDict):
     full_doc_ids: List[str]
 
 # 设置API密钥
-os.environ['OPENAI_API_KEY'] = 'siq3nBr8C75Pv89E0CQaKq4c3KTCpOREj8Umj8OMCM5ByKkBrHxm-IOPiLuFlEOjnU3HFE5Hv-sfLzShM8CCoA'
+os.environ['OPENAI_API_KEY'] = MAAS_API_KEY
 
 # 设置路径以便导入HippoRAG模块
 import sys
@@ -55,7 +66,7 @@ class FallbackOpenIE:
         
         # 存储API密钥
         self.primary_api_key = os.environ.get('OPENAI_API_KEY')
-        self.fallback_api_key = 'sk-0xdfGKYi0W6KOzcGC4B3958f6b6b482f8616A7E05eCa7aEb'
+        self.fallback_api_key = 'sk-7a4e2ece8871495895a9c6a506715e9b'  # 阿里云百炼 DashScope API Key
         
         # 统计fallback使用次数
         self.fallback_used_count = 0
@@ -241,83 +252,105 @@ class FallbackOpenIE:
         """
         使用备用配置机制进行批量OpenIE处理
         
+        逻辑：
+        1. 主配置尝试5次
+        2. 5次后，只把失败的chunks发给备用配置（只调用一次）
+        3. 备用配置也失败的chunks保持为空
+        
         Args:
             chunks: 待处理的chunks字典
             
         Returns:
-            Tuple[Dict, Dict]: NER结果字典和三元组结果字典，以及是否使用了备用配置的标记
+            Tuple[Dict, Dict]: NER结果字典和三元组结果字典
         """
-        primary_failed = False
-        failure_details = {}
+        import time
+        from hipporag.utils.misc_utils import NerRawOutput, TripleRawOutput
         
-        # 首先尝试主配置，确保使用主API密钥
-        try:
-            self.logger.info("使用主配置进行OpenIE处理...")
-            # 确保使用主配置的API密钥
-            if self.primary_api_key:
-                os.environ['OPENAI_API_KEY'] = self.primary_api_key
-            ner_results_dict, triple_results_dict = self.primary_openie.batch_openie(chunks)
-            
-            # 检查是否有成功的结果
-            successful_ner = sum(1 for result in ner_results_dict.values() 
-                               if result.unique_entities and not result.metadata.get('error'))
-            successful_triples = sum(1 for result in triple_results_dict.values() 
-                                   if result.triples and not result.metadata.get('error'))
-            
-            total_chunks = len(chunks)
-            success_rate = (successful_ner + successful_triples) / (2 * total_chunks) if total_chunks > 0 else 0
-            
-            # 如果成功率大于50%，认为主配置工作正常
-            if success_rate == 1:
-                self.logger.info(f"主配置OpenIE处理成功，成功率: {success_rate:.1%}")
-                return ner_results_dict, triple_results_dict
-            else:
-                primary_failed = True
-                
-                # 记录详细的失败情况
-                self._record_primary_failure_details(
-                    failure_type="low_success_rate",
-                    chunks=chunks,
-                    ner_results_dict=ner_results_dict,
-                    triple_results_dict=triple_results_dict,
-                    success_rate=success_rate,
-                    successful_ner=successful_ner,
-                    successful_triples=successful_triples,
-                    total_chunks=total_chunks
-                )
-                return ner_results_dict, triple_results_dict
-                
-        except Exception as e:
-            primary_failed = True
-            
-            # 记录详细的异常失败情况
-            self._record_primary_failure_details(
-                failure_type="exception",
-                chunks=chunks,
-                exception=e,
-                total_chunks=len(chunks)
-            )
+        max_retries = 5  # 主配置最大重试次数
+        retry_delay = 3  # 重试间隔（秒）
         
-        # 如果主配置失败或成功率太低，且有备用配置，则尝试备用配置
-        if self.fallback_openie and primary_failed:
+        # 最终结果字典
+        final_ner_results = {}
+        final_triple_results = {}
+        
+        # 当前需要处理的chunks（初始为全部）
+        pending_chunks = dict(chunks)
+        
+        # 主配置尝试5次
+        for attempt in range(1, max_retries + 1):
+            if not pending_chunks:
+                break  # 没有待处理的chunks了
+                
             try:
-                self.logger.info("=" * 60)
-                self.logger.info("=== 使用备用配置重试OpenIE处理 ===")
-                self.logger.info(f"批次大小: {len(chunks)} 个chunks")
+                self.logger.info(f"使用主配置进行OpenIE处理... (第 {attempt}/{max_retries} 次尝试，{len(pending_chunks)} 个chunks)")
+                # 确保使用主配置的API密钥
+                if self.primary_api_key:
+                    os.environ['OPENAI_API_KEY'] = self.primary_api_key
+                    
+                ner_results_dict, triple_results_dict = self.primary_openie.batch_openie(pending_chunks)
                 
-                # 输出每个chunk的详细信息
-                for i, (chunk_id, chunk_info) in enumerate(chunks.items()):
+                # 分离成功和失败的chunks
+                succeeded_chunk_ids = []
+                failed_chunk_ids = []
+                
+                for chunk_id in pending_chunks.keys():
+                    ner_result = ner_results_dict.get(chunk_id)
+                    triple_result = triple_results_dict.get(chunk_id)
+                    
+                    # 判断是否成功：NER和三元组都必须有结果且没有错误
+                    ner_success = ner_result and ner_result.unique_entities and not ner_result.metadata.get('error')
+                    triple_success = triple_result and triple_result.triples and not triple_result.metadata.get('error')
+                    
+                    if ner_success and triple_success:
+                        # 成功的chunk，保存结果
+                        succeeded_chunk_ids.append(chunk_id)
+                        final_ner_results[chunk_id] = ner_result
+                        final_triple_results[chunk_id] = triple_result
+                    else:
+                        failed_chunk_ids.append(chunk_id)
+                
+                self.logger.info(f"第 {attempt} 次尝试结果: 成功 {len(succeeded_chunk_ids)} 个, 失败 {len(failed_chunk_ids)} 个")
+                
+                # 更新待处理列表：只保留失败的chunks
+                pending_chunks = {cid: pending_chunks[cid] for cid in failed_chunk_ids}
+                
+                # 如果没有失败的chunks，直接返回
+                if not pending_chunks:
+                    self.logger.info(f"✅ 主配置第 {attempt} 次尝试全部成功！")
+                    return final_ner_results, final_triple_results
+                    
+                # 还有失败的chunks，继续重试
+                if attempt < max_retries:
+                    self.logger.warning(f"还有 {len(pending_chunks)} 个chunks失败，将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                    
+            except Exception as e:
+                self.logger.error(f"主配置第 {attempt}/{max_retries} 次尝试发生异常: {str(e)}")
+                
+                if attempt < max_retries:
+                    self.logger.info(f"将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+        
+        # 主配置5次后仍有失败的chunks
+        if pending_chunks:
+            self.logger.warning(f"主配置 {max_retries} 次尝试后仍有 {len(pending_chunks)} 个chunks失败")
+            
+            # 如果有备用配置，只对失败的chunks调用备用配置（只调用一次）
+            if self.fallback_openie:
+                self.logger.info("=" * 60)
+                self.logger.info(f"=== 使用备用配置处理 {len(pending_chunks)} 个失败的chunks（只尝试一次）===")
+                
+                # 输出失败chunks的详细信息
+                for i, (chunk_id, chunk_info) in enumerate(pending_chunks.items()):
                     content = chunk_info['content']
                     content_preview = content[:150] + "..." if len(content) > 150 else content
-                    self.logger.info(f"  Chunk {i+1}/{len(chunks)}")
-                    self.logger.info(f"    ID: {chunk_id}")
+                    self.logger.info(f"  失败Chunk {i+1}/{len(pending_chunks)}: {chunk_id}")
                     self.logger.info(f"    内容长度: {len(content)} 字符")
                     self.logger.info(f"    内容预览: {content_preview}")
-                    self.logger.info(f"    Token数: {chunk_info.get('num_tokens', 'N/A')}")
-                    if i >= 2:  # 只显示前3个chunk的详细信息，避免日志过长
-                        remaining = len(chunks) - 3
+                    if i >= 2:  # 只显示前3个
+                        remaining = len(pending_chunks) - 3
                         if remaining > 0:
-                            self.logger.info(f"    ... 还有 {remaining} 个chunks")
+                            self.logger.info(f"    ... 还有 {remaining} 个失败chunks")
                         break
                         
                 self.logger.info("=" * 60)
@@ -327,66 +360,92 @@ class FallbackOpenIE:
                 os.environ['OPENAI_API_KEY'] = self.fallback_api_key
                 
                 try:
-                    ner_results_dict, triple_results_dict = self.fallback_openie.batch_openie(chunks)
+                    # 备用配置只调用一次
+                    fallback_ner_results, fallback_triple_results = self.fallback_openie.batch_openie(pending_chunks)
                     self.fallback_used_count += 1
                     
-                    # 检查备用配置的成功率
-                    successful_ner = sum(1 for result in ner_results_dict.values() 
-                                       if result.unique_entities and not result.metadata.get('error'))
-                    successful_triples = sum(1 for result in triple_results_dict.values() 
-                                           if result.triples and not result.metadata.get('error'))
+                    # 处理备用配置的结果
+                    fallback_succeeded = 0
+                    fallback_failed = 0
                     
-                    total_chunks = len(chunks)
-                    success_rate = (successful_ner + successful_triples) / (2 * total_chunks) if total_chunks > 0 else 0
+                    for chunk_id in pending_chunks.keys():
+                        ner_result = fallback_ner_results.get(chunk_id)
+                        triple_result = fallback_triple_results.get(chunk_id)
+                        
+                        ner_success = ner_result and ner_result.unique_entities and not ner_result.metadata.get('error')
+                        triple_success = triple_result and triple_result.triples and not triple_result.metadata.get('error')
+                        
+                        if ner_success and triple_success:
+                            # 备用配置成功
+                            fallback_succeeded += 1
+                            ner_result.metadata['used_fallback'] = True
+                            triple_result.metadata['used_fallback'] = True
+                            final_ner_results[chunk_id] = ner_result
+                            final_triple_results[chunk_id] = triple_result
+                        else:
+                            # 备用配置也失败，保持为空
+                            fallback_failed += 1
+                            final_ner_results[chunk_id] = NerRawOutput(
+                                chunk_id=chunk_id,
+                                response="",
+                                unique_entities=[],
+                                metadata={'error': '主配置和备用配置都失败，放弃提取'}
+                            )
+                            final_triple_results[chunk_id] = TripleRawOutput(
+                                chunk_id=chunk_id,
+                                response="",
+                                triples=[],
+                                metadata={'error': '主配置和备用配置都失败，放弃提取'}
+                            )
                     
-                    self.logger.info(f"✅ 备用配置OpenIE处理完成，成功率: {success_rate:.1%}")
+                    self.logger.info(f"✅ 备用配置处理完成: 成功 {fallback_succeeded} 个, 失败 {fallback_failed} 个（放弃）")
                     
-                    # 输出备用配置处理结果摘要
-                    total_entities = sum(len(result.unique_entities) for result in ner_results_dict.values())
-                    total_triples = sum(len(result.triples) for result in triple_results_dict.values())
-                    self.logger.info(f"备用配置提取结果: {total_entities} 个实体, {total_triples} 个三元组")
-                    self.logger.info("=" * 60)
+                except Exception as e:
+                    self.logger.error(f"备用配置处理失败: {str(e)}")
+                    self._record_fallback_failure_details(pending_chunks, e)
                     
-                    # 标记结果使用了备用配置，用于后续统计调整
-                    for result in ner_results_dict.values():
-                        result.metadata['used_fallback'] = True
-                    for result in triple_results_dict.values():
-                        result.metadata['used_fallback'] = True
-                    
-                    return ner_results_dict, triple_results_dict
-                    
+                    # 备用配置异常，所有待处理chunks保持为空
+                    for chunk_id in pending_chunks.keys():
+                        final_ner_results[chunk_id] = NerRawOutput(
+                            chunk_id=chunk_id,
+                            response="",
+                            unique_entities=[],
+                            metadata={'error': f'备用配置异常: {str(e)}'}
+                        )
+                        final_triple_results[chunk_id] = TripleRawOutput(
+                            chunk_id=chunk_id,
+                            response="",
+                            triples=[],
+                            metadata={'error': f'备用配置异常: {str(e)}'}
+                        )
+                        
                 finally:
                     # 恢复原始API密钥
                     if original_key:
                         os.environ['OPENAI_API_KEY'] = original_key
-                    
-            except Exception as e:
-                self.logger.error(f"备用配置OpenIE处理也失败: {str(e)}")
-                
-                # 记录备用配置失败的详细信息
-                self._record_fallback_failure_details(chunks, e)
+            else:
+                # 没有备用配置，失败的chunks保持为空
+                self.logger.warning(f"没有备用配置，{len(pending_chunks)} 个失败chunks将保持为空")
+                for chunk_id in pending_chunks.keys():
+                    final_ner_results[chunk_id] = NerRawOutput(
+                        chunk_id=chunk_id,
+                        response="",
+                        unique_entities=[],
+                        metadata={'error': '主配置失败且无备用配置'}
+                    )
+                    final_triple_results[chunk_id] = TripleRawOutput(
+                        chunk_id=chunk_id,
+                        response="",
+                        triples=[],
+                        metadata={'error': '主配置失败且无备用配置'}
+                    )
         
-        # 所有配置都失败，返回空结果
-        self._record_complete_failure(chunks)
-        empty_ner_results = {}
-        empty_triple_results = {}
+        # 统计最终结果
+        total_success = sum(1 for r in final_ner_results.values() if r.unique_entities and not r.metadata.get('error'))
+        total_failed = len(chunks) - total_success
+        self.logger.info(f"最终结果: 总计 {len(chunks)} 个chunks, 成功 {total_success} 个, 失败 {total_failed} 个")
         
-        for chunk_id in chunks.keys():
-            from hipporag.utils.misc_utils import NerRawOutput, TripleRawOutput
-            empty_ner_results[chunk_id] = NerRawOutput(
-                chunk_id=chunk_id,
-                response="",
-                unique_entities=[],
-                metadata={'error': '主配置和备用配置都失败'}
-            )
-            empty_triple_results[chunk_id] = TripleRawOutput(
-                chunk_id=chunk_id,
-                response="",
-                triples=[],
-                metadata={'error': '主配置和备用配置都失败'}
-            )
-        
-        return empty_ner_results, empty_triple_results
+        return final_ner_results, final_triple_results
 
     def _record_fallback_failure_details(self, chunks: Dict[str, ChunkInfo], exception: Exception):
         """
@@ -860,11 +919,10 @@ class EntityTripleExtractor:
 
 
 def create_fallback_config():
-    """创建备用配置"""
+    """创建备用配置 - 使用阿里云百炼（DashScope）"""
     fallback_config = BaseConfig()
-    fallback_config.llm_name = 'gpt-4.1'
-    # fallback_config.llm_base_url = 'http://api.v36.cm/v1/'
-    fallback_config.llm_base_url = 'https://api.vveai.com/v1'
+    fallback_config.llm_name = 'qwen-plus'
+    fallback_config.llm_base_url = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
     fallback_config.temperature = 0.1
     fallback_config.openie_mode = 'online'  # 备用配置使用在线模式
     
@@ -1022,11 +1080,9 @@ def main():
     if args.llm_base_url:
         config.llm_base_url = args.llm_base_url
     
-    # 使用DeepSeek配置
-    # if args.llm_name == 'DeepSeek-V3':
-    #     config.llm_base_url = 'https://api.modelarts-maas.com/v1'
-    config.llm_base_url = 'https://api.modelarts-maas.com/v1'
-    config.llm_name = 'DeepSeek-V3'
+    # 使用 MAAS API 配置
+    config.llm_base_url = 'https://api.modelarts-maas.com/v2'
+    config.llm_name = 'deepseek-v3.2-exp'
 
     # 创建备用配置
     fallback_config = None
