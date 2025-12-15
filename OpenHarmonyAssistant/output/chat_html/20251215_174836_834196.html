@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="referrer" content="no-referrer">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构详解</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00D0FF;
+      --oh-violet: #9B51E0;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #e2e8f0;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer {
+      transition: all 0.4s ease;
+    }
+    .layer:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+    }
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0, 208, 255, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 208, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 208, 255, 0); }
+    }
+    .code-block {
+      font-family: 'Fira Code', monospace;
+      background: #1e293b;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+    .flow-line {
+      stroke-dasharray: 10;
+      animation: dash 1.5s linear infinite;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -20; }
+    }
+  </style>
+</head>
+<body class="min-h-screen text-gray-200">
+<!-- [AUTO] Injected image(s) because LLM output had no <img> but RAG provided images -->
+<section class="mx-auto max-w-6xl px-4 py-6">
+  <div class="mb-3 text-slate-300 text-sm">相关图片</div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <figure class="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/40">
+              <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。" referrerpolicy="no-referrer" class="w-full h-auto block"/>
+              <figcaption class="px-4 py-3 text-sm text-slate-300">
+                <div class="font-medium">这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。</div>
+                <div class="text-xs text-slate-400 mt-1">1 OpenHarmony开源项目 > 1.2 技术架构</div>
+              </figcaption>
+            </figure>
+  </div>
+</section>
+
+  <!-- Header -->
+  <header class="glass py-6 px-6 flex justify-between items-center sticky top-0 z-50">
+    <h1 class="text-2xl font-bold flex items-center">
+      <i class="ph ph-atom text-cyan-400 mr-2"></i>
+      OpenHarmony 技术架构详解
+    </h1>
+    <div class="flex space-x-4">
+      <button id="theme-toggle" class="p-2 rounded-full bg-slate-800 hover:bg-slate-700 transition">
+        <i class="ph ph-moon text-xl"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Hero Section with Image -->
+    <section class="glass rounded-2xl p-6 mb-12 overflow-hidden relative">
+      <div class="absolute inset-0 opacity-20" style="background: url('https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png') center/cover no-repeat;"></div>
+      <div class="relative z-10">
+        <h2 class="text-3xl font-bold mb-4">全场景分布式操作系统</h2>
+        <p class="text-lg mb-6 max-w-3xl">
+          OpenHarmony 是由开放原子开源基金会孵化的开源项目，目标是面向全场景、全连接、全智能时代，
+          搭建一个智能终端设备操作系统的框架和平台，促进万物互联产业的繁荣发展。
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <span class="px-3 py-1 bg-blue-900/50 rounded-full text-sm">分布式</span>
+          <span class="px-3 py-1 bg-cyan-900/50 rounded-full text-sm">组件化</span>
+          <span class="px-3 py-1 bg-violet-900/50 rounded-full text-sm">跨平台</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Types -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6 flex items-center">
+        <i class="ph ph-cpu text-blue-400 mr-2"></i> 系统类型与适配
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Mini System -->
+        <div class="glass rounded-xl p-6 layer border-l-4 border-cyan-500">
+          <h3 class="text-xl font-semibold mb-2">轻量系统 (Mini)</h3>
+          <p class="text-sm text-gray-400 mb-3">MCU类处理器，最小128KiB内存</p>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 轻量级网络协议</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> IoT总线读写部件</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 传感器、穿戴设备</li>
+          </ul>
+        </div>
+        <!-- Small System -->
+        <div class="glass rounded-xl p-6 layer border-l-4 border-blue-50 00">
+          <h3 class="text-xl font-semibold mb-2">小型系统 (Small)</h3>
+          <p class="text-sm text-gray-400 mb-3">应用处理器，最小1MiB内存</p>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 标准图形框架</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 视频编解码能力</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 智能家居、行车记录仪</li>
+          </ul>
+        </div>
+        <!-- Standard System -->
+        <div class="glass rounded-xl p-6 layer border-l-4 border-violet-500">
+          <h3 class="text-xl font-semibold mb-2">标准系统 (Standard)</h3>
+          <p class="text-sm text-gray-400 mb-3">应用处理器，最小128MiB内存</p>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 3D GPU与硬件合成</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 完整应用框架</li>
+            <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 高端冰箱屏、平板</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture Diagram -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6 flex items-center">
+        <i class="ph ph-stack text-cyan-400 mr-2"></i> 分层架构详解
+      </h2>
+      <div class="glass rounded-2xl p-6 overflow-hidden relative">
+        <!-- SVG Architecture Diagram -->
+        <svg viewBox="0 0 800 600" class="w-full h-auto">
+          <!-- Background Grid -->
+          <defs>
+            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+
+          <!-- Layers -->
+          <g id="layers">
+            <!-- 应用层 -->
+            <rect x="100" y="50" width="600" height="80" rx="10" fill="var(--oh-violet)" opacity="0.8" class="layer"/>
+            <text x="400" y="95" font-family="Inter" font-size="18" fill="white" text-anchor="middle">应用层 (Applications)</text>
+            
+            <!-- 框架层 -->
+            <rect x="100" y="150" width="600" height="100" rx="10" fill="var(--oh-blue)" opacity="0.8" class="layer"/>
+            <text x="400" y="190" font-family="Inter" font-size="18" fill="white" text-anchor="middle">框架层 (Framework)</text>
+            <text x="400" y="215" font-family="Inter" font-size="14" fill="white" text-anchor="middle">ArkUI, 用户程序框架</text>
+            
+            <!-- 系统服务层 -->
+            <rect x="100" y="270" width="600" height="120" rx="10" fill="#4F46E5" opacity="0.8" class="layer"/>
+            <text x="400" y="320" font-family="Inter" font-size="18" fill="white" text-anchor="middle">系统服务层 (System Services)</text>
+            <text x="400" y="345" font-family="Inter" font-size="14" fill="white" text-anchor="middle">分布式软总线, 安全子系统, 媒体子系统</text>
+            
+            <!-- 内核层 -->
+            <rect x="100" y="410" width="600" height="120" rx="10" fill="#0891B2" opacity="0.8" class="layer"/>
+            <text x="400" y="450" font-family="Inter" font-size="18" fill="white" text-anchor="middle">内核层 (Kernel)</text>
+            <text x="400" y="475" font-family="Inter" font-size="14" fill="white" text-anchor="middle">多内核设计 (Linux / LiteOS), 驱动子系统</text>
+            
+            <!-- 箭头 -->
+            <line x1="400" y1="130" x2="400" y2="150" stroke="white" stroke-width="2" marker-end="url(#arrowhead)" class="flow-line"/>
+            <line x1="400" y1="250" x2="400" y2="270" stroke="white" stroke-width="2" marker-end="url(#arrowhead)" class="flow-line"/>
+            <line x1="400" y1="390" x2="400" y2="410" stroke="white" stroke-width="2" marker-end="url(#arrowhead)" class="flow-line"/>
+            
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+            refX="0" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="white" />
+            </marker>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Kernel & Drivers -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+      <div class="glass rounded-2xl p-6">
+        <h3 class="text-xl font-bold mb-4 flex items-center">
+          <i class="ph ph-gear-six text-cyan-400 mr-2"></i> 多内核架构
+        </h3>
+        <p class="mb-4">
+          OpenHarmony 采用多内核设计，支持 Linux 和 LiteOS 内核，通过 KAL (Kernel Abstraction Layer) 屏蔽差异，向上提供统一接口。
+        </p>
+        <div class="code-block">
+          <pre class="text-sm"><code>// KAL 提供的统一接口示例
+int kal_thread_create(kal_thread_entry entry, void *arg, ...);
+int kal_file_open(const char *path, int flags, ...);
+void* kal_malloc(size_t size);</code></pre>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-6">
+        <h3 class="text-xl font-bold mb-4 flex items-center">
+          <i class="ph ph-plug text-blue-400 mr-2"></i> 统一驱动框架 (HDF)
+        </h3>
+        <p class="mb-4">
+          HDF (Hardware Driver Foundation) 提供了统一的驱动标准和接口，支持驱动一次开发，多系统部署。
+        </p>
+        <ul class="space-y-2 text-sm">
+          <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 弹性化框架能力</li>
+          <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 规范化驱动接口</li>
+          <li class="flex items-start"><i class="ph ph-check-circle-fill text-green-500 mt-1 mr-2"></i> 组件化驱动模型</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Playground / Simulator -->
+    <section class="glass rounded-2xl p-6 mb-16">
+      <h2 class="text-2xl font-bold mb-6 flex items-center">
+        <i class="ph ph-code-block text-cyan-400 mr-2"></i> 模拟器: 简单的计数器应用
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div>
+          <h3 class="font-semibold mb-2">ArkTS 代码</h3>
+          <div class="code-block">
+            <pre class="text-sm"><code>// Counter.ets
+@Entry
+@Component
+struct Counter {
+  @State count: number = 0
+
+  build() {
+    Column({ space: 20 }) {
+      Text('计数器')
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+      
+      Text(`点击次数: ${this.count}`)
+        .fontSize(18)
+      
+      Button('点击我')
+        .onClick(() => {
+          this.count++
+        })
+        .backgroundColor('#0077ED')
+        .fontColor('#FFFFFF')
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+}</code></pre>
+          </div>
+        </div>
+        <div class="flex flex-col items-center justify-center">
+          <div class="w-64 h-96 bg-gray-800 rounded-3xl border-8 border-gray-900 shadow-2xl overflow-hidden relative">
+            <div class="absolute top-0 left-0 right-0 h-6 bg-black flex justify-center items-center">
+              <div class="w-16 h-1 bg-gray-700 rounded-full"></div>
+            </div>
+            <div class="p-6 h-full flex flex-col justify-center items-center bg-gradient-to-b from-slate-900 to-slate-800">
+              <h4 class="text-xl font-bold mb-4">计数器</h4>
+              <p class="text-3xl mb-6" id="sim-count">0</p>
+              <button id="sim-button" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-full font-medium transition transform hover:scale-105 active:scale-95">
+                点击我
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="glass py-6 px-6 text-center text-gray-500 text-sm">
+    &copy; 2025 OpenHarmony 技术架构详解 | 基于 Gitee 文档构建
+  </footer>
+
+  <script>
+    // Theme Toggle
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      const icon = document.querySelector('#theme-toggle i');
+      if (document.documentElement.classList.contains('dark')) {
+        icon.classList.remove('ph-moon');
+        icon.classList.add

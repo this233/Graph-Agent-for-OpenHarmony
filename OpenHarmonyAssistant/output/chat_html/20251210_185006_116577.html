@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构可视化</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007AFF;
+      --oh-cyan: #5AC8FA;
+      --oh-violet: #AF52DE;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glow {
+      box-shadow: 0 0 15px rgba(0, 122, 255, 0.5);
+    }
+    .section-title::after {
+      content: "";
+      display: block;
+      width: 60px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--oh-blue), var(--oh-cyan));
+      margin-top: 8px;
+      border-radius: 2px;
+    }
+    .arch-layer {
+      transition: all 0.3s ease;
+    }
+    .arch-layer:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 122, 255, 0.3);
+    }
+    .pulse-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--oh-cyan);
+      box-shadow: 0 0 0 0 rgba(90, 200, 250, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(90, 200, 250, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(90, 200, 250, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(90, 200, 250, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- Header -->
+  <header class="text-center mb-12">
+    <h1 class="text-4xl font-bold">OpenHarmony 技术架构</h1>
+    <p class="mt-2 text-slate-400">交互式架构图与子系统概览</p>
+  </header>
+
+  <!-- Main Dashboard -->
+  <main class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+    <!-- 左侧：ArkTS UI 架构图 -->
+    <section class="glass rounded-2xl p-6">
+      <h2 class="text-2xl font-semibold section-title">ArkTS UI 声明式开发架构</h2>
+      <p class="mt-2 text-sm text-slate-400">基于方舟运行时的现代化 UI 开发范式</p>
+      <div class="mt-6 space-y-4">
+        <div class="arch-layer glass rounded-xl p-4 border-l-4 border-blue-500 cursor-pointer" onclick="highlightLayer('frontend')">
+          <div class="flex items-center">
+            <i class="ph ph-code text-blue-400 mr-2 text-xl"></i>
+            <h3 class="font-bold">声明式 UI 前端</h3>
+          </div>
+          <p class="mt-2 text-sm text-slate-300">提供 UI 开发范式基础语言规范、内置组件和状态管理机制。</p>
+        </div>
+        <div class="arch-layer glass rounded-xl p-4 border-l-4 border-cyan-500 cursor-pointer" onclick="highlightLayer('runtime')">
+          <div class="flex items-center">
+            <i class="ph ph-cpu text-cyan-400 mr-2 text-xl"></i>
+            <h3 class="font-bold">语言运行时</h3>
+          </div>
+          <p class="mt-2 text-sm text-slate-300">方舟语言运行时，支持语法解析、跨语言调用和高性能 TS 环境。</p>
+        </div>
+        <div class="arch-layer glass rounded-xl p-4 border-l-4 border-violet-500 cursor-pointer" onclick="highlightLayer('backend')">
+          <div class="flex items-center">
+            <i class="ph ph-gear text-violet-400 mr-2 text-xl"></i>
+            <h3 class="font-bold">声明式 UI 后端引擎</h3>
+          </div>
+          <p class="mt-2 text-sm text-slate-300">兼容多范式的 UI 渲染管线，提供布局、动效和绘制能力。</p>
+        </div>
+        <div class="arch-layer glass rounded-xl p-4 border-l-4 border-green-500 cursor-pointer" onclick="highlightLayer('render')">
+          <div class="flex items-center">
+            <i class="ph ph-palette text-green-400 mr-2 text-xl"></i>
+            <h3 class="font-bold">渲染引擎</h3>
+          </div>
+          <p class="mt-2 text-sm text-slate-300">高效绘制能力，将渲染指令转化为屏幕输出。</p>
+        </div>
+        <div class="arch-layer glass rounded-xl p-4 border-l-4 border-amber-500 cursor-pointer" onclick="highlightLayer('platform')">
+          <div class="flex items-center">
+            <i class="ph ph-plug text-amber-400 mr-2 text-xl"></i>
+            <h3 class="font-bold">平台适配层</h3>
+          </div>
+          <p class="mt-2 text-sm text-slate-300">抽象系统接口，支持接入不同系统如渲染管线和生命周期调度。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右侧：子系统概览 -->
+    <section class="glass rounded-2xl p-6">
+      <h2 class="text-2xl font-semibold section-title">核心子系统概览</h2>
+      <p class="mt-2 text-sm text-slate-400">OpenHarmony 系统的主要功能模块</p>
+      <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>分布式软总线</span>
+        </div>
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>DFX 子系统</span>
+        </div>
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>研发工具链</span>
+        </div>
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>图形子系统</span>
+        </div>
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>DeviceProfile</span>
+        </div>
+        <div class="glass rounded-xl p-4 hover:glow cursor-pointer flex items-center">
+          <span class="pulse-dot mr-3"></span>
+          <span>输入法框架</span>
+        </div>
+      </div>
+
+      <!-- 图形子系统目录 -->
+      <div class="mt-8">
+        <h3 class="font-bold text-lg flex items-center">
+          <i class="ph ph-folder-open mr-2 text-amber-400"></i> 图形子系统目录结构
+        </h3>
+        <pre class="mt-2 p-4 bg-slate-800 rounded-lg text-sm overflow-x-auto font-mono text-cyan-300">
+foundation/graphic/standard/
+├── frameworks
+│   ├── animation_server
+│   ├── bootanimation
+│   ├── dumper
+│   ├── fence
+│   ├── surface
+│   ├── vsync
+├── rosen
+│   ├── build
+│   ├── doc
+│   ├── include
+│   ├── lib
+│   ├── modules
+│   ├── samples
+│   ├── test
+│   ├── tools
+├── interfaces
+│   ├── innerkits
+│   └── kits
+└── utils
+        </pre>
+      </div>
+    </section>
+
+    <!-- 底部：CPU 架构支持表格 -->
+    <section class="lg:col-span-2 glass rounded-2xl p-6 mt-8">
+      <h2 class="text-2xl font-semibold section-title">CPU 架构支持</h2>
+      <p class="mt-2 text-sm text-slate-400">OpenHarmony 对不同 CPU 架构的支持情况</p>
+      <div class="mt-6 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-700">
+              <th class="py-3 px-4 text-left">规则</th>
+              <th class="py-3 px-4 text-left">通用体系架构层</th>
+              <th class="py-3 px-4 text-left">特定体系架构层</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4">头文件位置</td>
+              <td class="py-3 px-4">arch/include</td>
+              <td class="py-3 px-4">arch/&lt;arch&gt;/&lt;arch&gt;/&lt;toolchain&gt;/</td>
+            </tr>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4">头文件命名</td>
+              <td class="py-3 px-4">los_&lt;function&gt;.h</td>
+              <td class="py-3 px-4">los_arch_&lt;function&gt;.h</td>
+            </tr>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4">函数命名</td>
+              <td class="py-3 px-4">Halxxxx</td>
+              <td class="py-3 px-4">Halxxxx</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="mt-8 font-bold text-lg">已支持的架构</h3>
+      <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="glass rounded-lg p-4 text-center">
+          <i class="ph ph-cpu text-blue-400 text-2xl mb-2"></i>
+          <p>ARM Cortex-M3</p>
+        </div>
+        <div class="glass rounded-lg p-4 text-center">
+          <i class="ph ph-cpu text-blue-400 text-2xl mb-2"></i>
+          <p>ARM Cortex-M4</p>
+        </div>
+        <div class="glass rounded-lg p-4 text-center">
+          <i class="ph ph-cpu text-blue-400 text-2xl mb-2"></i>
+          <p>RISC-V</p>
+        </div>
+        <div class="glass rounded-lg p-4 text-center">
+          <i class="ph ph-cpu text-blue-400 text-2xl mb-2"></i>
+          <p>Xtensa LX6</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function highlightLayer(layer) {
+      alert(`你点击了: ${layer}`);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007acc;
+      --oh-cyan: #00c8ff;
+      --oh-violet: #a166ff;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer-card {
+      transition: all 0.4s ease;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    .layer-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0, 200, 255, 0.4);
+    }
+    .layer-icon {
+      font-size: 2rem;
+      color: var(--oh-cyan);
+    }
+    .subsystem-list {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.5s ease-out;
+    }
+    .subsystem-list.open {
+      max-height: 500px;
+    }
+    .glow {
+      text-shadow: 0 0 8px var(--oh-cyan);
+    }
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0, 200, 255, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 200, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 200, 255, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-3xl md:text-5xl font-bold mb-4 glow">OpenHarmony 技术架构</h1>
+      <p class="text-lg text-slate-300">分层设计 · 组件化 · 多设备适配</p>
+    </header>
+
+    <!-- Hero Image Section -->
+    <section class="mb-16 glass rounded-xl p-4 flex justify-center items-center">
+      <div class="relative w-full max-w-4xl">
+        <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="OpenHarmony 架构图" class="w-full h-auto rounded-lg shadow-2xl" />
+        <div class="absolute inset-0 rounded-lg border-2 border-cyan-500/30 pointer-events-none"></div>
+      </div>
+    </section>
+
+    <!-- Layer Stack -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 text-center">分层架构详解</h2>
+      <div class="space-y-6">
+        <!-- Layer 1: 内核层 -->
+        <div class="layer-card glass rounded-xl p-6 cursor-pointer" onclick="toggleSubsystems('kernel-subsystems')">
+          <div class="flex items-start">
+            <i class="layer-icon ph ph-cpu mr-4 mt-1"></i>
+            <div>
+              <h3 class="text-xl font-bold">内核层 (Kernel Layer)</h3>
+              <p class="text-slate-300 mt-2">提供基础系统能力，支持多内核设计和统一驱动框架。</p>
+              <div id="kernel-subsystems" class="subsystem-list mt-4">
+                <ul class="list-disc pl-5 space-y-2 text-sm text-slate-400">
+                  <li><strong>内核子系统</strong>: 多内核（Linux / LiteOS）设计，通过KAL屏蔽差异。</li>
+                  <li><strong>驱动子系统</strong>: 驱动框架(HDF)提供统一外设访问能力。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 2: 系统服务层 -->
+        <div class="layer-card glass rounded-xl p-6 cursor-pointer" onclick="toggleSubsystems('service-subsystems')">
+          <div class="flex items-start">
+            <i class="layer-icon ph ph-cube mr-4 mt-1"></i>
+            <div>
+              <h3 class="text-xl font-bold">系统服务层 (System Service Layer)</h3>
+              <p class="text-slate-300 mt-2">核心能力集合，支持分布式、图形、安全、AI等。</p>
+              <div id="service-subsystems" class="subsystem-list mt-4">
+                <ul class="list-disc pl-5 space-y-2 text-sm text-slate-400">
+                  <li><strong>系统基本能力子系统集</strong>: 分布式软总线、数据管理、任务调度等。</li>
+                  <li><strong>基础软件服务子系统集</strong>: 事件通知、电话、多媒体、DFX等。</li>
+                  <li><strong>增强软件服务子系统集</strong>: 智慧屏、穿戴、IoT专有业务等。</li>
+                  <li><strong>硬件服务子系统集</strong>: 位置服务、用户IAM、穿戴/IoT硬件服务等。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 3: 框架层 -->
+        <div class="layer-card glass rounded-xl p-6 cursor-pointer" onclick="toggleSubsystems('framework-subsystems')">
+          <div class="flex items-start">
+            <i class="layer-icon ph ph-brackets-curly mr-4 mt-1"></i>
+            <div>
+              <h3 class="text-xl font-bold">框架层 (Framework Layer)</h3>
+              <p class="text-slate-300 mt-2">提供多语言框架、Ability框架和UI框架(ArkUI)。</p>
+              <div id="framework-subsystems" class="subsystem-list mt-4">
+                <ul class="list-disc pl-5 space-y-2 text-sm text-slate-400">
+                  <li><strong>用户程序框架</strong>: C/C++/JS多语言支持</li>
+                  <li><strong>Ability框架</strong>: Feature Ability (FA) 和 Particle Ability (PA)</li>
+                  <li><strong>ArkUI框架</strong>: 适用于JS的声明式UI框架</li>
+                  <li><strong>多语言API框架</strong>: 对外提供统一接口</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 4: 应用层 -->
+        <div class="layer-card glass rounded-xl p-6 cursor-pointer" onclick="toggleSubsystems('app-subsystems')">
+          <div class="flex items-start">
+            <i class="layer-icon ph ph-app-window mr-4 mt-1"></i>
+            <div>
+              <h3 class="text-xl font-bold">应用层 (Application Layer)</h3>
+              <p class="text-slate-300 mt-2">由系统应用和第三方应用组成，支持跨设备调度。</p>
+              <div id="app-subsystems" class="subsystem-list mt-4">
+                <ul class="list-disc pl-5 space-y-2 text-sm text-slate-400">
+                  <li><strong>Feature Ability (FA)</strong>: 有UI界面，提供交互能力</li>
+                  <li><strong>Particle Ability (PA)</strong>: 无UI界面，提供后台任务和数据访问</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Types -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 text-center">系统类型</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass rounded-xl p-6 text-center pulse">
+          <i class="text-4xl ph ph-chip"></i>
+          <h3 class="text-lg font-bold mt-4">轻量系统</h3>
+          <p class="text-sm text-slate-300 mt-2">MCU类处理器，128KiB内存，适用于连接模组、传感器等。</p>
+        </div>
+        <div class="glass rounded-xl p-6 text-center pulse">
+          <i class="text-4xl ph ph-video-camera"></i>
+          <h3 class="text-lg font-bold mt-4">小型系统</h3>
+          <p class="text-sm text-slate-300 mt-2">应用处理器，1MiB内存，支持IP Camera、路由器等。</p>
+        </div>
+        <div class="glass rounded-xl p-6 text-center pulse">
+          <i class="text-4xl ph ph-monitor"></i>
+          <h3 class="text-lg font-bold mt-4">标准系统</h3>
+          <p class="text-sm text-slate-300 mt-2">应用处理器，128MiB内存，支持高端显示设备。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-500 text-sm py-6 border-t border-slate-800">
+      <p>OpenHarmony © 2025 | 基于上下文生成的交互式技术架构视图</p>
+    </footer>
+  </div>
+
+  <script>
+    function toggleSubsystems(id) {
+      const element = document.getElementById(id);
+      element.classList.toggle('open');
+    }
+
+    // Auto-open first subsystem on load
+    window.onload = () => {
+      document.getElementById('kernel-subsystems').classList.add('open');
+    };
+  </script>
+</body>
+</html>

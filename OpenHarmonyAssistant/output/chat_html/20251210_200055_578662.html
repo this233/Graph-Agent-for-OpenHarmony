@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenHarmony 技术架构交互式解析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root {
+            --oh-blue: #0077ED;
+            --oh-cyan: #00D8FF;
+            --oh-violet: #8A2BE2;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: #f1f5f9;
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .layer-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .layer-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+        }
+        .active-layer {
+            border-left: 4px solid var(--oh-cyan);
+            background: rgba(0, 216, 255, 0.1);
+        }
+        .architecture-diagram {
+            background: url('https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png') center/contain no-repeat;
+            min-height: 400px;
+        }
+        .kernel-diagram {
+            background: url('https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/1_zh-cn_image_0000001128794202.png') center/contain no-repeat;
+            min-height: 200px;
+        }
+        .highlight {
+            color: var(--oh-cyan);
+            font-weight: 600;
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 216, 255, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 216, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 216, 255, 0); }
+        }
+        .glow {
+            text-shadow: 0 0 8px rgba(0, 216, 255, 0.7);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-12 mt-6">
+            <h1 class="text-3xl md:text-5xl font-bold mb-4 glow">OpenHarmony 技术架构深度解析</h1>
+            <p class="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto">
+                探索 OpenHarmony 分层架构、多内核设计与分布式能力的核心技术
+            </p>
+        </header>
+
+        <!-- Interactive Architecture Diagram -->
+        <section class="mb-16 glass rounded-2xl p-6">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <i class="ph ph-stack text-oh-cyan mr-2"></i> 分层架构总览
+            </h2>
+            <div class="architecture-diagram rounded-xl mb-6 border border-white/10"></div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+                <div class="layer-card glass rounded-xl p-5 active-layer" data-layer="kernel">
+                    <div class="flex items-center mb-3">
+                        <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                        <h3 class="text-xl font-bold">内核层</h3>
+                    </div>
+                    <p class="text-slate-300 text-sm">多内核支持、KAL抽象层、HDF驱动框架</p>
+                </div>
+                <div class="layer-card glass rounded-xl p-5" data-layer="system">
+                    <div class="flex items-center mb-3">
+                        <div class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+                        <h3 class="text-xl font-bold">系统服务层</h3>
+                    </div>
+                    <p class="text-slate-300 text-sm">分布式能力、基础服务、硬件服务</p>
+                </div>
+                <div class="layer-card glass rounded-xl p-5" data-layer="framework">
+                    <div class="flex items-center mb-3">
+                        <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                        <h3 class="text-xl font-bold">框架层</h3>
+                    </div>
+                    <p class="text-slate-300 text-sm">应用框架、UI框架、API接口</p>
+                </div>
+                <div class="layer-card glass rounded-xl p-5" data-layer="app">
+                    <div class="flex items-center mb-3">
+                        <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                        <h3 class="text-xl font-bold">应用层</h3>
+                    </div>
+                    <p class="text-slate-300 text-sm">系统应用、第三方应用、FA/PA模型</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Layer Details -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-cpu text-oh-cyan mr-2"></i> 架构详解
+            </h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Kernel Layer -->
+                <div class="glass rounded-2xl p-6 lg:col-span-2">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="ph ph-chip text-red-400 mr-2"></i> 内核层 (Kernel Layer)
+                    </h3>
+                    <p class="mb-4 text-slate-300">
+                        OpenHarmony 内核层采用 <span class="highlight">多内核设计</span>，支持 <span class="highlight">Linux 内核</span> 和 
+                        <span class="highlight">LiteOS 内核</span>。通过 <span class="highlight">内核抽象层 (KAL)</span> 屏蔽内核差异，
+                        提供统一的进程管理、内存管理等基础能力。
+                    </p>
+                    
+                    <div class="kernel-diagram rounded-xl mb-4 border border-white/10"></div>
+                    
+                    <h4 class="font-bold mt-4 mb-2">驱动框架 (HDF)</h4>
+                    <p class="text-slate-300">
+                        HDF 提供统一外设访问能力和驱动开发、管理框架，实现硬件生态开放。
+                    </p>
+                </div>
+                
+                <!-- System Services -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="ph ph-shuffle-angular text-yellow-400 mr-2"></i> 系统服务层
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+                            <span><span class="highlight">系统基本能力</span>：分布式软总线、数据管理、任务调度</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+                            <span><span class="highlight">基础软件服务</span>：事件通知、电话、多媒体</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+                            <span><span class="highlight">增强软件服务</span>：智慧屏、穿戴、IoT专有业务</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+                            <span><span class="highlight">硬件服务</span>：位置服务、用户IAM、专有硬件服务</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- Framework & App -->
+                <div class="glass rounded-2xl p-6 lg:col-span-2">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="ph ph-code-simple text-green-400 mr-2"></i> 框架层 & 应用层
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="font-bold mb-2">框架层</h4>
+                            <ul class="space-y-2 text-slate-300">
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> C/C++/JS 多语言框架</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> Ability 框架</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> ArkUI 框架 (JS)</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> 多语言 API 接口</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="font-bold mb-2">应用层</h4>
+                            <ul class="space-y-2 text-slate-300">
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> 系统应用</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> 第三方应用</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> FA (Feature Ability) - 有UI</li>
+                                <li class="flex items-center"><i class="ph ph-dot text-oh-cyan"></i> PA (Particle Ability) - 无UI</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Deployment -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="ph ph-device-mobile-camera text-blue-400 mr-2"></i> 系统类型与部署
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="p-3 rounded-lg bg-slate-800/50">
+                            <h4 class="font-bold text-oh-cyan">轻量系统</h4>
+                            <p class="text-sm text-slate-300">MCU类处理器，≥128KiB内存</p>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-800/50">
+                            <h4 class="font-bold text-oh-cyan">小型系统</h4>
+                            <p class="text-sm text-slate-300">应用处理器，≥1MiB内存</p>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-800/50">
+                            <h4 class="font-bold text-oh-cyan">标准系统</h4>
+                            <p class="text-sm text-slate-300">应用处理器，≥128MiB内存</p>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-sm text-slate-300">
+                        通过 <span class="highlight">组件化设计</span> 和 <span class="highlight">弹性部署</span>，
+                        支持从百KiB到GiB级别的RAM设备。
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Features -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-lightning text-oh-cyan mr-2"></i> 核心特性
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass rounded-2xl p-5 text-center pulse">
+                    <div class="text-3xl mb-3">🔗</div>
+                    <h3 class="font-bold mb-2">分布式软总线</h3>
+                    <p class="text-sm text-slate-300">设备间无缝互联与通信</p>
+                </div>
+                <div class="glass rounded-2xl p-5 text-center pulse">
+                    <div class="text-3xl mb-3">💾</div>
+                    <h3 class="font-bold mb-2">分布式数据管理</h3>
+                    <p class="text-sm text-slate-300">跨设备数据同步与访问</p>
+                </div>
+                <div class="glass rounded-2xl p-5 text-center pulse">
+                    <div class="text-3xl mb-3">🔄</div>
+                    <h3 class="font-bold mb-2">分布式任务调度</h3>
+                    <p class="text-sm text-slate-300">跨设备任务协同执行</p>
+                </div>
+                <div class="glass rounded-2xl p-5 text-center pulse">
+                    <div class="text-3xl mb-3">🧩</div>
+                    <h3 class="font-bold mb-2">组件化架构</h3>
+                    <p class="text-sm text-slate-300">按需裁剪，弹性部署</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center text-slate-400 text-sm py-8 border-t border-white/10">
+            <p>OpenHarmony 技术架构交互式解析 | 基于官方文档构建</p>
+            <p class="mt-2">探索更多：<a href="https://gitee.com/openharmony" class="text-oh-cyan hover:underline">OpenHarmony 官方仓库</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Layer selection interaction
+        document.querySelectorAll('.layer-card').forEach(card => {
+            card.addEventListener('click', function() {
+                // Remove active class from all cards
+                document.querySelectorAll('.layer-card').forEach(c => {
+                    c.classList.remove('active-layer');
+                });
+                
+                // Add active class to clicked card
+                this.classList.add('active-layer');
+                
+                // In a full implementation, this would load detailed content
+                // For this demo, we just highlight the selection
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer {
+      transition: all 0.4s ease;
+    }
+    .layer:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    }
+    .highlight {
+      background: rgba(99, 102, 241, 0.2);
+      border-left: 3px solid #6366f1;
+    }
+    .code-block {
+      font-family: 'Fira Code', monospace;
+      background: #1e293b;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-violet-500">
+        OpenHarmony 技术架构
+      </h1>
+      <p class="mt-2 text-slate-400">分层设计，模块化构建，赋能万物互联</p>
+    </header>
+
+    <!-- 架构图展示 -->
+    <div class="glass rounded-xl p-6 mb-12 shadow-2xl">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-cpu text-violet-400 mr-2"></i> 架构总览
+      </h2>
+      <div class="flex justify-center">
+        <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="OpenHarmony 架构图" class="rounded-lg shadow-lg max-w-full h-auto">
+      </div>
+    </div>
+
+    <!-- 分层介绍 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+      <!-- 内核层 -->
+      <div class="glass rounded-xl p-6 layer shadow-2xl">
+        <h2 class="text-2xl font-semibold mb-4 flex items-center">
+          <i class="ph ph-gear text-cyan-400 mr-2"></i> 内核层 (Kernel Layer)
+        </h2>
+        <ul class="space-y-3">
+          <li class="p-3 rounded-lg hover:highlight transition-all">
+            <span class="font-semibold text-cyan-300">内核子系统</span>
+            <p class="text-sm text-slate-300 mt-1">采用多内核设计，支持 Linux 内核或 LiteOS，提供基础的进程管理、内存管理等核心能力。</p>
+          </li>
+          <li class="p-3 rounded-lg hover:highlight transition-all">
+            <span class="font-semibold text-cyan-300">驱动子系统</span>
+            <p class="text-sm text-slate-300 mt-1">基于 HDF (Hardware Driver Foundation) 驱动框架，实现硬件生态的开放与统一。</p>
+          </li>
+        </ul>
+      </div>
+
+      <!-- 框架层 -->
+      <div class="glass rounded-xl p-6 layer shadow-2xl">
+        <h2 class="text-2xl font-semibold mb-4 flex items-center">
+          <i class="ph ph-code text-violet-400 mr-2"></i> 框架层 (Framework Layer)
+        </h2>
+        <ul class="space-y-3">
+          <li class="p-3 rounded-lg hover:highlight transition-all">
+            <span class="font-semibold text-violet-300">Ability 框架</span>
+            <p class="text-sm text-slate-300 mt-1">为应用开发提供组件模型，支持 Page、Service、Data 等多种 Ability 类型。</p>
+          </li>
+          <li class="p-3 rounded-lg hover:highlight transition-all">
+            <span class="font-semibold text-violet-300">ArkUI 框架</span>
+            <p class="text-sm text-slate-300 mt-1">面向 JS/TS 开发者的声明式 UI 框架，支持构建高性能、高流畅的用户界面。</p>
+          </li>
+          <li class="p-3 rounded-lg hover:highlight transition-all">
+            <span class="font-semibold text-violet-300">多语言 API</span>
+            <p class="text-sm text-slate-300 mt-1">提供 C/C++/JS 等多语言的系统服务接口，方便开发者调用底层能力。</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 交互式代码示例 -->
+    <div class="glass rounded-xl p-6 mb-12 shadow-2xl">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-code-simple text-amber-400 mr-2"></i> ArkTS 示例：Hello World
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h3 class="font-medium text-slate-300 mb-2">代码</h3>
+          <div class="code-block">
+            <pre><code>@Component
+struct Index {
+  @State message: string = 'Hello World'
+
+  build() {
+    Column() {
+      Text(this.message)
+        .fontSize(24)
+        .onClick(() => {
+          this.message = 'Hello OpenHarmony!'
+        })
+    }
+    .width('100%')
+    .height('100%')
+  }
+}</code></pre>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-medium text-slate-300 mb-2">模拟器</h3>
+          <div class="bg-slate-800 border border-slate-700 rounded-xl h-64 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMxZTI5M2IiLz48Y2lyY2xlIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjEwIiBmaWxsPSIjNjM2NmYxIiBmaWxsLW9wYWNpdHk9IjAuMiIvPjwvc3ZnPg==')] opacity-20"></div>
+            <div id="simulator-text" class="text-2xl font-semibold text-center z-10 cursor-pointer transition-transform duration-300 hover:scale-105" onclick="changeText()">
+              Hello World
+            </div>
+            <div class="absolute bottom-4 text-xs text-slate-500">点击文字切换内容</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 系统服务层 -->
+    <div class="glass rounded-xl p-6 mb-12 shadow-2xl">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-plug text-emerald-400 mr-2"></i> 系统服务层 (System Service Layer)
+      </h2>
+      <div class="flex flex-wrap gap-4">
+        <span class="px-4 py-2 bg-slate-800 rounded-full text-sm">分布式软总线</span>
+        <span class="px-4 py-2 bg-slate-800 rounded-full text-sm">分布式数据管理</span>
+        <span class="px-4 py-2 bg-slate-800 rounded-full text-sm">分布式任务调度</span>
+        <span class="px-4 py-2 bg-slate-800 rounded-full text-sm">统一用户认证</span>
+      </div>
+      <p class="mt-4 text-slate-300">
+        系统服务层是 OpenHarmony 的核心能力集合，为上层应用提供分布式、安全、一致的系统服务。
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function changeText() {
+      const el = document.getElementById('simulator-text');
+      if (el.textContent === 'Hello World') {
+        el.textContent = 'Hello OpenHarmony!';
+        el.classList.add('text-violet-400');
+      } else {
+        el.textContent = 'Hello World';
+        el.classList.remove('text-violet-400');
+      }
+    }
+  </script>
+</body>
+</html>

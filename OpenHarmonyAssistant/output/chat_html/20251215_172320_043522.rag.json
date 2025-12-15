@@ -1,0 +1,296 @@
+{
+  "query": "详细讲一下系统类型与部署",
+  "chunks": {
+    "ids": [
+      "chunk-090aa1156a376b1b0a66ec331d76b8ea",
+      "chunk-684fc973e2c70224a5a61489fa556cca",
+      "chunk-5bfa858f9b22c1c9fcee16e6ec92fb7c",
+      "chunk-434e807902b097dd4520d4285360c349",
+      "chunk-359fbf44eece16380cf39125256c764b",
+      "chunk-97e82fa81973fcc540b0283266c1ab93",
+      "chunk-44e24013e6b937bc87af6a99248022c0",
+      "chunk-c1f6f4e50e62f5d2012e033631fa0d99",
+      "chunk-2040f586c249d6da8bd8ddd706f4d0bb",
+      "chunk-6adb50c03c1a989c6073613c20c7cb0b"
+    ],
+    "contents": [
+      "# 1 OpenHarmony开源项目  \n## 1.4 系统类型  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。",
+      "# 1 术语  \n## 1.10 S  \n- ### Service widget；服务卡片  \n将用户应用程序的重要信息以服务卡片的形式展示在桌面，用户可通过快捷手势使用卡片，以达到服务直达、减少层级跳转的目的。  \n- ### Stage模型  \nAPI version 9开始新增的应用模型，提供UIAbility、ExtensionAbility两大类应用组件。由于该模型还提供了AbilityStage、WindowStage等类作为应用组件和Window窗口的“舞台”，因此称之为Stage模型。  \n- ### Super virtual device；超级虚拟终端  \n亦称超级终端，通过分布式技术将多个终端的能力进行整合，存放在一个虚拟的硬件资源池里，根据业务需要统一管理和调度终端能力，来对外提供服务。  \n- ### System Capability (SysCap)；系统能力  \n不同值用于指代OpenHarmony中各个相对独立的特性/系统能力，如蓝牙、Wi-Fi、NFC等。每个特性/系统能力对应多个API，每个API定义上包含了相应的SysCap标签。  \n- ### System Type；系统类型\n- Mini System，轻量系统：面向MCU（Microcontroller Unit，微控制单元）类处理器，例如ARM Cortex-M、RISC-V 32位的设备，资源极其有限，参考内存≥128KiB，提供丰富的近距连接能力以及丰富的外设总线访问能力。典型产品有智能家居领域的联接类模组、传感器设备等。\n- Small System，小型系统：面向应用处理器，例如Arm Cortex-A的设备，参考内存≥1MiB，提供更高的安全能力，提供标准的图形框架，提供视频编解码的多媒体能力。典型产品有智能家居领域的IPCamera、电子猫眼、路由器以及智慧出行域的行车记录仪等。\n- Standard System，标准系统：面向应用处理器，例如Arm Cortex-A的设备，参考内存≥128MiB，提供增强的交互能力，提供3D GPU以及硬件合成能力，提供更多控件以及动效更丰富的图形能力，提供完整的应用框架。典型产品有高端的冰箱显示屏等。",
+      "# 1 XTS测评用例开发指导  \n## 1.2 系统类型  \n支持如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。",
+      "# 1 XTS子系统<a name=\"ZH-CN_TOPIC_0000001117409671\"></a>  \n## 1.2 系统类型<a name=\"section125090457443\"></a>  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。典型的开发板型号是Multi-modalV200Z-R。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。典型的开发板型号是Hispark_Taurus。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。典型的开发板型号是润和DAYU200。",
+      "# 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a>  \n## 1.1 系统类型  \n在正式学习OpenHarmony开发前，开发者需要先了解系统类型，方便后续根据自身业务匹配对应的系统及对应文档资源。  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \n为了保证在不同硬件上集成的易用性，OpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n-   轻量系统（mini system）  \n面向MCU类处理器，例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony也提供了一系列可选的系统组件，方便设备开发者按需配置，以支撑其特色功能的扩展或定制开发。系统将这些可选的系统组件组合为一系列描述为特性或功能的系统能力，以方便设备开发者理解和选择。",
+      "# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |",
+      "# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>",
+      "# 1 编译构建指导  \n## 1.1 概述  \n### 1.1.1 适用范围  \n本指导适用于轻量、小型、标准三种系统。[芯片解决方案配置规则](subsys-build-chip_solution.md#芯片解决方案配置规则)与[新增并编译芯片解决方案](subsys-build-chip_solution.md#新增并编译芯片解决方案)主要和轻量系统、小型系统相关，其他内容都是通用的。",
+      "# 1 OpenHarmony部件设计和开发指南  \n## 1.2 部件设计  \n### 1.2.1 划分原则  \n当开发一个新的功能时，应该新增部件还是模块？如果是系统非必选的功能、有可裁剪的产品化诉求，则需独立为部件。并且需要满足如下要求：  \n- 具备独立的代码目录，可独立编译出库或可执行文件。\n- 小型和标准系统中具备独立部署的能力，非必选的功能被裁剪后不会导致系统异常。\n- 可独立测试和验证。",
+      "# 1 沙盒管理  \n## 1.1 概述  \n### 1.1.3 约束与限制  \n仅标准系统下使用。"
+    ],
+    "metadata": [
+      {
+        "id": "chunk-090aa1156a376b1b0a66ec331d76b8ea",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony系统分为三种类型：轻量系统面向MCU处理器，内存128KiB起，适用于智能家居传感器等简单设备；小型系统面向Cortex-A处理器，内存1MiB起，支持图形框架和多媒体，适用于IP摄像头等产品；标准系统同样面向Cortex-A处理器，内存128MiB起，具备完整应用框架和3D图形能力，适用于高端显示屏设备。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.4 系统类型"
+      },
+      {
+        "id": "chunk-684fc973e2c70224a5a61489fa556cca",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/glossary.md",
+        "summary": "本文档定义了OpenHarmony系统的关键术语：服务卡片用于桌面信息展示与快捷操作；Stage模型是API 9新增的应用模型，提供UIAbility等组件；超级虚拟终端通过分布式技术整合多终端能力；系统能力（SysCap）标识独立特性如蓝牙、Wi-Fi；系统类型包括面向MCU的轻量系统（内存≥128KiB）、面向应用处理器的小型系统（内存≥1MiB）和标准系统（内存≥128MiB），分别适用于不同硬件配置和功能需求的设备。",
+        "breadcrumb": "1 术语 > 1.10 S"
+      },
+      {
+        "id": "chunk-5bfa858f9b22c1c9fcee16e6ec92fb7c",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-test/xts.md",
+        "summary": "该文档定义了XTS测评的三种系统类型：轻量系统面向MCU处理器，适用于内存128KiB以上的物联网设备；小型系统面向应用处理器，支持1MiB内存，具备多媒体能力；标准系统面向高性能应用处理器，需128MiB内存，支持3D图形和完整应用框架。分别对应不同层级的智能设备需求。",
+        "breadcrumb": "1 XTS测评用例开发指导 > 1.2 系统类型"
+      },
+      {
+        "id": "chunk-434e807902b097dd4520d4285360c349",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/XTS子系统.md",
+        "summary": "OpenHarmony系统支持三种类型：轻量系统面向MCU处理器，适用于内存128KiB以上的传感器、穿戴设备等；小型系统面向Cortex-A处理器，支持1MiB以上内存，用于IP Camera、路由器等；标准系统面向Cortex-A处理器，支持128MiB以上内存，提供完整应用框架，适用于高端冰箱显示屏等。",
+        "breadcrumb": "1 XTS子系统<a name=\"ZH-CN_TOPIC_0000001117409671\"></a> > 1.2 系统类型<a name=\"section125090457443\"></a>"
+      },
+      {
+        "id": "chunk-359fbf44eece16380cf39125256c764b",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-dev-guide.md",
+        "summary": "OpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持从128KiB到xGiB内存的设备运行。系统定义了三种基础类型：轻量系统（面向MCU处理器，内存≥128KiB，适用于传感器、穿戴设备）、小型系统（面向应用处理器，内存≥1MiB，适用于IP Camera、路由器）和标准系统（面向应用处理器，内存≥128MiB，适用于高端冰箱显示屏）。开发者可根据硬件能力选择系统组件进行集成，并支持可选组件扩展功能。",
+        "breadcrumb": "1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a> > 1.1 系统类型"
+      },
+      {
+        "id": "chunk-97e82fa81973fcc540b0283266c1ab93",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony根据设备能力划分为三类系统：轻量系统面向MCU处理器，适用于内存128KiB的物联网设备；小型系统面向应用处理器，支持1MiB内存，具备多媒体功能；标准系统面向高性能应用处理器，需128MiB内存，支持丰富图形和完整应用框架。内核适配方面，LiteOS-M用于轻量系统，LiteOS-A和Linux用于小型系统，标准系统仅支持Linux内核。",
+        "breadcrumb": "1 内核概述 > 1.4 不同内核适配的系统及设备类型"
+      },
+      {
+        "id": "chunk-44e24013e6b937bc87af6a99248022c0",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md",
+        "summary": "OpenHarmony根据系统级别采用不同内核：轻量系统和小型系统使用LiteOS，小型系统和标准系统使用Linux。LiteOS适用于轻量系统和小型系统，Linux适用于小型系统和标准系统。",
+        "breadcrumb": "1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>"
+      },
+      {
+        "id": "chunk-c1f6f4e50e62f5d2012e033631fa0d99",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-build-all.md",
+        "summary": "本文档提供OpenHarmony轻量、小型、标准三种系统的编译构建指导。其中芯片解决方案配置规则及新增编译方法主要针对轻量系统和小型系统，其余内容适用于所有系统类型。",
+        "breadcrumb": "1 编译构建指导 > 1.1 概述 > 1.1.1 适用范围"
+      },
+      {
+        "id": "chunk-2040f586c249d6da8bd8ddd706f4d0bb",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/design/OpenHarmony部件设计和开发指南.md",
+        "summary": "本文档规定了OpenHarmony系统新增功能时的部件划分原则：系统非必选且需支持裁剪的功能应独立为部件，需满足独立代码目录、独立编译、裁剪后系统稳定、可独立测试等要求。",
+        "breadcrumb": "1 OpenHarmony部件设计和开发指南 > 1.2 部件设计 > 1.2.1 划分原则"
+      },
+      {
+        "id": "chunk-6adb50c03c1a989c6073613c20c7cb0b",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-boot-init-sandbox.md",
+        "summary": "本文档说明沙盒管理功能仅适用于标准系统环境，在其他系统类型下无法使用。",
+        "breadcrumb": "1 沙盒管理 > 1.1 概述 > 1.1.3 约束与限制"
+      }
+    ]
+  },
+  "codes": {
+    "ids": [
+      "code-ee5f5c1a7627e30e0bfc9a63183ccd28",
+      "code-65f495a1ed102af0454e06bfce9e20e4",
+      "code-efc866fb8b1edfc11abe90d9c4712081"
+    ],
+    "contents": [
+      "获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。",
+      "# 1 Docker编译环境  \n## 1.3 独立Docker环境  \n### 1.3.1 搭建Docker环境（轻量系统和小型系统）  \n1. 获取Docker镜像  \n获取小型系统镜像的命令为：  \n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n```\n获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。",
+      "│   │   │   ├── src         # 实现代码\n│   │   │   └── test        # 测试用例\n│   ├── interfaces          # 国际化框架接口\n│   │   ├── kits            # 应用接口\n│   │   │   ├── i18n        # C/C++国际化能力接口\n│   │   │   └── js          # JavaScript接口的C/C++支持\n├── resmgr_lite             # 资源管理框架代码仓\n│   ├── frameworks          # 资源管理框架核心代码\n│   │   ├── resmgr          # 资源解析核心代码\n│   │   │   ├── include     # 接口文件\n│   │   │   └── src         # 实现代码\n│   ├── interfaces          # 资源管理框架接口\n│   │   └── innerkits       # 资源管理框架对子系统间接口\n```  \n标准系统的目录结构如下所示：  \n```\n/base/global\n├── i18n           # 国际化框架代码仓\n│   ├── frameworks          # 国际化框架核心代码\n│   ├── interfaces          # 国际化框架接口\n│   │   ├── js              # 国际化框架JavaScript接口\n│   │   └── native          # 国际化框架native接口\n├── resmgr_standard         # 资源管理代码仓\n│   ├── frameworks          # 资源管理核心代码\n│   │   ├── resmgr          # 资源解析核心代码\n│   │   │   ├── include     # 资源管理头文件\n│   │   │   ├── src         # 资源管理实现代码\n│   │   │   └── test        # 资源管理测试代码\n│   ├── interfaces          # 资源管理接口\n│   │   ├── innerkits       # 资源管理对子系统间接口\n│   │   └── js              # 资源管理JavaScript接口\n```"
+    ],
+    "metadata": [
+      {
+        "id": "code-ee5f5c1a7627e30e0bfc9a63183ccd28",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md",
+        "summary": "本文档说明如何使用Docker获取OpenHarmony轻量系统镜像，并通过docker run命令在Ubuntu和Windows系统中创建交互式容器环境。该命令将本地代码目录映射到容器内，为OpenHarmony开发提供标准化的构建环境。",
+        "breadcrumb": "1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）"
+      },
+      {
+        "id": "code-65f495a1ed102af0454e06bfce9e20e4",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md",
+        "summary": "该文档说明如何搭建OpenHarmony的Docker编译环境，包括获取轻量系统和小型系统的Docker镜像，以及分别在Ubuntu和Windows系统中启动对应Docker容器并挂载源码目录的操作步骤。",
+        "breadcrumb": "1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）"
+      },
+      {
+        "id": "code-efc866fb8b1edfc11abe90d9c4712081",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/全球化子系统.md",
+        "summary": "该代码目录结构展示了两种系统版本（轻量/标准）的国际化(i18n)和资源管理(resmgr)框架实现。包含核心代码框架、接口定义（支持C/C++、JavaScript等语言）、测试用例及资源解析模块，用于提供系统国际化和资源管理的基础能力支持。",
+        "breadcrumb": "1 全球化子系统<a name=\"ZH-CN_TOPIC_0000001115837954\"></a> > 1.3 目录<a name=\"section161941989596\"></a>"
+      }
+    ]
+  },
+  "tables": {
+    "ids": [
+      "table-97e82fa81973fcc540b0283266c1ab93",
+      "table-ac2141f3a95786a32c7b065db13b03cc",
+      "table-894f4846c76bb6834ae567247f0adad7"
+    ],
+    "contents": [
+      "# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |",
+      "# 1 快速入门概述  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \nOpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n**表1** 基础类型系统简介  \n| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini&nbsp;system） | MCU类处理器（例如Arm&nbsp;Cortex-M、RISC-V&nbsp;32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP&nbsp;Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D&nbsp;GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |  \n本文通过介绍OpenHarmony系统的开发环境搭建、编译、烧录、调测以及运行“Hello World”等，引导开发者快速熟悉OpenHarmony设备开发的基本流程和方法。",
+      "## 1 概述  \n目前OpenHarmony已经成立了SIG组[sig_devboard](https://gitee.com/openharmony/community/blob/master/sig/sig_devboard/sig_devboard_cn.md)。该SIG组以支持更多第三方开发板为目标，提供开发板移植的支撑。  \n在了解开发板移植前，需要先了解一下OpenHarmony对设备的分类。不同设备类型的移植方法会有较大差异。  \n| 设备类型    | 硬件要求        | 支持的内核          |\n|---------|-------------|----------------|\n| 轻量系统类设备 | 内存>128KB    | LiteOS-M       |\n| 小型系统类设备 | 内存>1MB、有MMU | LiteOS-A、Linux |\n| 标准系统类设备 | 内存>128MB    |  Linux       |"
+    ],
+    "metadata": [
+      {
+        "id": "table-97e82fa81973fcc540b0283266c1ab93",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony系统根据设备资源分为轻量系统（MCU/128KiB内存）、小型系统（Cortex-A/1MiB内存）和标准系统（Cortex-A/128MiB内存），分别适配智能家居、影音设备和高端显示屏。内核支持方面：LiteOS-M仅支持轻量系统，LiteOS-A仅支持小型系统，Linux同时支持小型和标准系统。",
+        "breadcrumb": "1 内核概述 > 1.4 不同内核适配的系统及设备类型"
+      },
+      {
+        "id": "table-ac2141f3a95786a32c7b065db13b03cc",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md",
+        "summary": "OpenHarmony是一款开源分布式操作系统，支持三种基础系统类型：轻量系统（MCU处理器，128KiB内存，适用于传感器等设备）、小型系统（应用处理器，1MiB内存，适用于摄像头等）和标准系统（应用处理器，128MiB内存，适用于高端显示屏）。设备开发者可根据硬件能力选择组件进行集成。",
+        "breadcrumb": "1 快速入门概述"
+      },
+      {
+        "id": "table-894f4846c76bb6834ae567247f0adad7",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/Readme-CN.md",
+        "summary": "OpenHarmony针对不同设备类型设定硬件与内核要求：轻量系统（内存>128KB，LiteOS-M）、小型系统（内存>1MB，LiteOS-A/Linux）和标准系统（内存>128MB，Linux）。SIG_devboard致力于支持第三方开发板移植。",
+        "breadcrumb": "1 概述"
+      }
+    ]
+  },
+  "images": {
+    "ids": [
+      "image-41fbd488aa3f386486db562dc8de7a1e",
+      "image-d263ab2a1ff164ad2ede58ec9aa7e2a3",
+      "image-ab32d55c17c571a30a4e741a820062e2"
+    ],
+    "contents": [
+      "这张图片展示了Stage模型的应用组件结构，其中UIAbility和ExtensionAbility是主要的两类组件。ExtensionAbility进一步细分为ServiceExtensionAbility等子类，表明在Stage模型中，不同类型的组件可以共享同一个ArkTS引擎实例，从而实现组件间的对象和状态共享，减少内存占用，适用于分布式场景下的复杂应用开发。",
+      "这张图片展示了FA模型中的应用组件分类，具体包括PageAbility、ServiceAbility和DataAbility三种类型。每种组件独立存在，分别负责页面显示、服务提供和数据管理功能。这种设计使得每个应用组件都能独享一个ArkTS引擎实例，确保了组件之间的隔离性和独立性，适用于需要高度模块化和独立运行能力的应用场景。",
+      "这张图片展示了OpenHarmony部件化设计的核心理念，即通过将系统能力分解为独立的部件（如桌面、设置、内核等），每个部件具有独立的文件和目录，并在不同设备上实例化为相应的库或可执行文件。这些部件通过拼装和配置，能够灵活组合以适应各种设备需求，从而实现一套OS代码支持多种产品形态，解决硬件和产品碎片化问题，提升开发效率。"
+    ],
+    "metadata": [
+      {
+        "id": "image-41fbd488aa3f386486db562dc8de7a1e",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/application-dev/application-models/figures/stage-model-component.png",
+        "local_path": "/root/code/docs/zh-cn/application-dev/application-models/figures/stage-model-component.png",
+        "caption": "这张图片展示了Stage模型的应用组件结构，其中UIAbility和ExtensionAbility是主要的两类组件。ExtensionAbility进一步细分为ServiceExtensionAbility等子类，表明在Stage模型中，不同类型的组件可以共享同一个ArkTS引擎实例，从而实现组件间的对象和状态共享，减少内存占用，适用于分布式场景下的复杂应用开发。",
+        "md_file_path": "/root/code/docs/zh-cn/application-dev/application-models/application-models.md",
+        "parent_chunk_id": "chunk-77574264717970a9cd969ebd64f29204",
+        "breadcrumb": "1 应用模型 > 1.3 通过对比认识FA模型与Stage模型",
+        "width": 1016,
+        "height": 326,
+        "format": "PNG",
+        "file_size_kb": 11.4
+      },
+      {
+        "id": "image-d263ab2a1ff164ad2ede58ec9aa7e2a3",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/application-dev/application-models/figures/fa-model-component.png",
+        "local_path": "/root/code/docs/zh-cn/application-dev/application-models/figures/fa-model-component.png",
+        "caption": "这张图片展示了FA模型中的应用组件分类，具体包括PageAbility、ServiceAbility和DataAbility三种类型。每种组件独立存在，分别负责页面显示、服务提供和数据管理功能。这种设计使得每个应用组件都能独享一个ArkTS引擎实例，确保了组件之间的隔离性和独立性，适用于需要高度模块化和独立运行能力的应用场景。",
+        "md_file_path": "/root/code/docs/zh-cn/application-dev/application-models/application-models.md",
+        "parent_chunk_id": "chunk-77574264717970a9cd969ebd64f29204",
+        "breadcrumb": "1 应用模型 > 1.3 通过对比认识FA模型与Stage模型",
+        "width": 1016,
+        "height": 326,
+        "format": "PNG",
+        "file_size_kb": 8.81
+      },
+      {
+        "id": "image-ab32d55c17c571a30a4e741a820062e2",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/design/figures/Component-Definition.png",
+        "local_path": "/root/code/docs/zh-cn/design/figures/Component-Definition.png",
+        "caption": "这张图片展示了OpenHarmony部件化设计的核心理念，即通过将系统能力分解为独立的部件（如桌面、设置、内核等），每个部件具有独立的文件和目录，并在不同设备上实例化为相应的库或可执行文件。这些部件通过拼装和配置，能够灵活组合以适应各种设备需求，从而实现一套OS代码支持多种产品形态，解决硬件和产品碎片化问题，提升开发效率。",
+        "md_file_path": "/root/code/docs/zh-cn/design/OpenHarmony部件设计和开发指南.md",
+        "parent_chunk_id": "chunk-7fbfe1b6e54dd3dec215b3c7029adc2e",
+        "breadcrumb": "1 OpenHarmony部件设计和开发指南 > 1.1 基本概念 > 1.1.1 部件定义",
+        "width": 760,
+        "height": 459,
+        "format": "PNG",
+        "file_size_kb": 26.27
+      }
+    ]
+  },
+  "timing": {
+    "stage1_embedding": 0.0960688591003418,
+    "stage2_rerank": 21.294708013534546,
+    "stage3_spread": 8.000866413116455,
+    "stage4_final_rerank": 5.5462963581085205,
+    "total": 47.344544887542725,
+    "stage5_report": 12.406605243682861
+  },
+  "rag_context": "# 用户问题\n详细讲一下系统类型与部署\n\n# 相关段落（原文）\n\n## 段落 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-dev-guide.md`\n**定位：** 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a> > 1.1 系统类型\n\n# 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a>  \n## 1.1 系统类型  \n在正式学习OpenHarmony开发前，开发者需要先了解系统类型，方便后续根据自身业务匹配对应的系统及对应文档资源。  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \n为了保证在不同硬件上集成的易用性，OpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n-   轻量系统（mini system）  \n面向MCU类处理器，例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony也提供了一系列可选的系统组件，方便设备开发者按需配置，以支撑其特色功能的扩展或定制开发。系统将这些可选的系统组件组合为一系列描述为特性或功能的系统能力，以方便设备开发者理解和选择。\n\n## 段落 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n**定位：** 1 OpenHarmony开源项目 > 1.4 系统类型\n\n# 1 OpenHarmony开源项目  \n## 1.4 系统类型  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。\n\n## 段落 3\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-test/xts.md`\n**定位：** 1 XTS测评用例开发指导 > 1.2 系统类型\n\n# 1 XTS测评用例开发指导  \n## 1.2 系统类型  \n支持如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。\n\n## 段落 4\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表\n\n## 段落 5\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n**摘要：** OpenHarmony根据系统级别采用不同内核：轻量系统和小型系统使用LiteOS，小型系统和标准系统使用Linux。LiteOS适用于轻量系统和小型系统，Linux适用于小型系统和标准系统。\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborde\n\n...（中间内容过长已截断）...\n\n<a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 段落 6\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/design/OpenHarmony部件设计和开发指南.md`\n**定位：** 1 OpenHarmony部件设计和开发指南 > 1.2 部件设计 > 1.2.1 划分原则\n\n# 1 OpenHarmony部件设计和开发指南  \n## 1.2 部件设计  \n### 1.2.1 划分原则  \n当开发一个新的功能时，应该新增部件还是模块？如果是系统非必选的功能、有可裁剪的产品化诉求，则需独立为部件。并且需要满足如下要求：  \n- 具备独立的代码目录，可独立编译出库或可执行文件。\n- 小型和标准系统中具备独立部署的能力，非必选的功能被裁剪后不会导致系统异常。\n- 可独立测试和验证。\n\n## 段落 7\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-build-all.md`\n**定位：** 1 编译构建指导 > 1.1 概述 > 1.1.1 适用范围\n\n# 1 编译构建指导  \n## 1.1 概述  \n### 1.1.1 适用范围  \n本指导适用于轻量、小型、标准三种系统。[芯片解决方案配置规则](subsys-build-chip_solution.md#芯片解决方案配置规则)与[新增并编译芯片解决方案](subsys-build-chip_solution.md#新增并编译芯片解决方案)主要和轻量系统、小型系统相关，其他内容都是通用的。\n\n## 段落 8\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-boot-init-sandbox.md`\n**定位：** 1 沙盒管理 > 1.1 概述 > 1.1.3 约束与限制\n\n# 1 沙盒管理  \n## 1.1 概述  \n### 1.1.3 约束与限制  \n仅标准系统下使用。\n\n# 相关图片\n\n## 图片 1\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/design/figures/Component-Definition.png)\n\n**说明：** 这张图片展示了OpenHarmony部件化设计的核心理念，即通过将系统能力分解为独立的部件（如桌面、设置、内核等），每个部件具有独立的文件和目录，并在不同设备上实例化为相应的库或可执行文件。这些部件通过拼装和配置，能够灵活组合以适应各种设备需求，从而实现一套OS代码支持多种产品形态，解决硬件和产品碎片化问题，提升开发效率。\n**定位：** 1 OpenHarmony部件设计和开发指南 > 1.1 基本概念 > 1.1.1 部件定义\n**尺寸：** 760x459\n\n# 相关表格\n\n## 表格 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md`\n**定位：** 1 快速入门概述\n\n# 1 快速入门概述  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \nOpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n**表1** 基础类型系统简介  \n| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini&nbsp;system） | MCU类处理器（例如Arm&nbsp;Cortex-M、RISC-V&nbsp;32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP&nbsp;Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D&nbsp;GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |  \n本文通过介绍OpenHarmony系统的开发环境搭建、编译、烧录、调测以及运行“Hello World”等，引导开发者快速熟悉OpenHarmony设备开发的基本流程和方法。\n\n# 相关代码\n\n## 代码 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md`\n**定位：** 1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）\n\n```\n# 1 Docker编译环境  \n## 1.3 独立Docker环境  \n### 1.3.1 搭建Docker环境（轻量系统和小型系统）  \n1. 获取Docker镜像  \n获取小型系统镜像的命令为：  \n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n```\n获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。\n```\n\n## 代码 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md`\n**定位：** 1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）\n\n```\n获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。\n```\n",
+  "report": {
+    "success": true,
+    "report_data": {
+      "answer": {
+        "summary": "",
+        "key_points": [],
+        "sections": []
+      },
+      "images": [],
+      "tables": [],
+      "codes": [],
+      "related_concepts": [],
+      "further_reading": [],
+      "selection": {
+        "selected_chunks": [
+          {
+            "id": "chunk-359fbf44eece16380cf39125256c764b",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-090aa1156a376b1b0a66ec331d76b8ea",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-5bfa858f9b22c1c9fcee16e6ec92fb7c",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-97e82fa81973fcc540b0283266c1ab93",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-44e24013e6b937bc87af6a99248022c0",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-2040f586c249d6da8bd8ddd706f4d0bb",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-c1f6f4e50e62f5d2012e033631fa0d99",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-6adb50c03c1a989c6073613c20c7cb0b",
+            "paragraph_indices": [
+              0
+            ]
+          }
+        ],
+        "selected_codes": [
+          "code-65f495a1ed102af0454e06bfce9e20e4",
+          "code-ee5f5c1a7627e30e0bfc9a63183ccd28"
+        ],
+        "selected_tables": [
+          "table-ac2141f3a95786a32c7b065db13b03cc"
+        ],
+        "selected_images": [
+          "image-ab32d55c17c571a30a4e741a820062e2"
+        ]
+      }
+    },
+    "error": ""
+  },
+  "frontend_prompt": "# 用户问题\n详细讲一下系统类型与部署\n\n# 相关段落（原文）\n\n## 段落 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-dev-guide.md`\n**定位：** 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a> > 1.1 系统类型\n\n# 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a>  \n## 1.1 系统类型  \n在正式学习OpenHarmony开发前，开发者需要先了解系统类型，方便后续根据自身业务匹配对应的系统及对应文档资源。  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \n为了保证在不同硬件上集成的易用性，OpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n-   轻量系统（mini system）  \n面向MCU类处理器，例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony也提供了一系列可选的系统组件，方便设备开发者按需配置，以支撑其特色功能的扩展或定制开发。系统将这些可选的系统组件组合为一系列描述为特性或功能的系统能力，以方便设备开发者理解和选择。\n\n## 段落 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n**定位：** 1 OpenHarmony开源项目 > 1.4 系统类型\n\n# 1 OpenHarmony开源项目  \n## 1.4 系统类型  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。\n\n## 段落 3\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-test/xts.md`\n**定位：** 1 XTS测评用例开发指导 > 1.2 系统类型\n\n# 1 XTS测评用例开发指导  \n## 1.2 系统类型  \n支持如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。\n\n## 段落 4\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表\n\n## 段落 5\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n**摘要：** OpenHarmony根据系统级别采用不同内核：轻量系统和小型系统使用LiteOS，小型系统和标准系统使用Linux。LiteOS适用于轻量系统和小型系统，Linux适用于小型系统和标准系统。\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborde\n\n...（中间内容过长已截断）...\n\n<a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 段落 6\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/design/OpenHarmony部件设计和开发指南.md`\n**定位：** 1 OpenHarmony部件设计和开发指南 > 1.2 部件设计 > 1.2.1 划分原则\n\n# 1 OpenHarmony部件设计和开发指南  \n## 1.2 部件设计  \n### 1.2.1 划分原则  \n当开发一个新的功能时，应该新增部件还是模块？如果是系统非必选的功能、有可裁剪的产品化诉求，则需独立为部件。并且需要满足如下要求：  \n- 具备独立的代码目录，可独立编译出库或可执行文件。\n- 小型和标准系统中具备独立部署的能力，非必选的功能被裁剪后不会导致系统异常。\n- 可独立测试和验证。\n\n## 段落 7\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-build-all.md`\n**定位：** 1 编译构建指导 > 1.1 概述 > 1.1.1 适用范围\n\n# 1 编译构建指导  \n## 1.1 概述  \n### 1.1.1 适用范围  \n本指导适用于轻量、小型、标准三种系统。[芯片解决方案配置规则](subsys-build-chip_solution.md#芯片解决方案配置规则)与[新增并编译芯片解决方案](subsys-build-chip_solution.md#新增并编译芯片解决方案)主要和轻量系统、小型系统相关，其他内容都是通用的。\n\n## 段落 8\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-boot-init-sandbox.md`\n**定位：** 1 沙盒管理 > 1.1 概述 > 1.1.3 约束与限制\n\n# 1 沙盒管理  \n## 1.1 概述  \n### 1.1.3 约束与限制  \n仅标准系统下使用。\n\n# 相关图片\n\n## 图片 1\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/design/figures/Component-Definition.png)\n\n**说明：** 这张图片展示了OpenHarmony部件化设计的核心理念，即通过将系统能力分解为独立的部件（如桌面、设置、内核等），每个部件具有独立的文件和目录，并在不同设备上实例化为相应的库或可执行文件。这些部件通过拼装和配置，能够灵活组合以适应各种设备需求，从而实现一套OS代码支持多种产品形态，解决硬件和产品碎片化问题，提升开发效率。\n**定位：** 1 OpenHarmony部件设计和开发指南 > 1.1 基本概念 > 1.1.1 部件定义\n**尺寸：** 760x459\n\n# 相关表格\n\n## 表格 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md`\n**定位：** 1 快速入门概述\n\n# 1 快速入门概述  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \nOpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n**表1** 基础类型系统简介  \n| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini&nbsp;system） | MCU类处理器（例如Arm&nbsp;Cortex-M、RISC-V&nbsp;32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP&nbsp;Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D&nbsp;GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |  \n本文通过介绍OpenHarmony系统的开发环境搭建、编译、烧录、调测以及运行“Hello World”等，引导开发者快速熟悉OpenHarmony设备开发的基本流程和方法。\n\n# 相关代码\n\n## 代码 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md`\n**定位：** 1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）\n\n```\n# 1 Docker编译环境  \n## 1.3 独立Docker环境  \n### 1.3.1 搭建Docker环境（轻量系统和小型系统）  \n1. 获取Docker镜像  \n获取小型系统镜像的命令为：  \n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n```\n获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。\n```\n\n## 代码 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/get-code/gettools-acquire.md`\n**定位：** 1 Docker编译环境 > 1.3 独立Docker环境 > 1.3.1 搭建Docker环境（轻量系统和小型系统）\n\n```\n获取轻量系统镜像的命令为：\n```\ndocker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n2. 进入Docker构建环境  \n在获取了镜像之后，您需要创建一个新的Docker容器，并进入该容器中。进入OpenHarmony源码根目录执行如下命令，从而进入Docker构建环境。  \n- Ubuntu系统：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n- Windows系统（假设源码目录为`D:\\OpenHarmony`）：  \n```\n# 进入小型系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2\n\n# 进入轻量系统Docker构建环境\ndocker run -it -v D:\\OpenHarmony:/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2\n```  \n>  **说明：**<br>\n> `docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2` 这个命令的含义是，创建并运行一个新的OpenHarmony的Docker容器，这个容器运行在交互模式下，并且将当前目录映射到容器的/home/openharmony目录。\n```\n"
+}

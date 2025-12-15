@@ -1,0 +1,298 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenHarmony 技术架构深度解析</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root {
+            --oh-blue: #007DFF;
+            --oh-cyan: #00D1FF;
+            --oh-violet: #7A65F2;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        .glass {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .layer-card {
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .layer-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 125, 255, 0.2);
+        }
+        .glow {
+            box-shadow: 0 0 15px rgba(0, 209, 255, 0.5);
+        }
+        .pulse-subsystem {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+            100% { opacity: 0.8; }
+        }
+        .draggable {
+            cursor: grab;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+        .kernel-icon {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(0, 209, 255, 0.1);
+            border: 1px solid rgba(0, 209, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Header -->
+    <header class="glass py-6 px-4 sm:px-8 text-center border-b border-white/10">
+        <h1 class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+            OpenHarmony 技术架构深度解析
+        </h1>
+        <p class="mt-2 text-slate-300 max-w-3xl mx-auto">探索开源鸿蒙的分层设计、多内核支持、分布式能力与弹性部署</p>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Hero Image Section -->
+        <section class="mb-16">
+            <div class="glass rounded-2xl p-1 overflow-hidden glow">
+                <div class="bg-slate-800/50 rounded-2xl p-6">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="ph ph-cpu text-cyan-400 mr-2"></i> OpenHarmony 架构总览
+                    </h2>
+                    <div class="flex flex-col md:flex-row items-center">
+                        <div class="md:w-1/2 mb-6 md:mb-0">
+                            <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" 
+                                 alt="OpenHarmony 架构图" 
+                                 class="rounded-xl shadow-lg w-full h-auto border border-white/10">
+                        </div>
+                        <div class="md:w-1/2 md:pl-8">
+                            <p class="text-slate-300 mb-4">
+                                OpenHarmony采用分层架构设计，从下至上依次为：<strong>内核层</strong>、<strong>系统服务层</strong>、<strong>框架层</strong>和<strong>应用层</strong>。
+                            </p>
+                            <p class="text-slate-300 mb-4">
+                                系统功能按“系统 > 子系统 > 组件”逐级展开，支持多设备弹性部署与按需裁剪。
+                            </p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-3 py-1 bg-blue-900/30 text-blue-300 rounded-full text-sm">分布式</span>
+                                <span class="px-3 py-1 bg-cyan-900/30 text-cyan-300 rounded-full text-sm">多内核</span>
+                                <span class="px-3 py-1 bg-violet-900/30 text-violet-300 rounded-full text-sm">组件化</span>
+                                <span class="px-3 py-1 bg-emerald-900/30 text-emerald-300 rounded-full text-sm">弹性部署</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 核心分层架构 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-stack text-blue-400 mr-2"></i> 核心分层架构
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- 内核层 -->
+                <div class="layer-card glass rounded-2xl p-6 border-l-4 border-blue-500">
+                    <div class="flex items-center mb-4">
+                        <div class="kernel-icon mr-3">
+                            <i class="ph ph-gear text-cyan-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold">内核层</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3">支持Linux和LiteOS，通过KAL提供统一接口。</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">LiteOS-M</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">LiteOS-A</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">Linux</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">KAL</span>
+                    </div>
+                </div>
+                
+                <!-- 系统服务层 -->
+                <div class="layer-card glass rounded-2xl p-6 border-l-4 border-cyan-500">
+                    <div class="flex items-center mb-4">
+                        <div class="kernel-icon mr-3">
+                            <i class="ph ph-plug text-blue-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold">系统服务层</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3">提供基础和增强的系统服务，如DFX、安全等。</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">分布式软总线</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">安全</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">DFX</span>
+                    </div>
+                </div>
+                
+                <!-- 框架层 -->
+                <div class="layer-card glass rounded-2xl p-6 border-l-4 border-violet-500">
+                    <div class="flex items-center mb-4">
+                        <div class="kernel-icon mr-3">
+                            <i class="ph ph-layout text-violet-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold">框架层</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3">提供UI、Ability等核心框架，支撑应用开发。</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">ArkUI</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">Ability</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">用户程序框架</span>
+                    </div>
+                </div>
+                
+                <!-- 应用层 -->
+                <div class="layer-card glass rounded-2xl p-6 border-l-4 border-emerald-500">
+                    <div class="flex items-center mb-4">
+                        <div class="kernel-icon mr-3">
+                            <i class="ph ph-app-window text-emerald-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold">应用层</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3">运行系统应用和第三方应用，支持一次开发多端部署。</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">系统应用</span>
+                        <span class="text-xs px-2 py-1 bg-slate-700 rounded">扩展应用</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 系统类型与内核 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-cpu text-cyan-400 mr-2"></i> 系统类型与内核适配
+            </h2>
+            <div class="glass rounded-2xl p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- 轻量系统 -->
+                    <div class="bg-slate-800/50 p-5 rounded-xl border border-white/10">
+                        <h3 class="font-bold text-lg mb-2 text-cyan-300">轻量系统 (Mini)</h3>
+                        <p class="text-sm text-slate-300 mb-3">面向MCU，内存≥128KiB</p>
+                        <div class="flex items-center mb-2">
+                            <i class="ph ph-chip text-blue-400 mr-2"></i>
+                            <span class="text-xs">内核: LiteOS-M</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="ph ph-device-mobile-camera text-emerald-400 mr-2"></i>
+                            <span class="text-xs">典型设备: 模组、传感器、穿戴</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 小型系统 -->
+                    <div class="bg-slate-800/50 p-5 rounded-xl border border-white/10">
+                        <h3 class="font-bold text-lg mb-2 text-blue-300">小型系统 (Small)</h3>
+                        <p class="text-sm text-slate-300 mb-3">面向应用处理器，内存≥1MiB</p>
+                        <div class="flex items-center mb-2">
+                            <i class="ph ph-chip text-blue-400 mr-2"></i>
+                            <span class="text-xs">内核: LiteOS-A / Linux</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="ph ph-video-camera text-emerald-400 mr-2"></i>
+                            <span class="text-xs">典型设备: 摄像头、路由器</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 标准系统 -->
+                    <div class="bg-slate-800/50 p-5 rounded-xl border border-white/10">
+                        <h3 class="font-bold text-lg mb-2 text-violet-300">标准系统 (Standard)</h3>
+                        <p class="text-sm text-slate-300 mb-3">面向应用处理器，内存≥128MiB</p>
+                        <div class="flex items-center mb-2">
+                            <i class="ph ph-chip text-blue-400 mr-2"></i>
+                            <span class="text-xs">内核: Linux</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="ph ph-monitor text-emerald-400 mr-2"></i>
+                            <span class="text-xs">典型设备: 智能屏、冰箱屏</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 核心技术亮点 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-lightning text-yellow-400 mr-2"></i> 核心技术亮点
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 分布式能力 -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="font-bold text-lg mb-3 flex items-center">
+                        <i class="ph ph-shuffle-angular text-cyan-400 mr-2"></i> 硬件互助，资源共享
+                    </h3>
+                    <ul class="space-y-2 text-sm text-slate-300">
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span><strong>分布式软总线:</strong> 多设备无缝互联</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span><strong>分布式数据管理:</strong> 跨设备数据无缝衔接</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span><strong>分布式任务调度:</strong> 智能选择最优设备</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span><strong>设备虚拟化:</strong> 构建超级虚拟终端</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- 一次开发多端部署 -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="font-bold text-lg mb-3 flex items-center">
+                        <i class="ph ph-code-simple text-blue-400 mr-2"></i> 一次开发，多端部署
+                    </h3>
+                    <ul class="space-y-2 text-sm text-slate-300">
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span>统一的UI框架与Ability框架</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span>多终端API一致性保证</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="ph ph-check-circle text-emerald-400 mt-1 mr-2"></i>
+                            <span>开发时预览设备能力适配</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 驱动子系统 -->
+        <section>
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="ph ph-plug-charging text-purple-400 mr-2"></i> 统一驱动框架 (HDF)
+            </h2>
+            <div class="glass rounded-2xl p-6">
+                <div class="flex flex-col md:flex-row">
+                    <div class="md:w-1/3 mb-6 md:mb-0 flex justify-center items-center">
+                        <div class="relative">
+                            <div class="w-32 h-32 rounded-full bg-gradient-to-r from-blue-900/30 to-violet-900/30 flex items-center justify-center border border-white/10 pulse-subsystem">
+                                <span class="text-center font-bold text-sm">HDF<br>驱动框架</span>
+                            </div>
+                            <div class="absolute -top-2 -right-2 w-8 h-8 rounded-full

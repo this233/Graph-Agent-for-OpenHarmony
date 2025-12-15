@@ -1,0 +1,233 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007AFF;
+      --oh-cyan: #5AC8FA;
+      --oh-violet: #AF52DE;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer-glow {
+      box-shadow: 0 0 15px rgba(0, 122, 255, 0.5);
+    }
+    .flow-line {
+      stroke: var(--oh-cyan);
+      stroke-width: 2;
+      stroke-dasharray: 5;
+      animation: flow 1.5s infinite linear;
+    }
+    @keyframes flow {
+      to { stroke-dashoffset: -20; }
+    }
+    .pulse-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--oh-violet);
+      box-shadow: 0 0 0 0 rgba(175, 82, 222, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(175, 82, 222, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(175, 82, 222, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(175, 82, 222, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12 mt-6">
+      <h1 class="text-3xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+        OpenHarmony 技术架构
+      </h1>
+      <p class="mt-3 text-slate-300 max-w-2xl mx-auto">
+        探索 OpenHarmony 分层架构与核心模块，点击图层查看详情。
+      </p>
+    </header>
+
+    <!-- Interactive Architecture Diagram -->
+    <div class="relative glass rounded-2xl p-6 mb-12 border border-white/10 shadow-2xl">
+      <svg viewBox="0 0 800 500" class="w-full h-auto">
+        <!-- Data Flow Arrows -->
+        <line x1="400" y1="80" x2="400" y2="150" class="flow-line"/>
+        <line x1="400" y1="190" x2="400" y2="260" class="flow-line"/>
+        <line x1="400" y1="300" x2="400" y2="370" class="flow-line"/>
+        <line x1="400" y1="410" x2="400" y2="480" class="flow-line"/>
+
+        <!-- Layer Rectangles -->
+        <rect x="150" y="50" width="500" height="60" rx="10" fill="rgba(0,122,255,0.2)" stroke="var(--oh-blue)" stroke-width="2" id="layer-app" class="cursor-pointer hover:opacity-80 transition-opacity"/>
+        <rect x="150" y="170" width="500" height="60" rx="10" fill="rgba(90,200,250,0.2)" stroke="var(--oh-cyan)" stroke-width="2" id="layer-framework" class="cursor-pointer hover:opacity-80 transition-opacity"/>
+        <rect x="150" y="290" width="500" height="60" rx="10" fill="rgba(175,82,222,0.2)" stroke="var(--oh-violet)" stroke-width="2" id="layer-system" class="cursor-pointer hover:opacity-80 transition-opacity"/>
+        <rect x="150" y="410" width="500" height="60" rx="10" fill="rgba(100,100,100,0.3)" stroke="#94a3b8" stroke-width="2" id="layer-kernel" class="cursor-pointer hover:opacity-80 transition-opacity"/>
+
+        <!-- Labels -->
+        <text x="400" y="85" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="600">应用层 (Applications)</text>
+        <text x="400" y="205" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="600">框架层 (Framework)</text>
+        <text x="400" y="325" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="600">系统服务层 (System Services)</text>
+        <text x="400" y="445" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="600">内核层 (Kernel)</text>
+      </svg>
+
+      <!-- Legend -->
+      <div class="absolute top-4 right-4 flex flex-col space-y-2 text-xs">
+        <div class="flex items-center"><div class="w-3 h-3 rounded-full bg-[var(--oh-blue)] mr-2"></div> 应用层</div>
+        <div class="flex items-center"><div class="w-3 h-3 rounded-full bg-[var(--oh-cyan)] mr-2"></div> 框架层</div>
+        <div class="flex items-center"><div class="w-3 h-3 rounded-full bg-[var(--oh-violet)] mr-2"></div> 系统服务层</div>
+        <div class="flex items-center"><div class="w-3 h-3 rounded-full bg-slate-400 mr-2"></div> 内核层</div>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div id="detail-panel" class="glass rounded-2xl p-6 mb-12 border border-white/10 shadow-2xl transition-all duration-500">
+      <div class="flex justify-between items-start">
+        <h2 id="detail-title" class="text-2xl font-bold text-cyan-400">架构概览</h2>
+        <button id="close-detail" class="text-slate-400 hover:text-white">
+          <i class="ph ph-x text-2xl"></i>
+        </button>
+      </div>
+      <p id="detail-desc" class="mt-4 text-slate-300">
+        点击上方任意图层，查看该层的详细说明与核心技术模块。
+      </p>
+      <div id="detail-content" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <!-- Content will be injected here -->
+      </div>
+    </div>
+
+    <!-- Key Features -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div class="glass rounded-2xl p-5 border border-white/10 shadow-lg hover:shadow-cyan-500/20 transition-shadow">
+        <div class="flex items-center mb-3">
+          <i class="ph ph-shuffle-angular text-cyan-400 text-2xl mr-3"></i>
+          <h3 class="text-lg font-semibold">分布式软总线</h3>
+        </div>
+        <p class="text-slate-300 text-sm">实现设备间无感发现、高效传输与协同。</p>
+      </div>
+      <div class="glass rounded-2xl p-5 border border-white/10 shadow-lg hover:shadow-violet-500/20 transition-shadow">
+        <div class="flex items-center mb-3">
+          <i class="ph ph-plug-charging text-violet-400 text-2ll mr-3"></i>
+          <h3 class="text-lg font-semibold">统一OS内核</h3>
+        </div>
+        <p class="text-slate-300 text-sm">支持LiteOS、Linux等多内核，灵活适配。</p>
+      </div>
+      <div class="glass rounded-2xl p-5 border border-white/10 shadow-lg hover:shadow-blue-500/20 transition-shadow">
+        <div class="flex items-center mb-3">
+          <i class="ph ph-code-block text-blue-400 text-2xl mr-3"></i>
+          <h3 class="text-lg font-semibold">ArkTS语言</h3>
+        </div>
+        <p class="text-slate-300 text-sm">声明式UI，一次开发，多端部署。</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-500 text-sm py-6 border-t border-white/10">
+      <p>© 2025 OpenHarmony. 使用现代 Web 技术构建的交互式架构展示。</p>
+    </footer>
+  </div>
+
+  <script>
+    const layerData = {
+      "layer-app": {
+        title: "应用层 (Applications)",
+        desc: "开发者基于 OpenHarmony 平台开发的各种应用程序，如智慧屏、穿戴设备应用等。",
+        content: [
+          { name: "System UI", desc: "系统级用户界面，如状态栏、锁屏等。" },
+          { name: "预装应用", desc: "如计算器、相机、设置等原生应用。" },
+          { name: "第三方应用", desc: "通过应用市场安装的各类应用。" }
+        ]
+      },
+      "layer-framework": {
+        title: "框架层 (Framework)",
+        desc: "为应用开发提供核心能力，包括UI框架、各种接口和运行时环境。",
+        content: [
+          { name: "ArkUI", desc: "基于ArkTS的声明式UI框架，支持组件化开发。" },
+          { name: "Ability框架", desc: "应用组件模型，支持Page、Service、Data等Ability。" },
+          { name: "分布式数据管理", desc: "实现跨设备数据同步与共享。" },
+          { name: "安全访问管理", desc: "提供统一的权限管理和访问控制。" }
+        ]
+      },
+      "layer-system": {
+        title: "系统服务层 (System Services)",
+        desc: "OpenHarmony核心系统能力的集合，为上层提供基础服务。",
+        content: [
+          { name: "分布式软总线", desc: "实现设备间自发现、自组网、高带宽低时延通信。" },
+          { name: "分布式数据管理", desc: "提供跨设备的数据访问和同步机制。" },
+          { name: "分布式任务调度", desc: "实现跨设备应用的启动和协同。" },
+          { name: "公共事件与通知", desc: "提供系统级事件广播和通知服务。" }
+        ]
+      },
+      "layer-kernel": {
+        title: "内核层 (Kernel)",
+        desc: "OpenHarmony的操作系统内核，支持多种微内核和宏内核。",
+        content: [
+          { name: "LiteOS", desc: "面向IoT设备的轻量级实时操作系统内核。" },
+          { name: "Linux内核", desc: "适用于资源较丰富的智能设备。" },
+          { name: "驱动子系统", desc: "HDF（Hardware Driver Foundation）统一驱动框架。" },
+          { name: "硬件抽象层", desc: "屏蔽底层硬件差异，提供统一接口。" }
+        ]
+      }
+    };
+
+    const detailPanel = document.getElementById('detail-panel');
+    const detailTitle = document.getElementById('detail-title');
+    const detailDesc = document.getElementById('detail-desc');
+    const detailContent = document.getElementById('detail-content');
+    const closeDetailBtn = document.getElementById('close-detail');
+
+    document.querySelectorAll('rect[id^="layer-"]').forEach(rect => {
+      rect.addEventListener('click', () => {
+        const id = rect.id;
+        const data = layerData[id];
+        if (data) {
+          detailTitle.textContent = data.title;
+          detailDesc.textContent = data.desc;
+          detailContent.innerHTML = '';
+          data.content.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'flex items-start p-3 glass rounded-lg border border-white/10';
+            div.innerHTML = `
+              <span class="pulse-dot mt-1 mr-3 flex-shrink-0"></span>
+              <div>
+                <h4 class="font-semibold">${item.name}</h4>
+                <p class="text-slate-400 text-xs mt-1">${item.desc}</p>
+              </div>
+            `;
+            detailContent.appendChild(div);
+          });
+          detailPanel.classList.add('layer-glow');
+          setTimeout(() => detailPanel.classList.remove('layer-glow'), 1000);
+        }
+      });
+    });
+
+    closeDetailBtn.addEventListener('click', () => {
+      detailTitle.textContent = '架构概览';
+      detailDesc.textContent = '点击上方任意图层，查看该层的详细说明与核心技术模块。';
+      detailContent.innerHTML = '';
+    });
+  </script>
+</body>
+</html>
+```

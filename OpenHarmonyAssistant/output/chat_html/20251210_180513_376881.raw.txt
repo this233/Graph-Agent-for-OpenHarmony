@@ -1,0 +1,229 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony Interactive Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007AFF;
+      --oh-cyan: #5AC8FA;
+      --oh-violet: #AF52DE;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .code-block {
+      font-family: 'Fira Code', monospace;
+      background: #1e293b;
+      border-left: 4px solid var(--oh-blue);
+    }
+    .glow {
+      box-shadow: 0 0 12px rgba(0, 122, 255, 0.5);
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .floating {
+      animation: float 4s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6">
+
+  <!-- Hero Section -->
+  <div class="text-center mb-12">
+    <h1 class="text-4xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+      Welcome to OpenHarmony
+    </h1>
+    <p class="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto">
+      Explore the future of distributed operating systems with this interactive playground.
+    </p>
+  </div>
+
+  <!-- Main Dashboard Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
+
+    <!-- Interactive Architecture Diagram -->
+    <div class="glass-card rounded-2xl p-6 glow">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-stack text-cyan-400 mr-2"></i> System Architecture
+      </h2>
+      <div id="architecture-diagram" class="relative h-64 flex flex-col justify-between pb-4">
+        <!-- Layers -->
+        <div class="absolute top-0 left-0 right-0 h-12 glass-card rounded-lg flex items-center justify-center text-sm font-medium border border-white/10">
+          Application Framework
+        </div>
+        <div class="absolute top-16 left-0 right-0 h-12 glass-card rounded-lg flex items-center justify-center text-sm font-medium border border-white/10">
+          System Services
+        </div>
+        <div class="absolute top-32 left-0 right-0 h-12 glass-card rounded-lg flex items-center justify-center text-sm font-medium border border-white/10">
+          Kernel
+        </div>
+        <div class="absolute top-48 left-0 right-0 h-12 glass-card rounded-lg flex items-center justify-center text-sm font-medium border border-white/10">
+          Hardware Abstraction Layer (HAL)
+        </div>
+        <!-- Data Flow Particles -->
+        <div class="absolute top-12 left-1/2 w-2 h-2 rounded-full bg-cyan-400 animate-pulse" style="animation-delay: 0s;"></div>
+        <div class="absolute top-28 left-1/2 w-2 h-2 rounded-full bg-blue-400 animate-pulse" style="animation-delay: 0.5s;"></div>
+        <div class="absolute top-44 left-1/2 w-2 h-2 rounded-full bg-violet-400 animate-pulse" style="animation-delay: 1s;"></div>
+      </div>
+      <div class="mt-6 text-sm text-slate-300">
+        Hover over layers to see details. Click to expand.
+      </div>
+    </div>
+
+    <!-- Code Playground -->
+    <div class="glass-card rounded-2xl p-6 glow">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-code-simple text-blue-400 mr-2"></i> ArkTS Playground
+      </h2>
+      <div class="code-block rounded-lg p-4 text-sm mb-4 overflow-x-auto">
+        <pre><code>@Component
+struct Counter {
+  @State count: number = 0
+
+  build() {
+    Column() {
+      Text(`Count: ${this.count}`)
+        .fontSize(24)
+        .margin({ bottom: 20 })
+      Button('Increment') {
+        this.count++
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+}</code></pre>
+      </div>
+      <div class="bg-gray-800 border border-white/10 rounded-xl p-4 h-48 flex flex-col items-center justify-center">
+        <div class="text-xl mb-4">Simulator</div>
+        <div id="simulator-display" class="text-3xl font-bold mb-4">Count: 0</div>
+        <button id="increment-btn" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition duration-300">
+          Increment
+        </button>
+      </div>
+    </div>
+
+    <!-- HDF Visualization -->
+    <div class="glass-card rounded-2xl p-6 col-span-1 md:col-span-2 glow">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-plug text-violet-400 mr-2"></i> HDF Driver Model
+      </h2>
+      <div class="relative h-48 overflow-hidden rounded-lg border border-white/10 bg-gray-900">
+        <!-- SVG Pipes -->
+        <svg width="100%" height="100%">
+          <!-- Device to Driver -->
+          <line x1="10%" y1="50%" x2="30%" y2="50%" stroke="rgba(96, 165, 250, 0.5)" stroke-width="4" stroke-dasharray="8,4">
+            <animate attributeName="stroke-dashoffset" values="0;20" dur="1.5s" repeatCount="indefinite"/>
+          </line>
+          <!-- Driver to Kernel -->
+          <line x1="30%" y1="50%" x2="70%" y2="50%" stroke="rgba(139, 92, 246, 0.5)" stroke-width="4" stroke-dasharray="8,4">
+            <animate attributeName="stroke-dashoffset" values="0;20" dur="1.2s" repeatCount="indefinite"/>
+          </line>
+          <!-- Kernel to System -->
+          <line x1="70%" y1="50%" x2="90%" y2="50%" stroke="rgba(16, 185, 129, 0.5)" stroke-width="4" stroke-dasharray="8,4">
+            <animate attributeName="stroke-dashoffset" values="0;20" dur="1s" repeatCount="indefinite"/>
+          </line>
+          
+          <!-- Nodes -->
+          <circle cx="10%" cy="50%" r="12" fill="#60a5fa" class="floating"/>
+          <circle cx="30%" cy="50%" r="12" fill="#8b5cf6" class="floating" style="animation-delay: 0.3s;"/>
+          <circle cx="70%" cy="50%" r="12" fill="#10b981" class="floating" style="animation-delay: 0.6s;"/>
+          <circle cx="90%" cy="50%" r="12" fill="#f59e0b" class="floating" style="animation-delay: 0.9s;"/>
+        </svg>
+        <div class="absolute top-1/2 left-10 transform -translate-y-1/2 text-xs bg-black/50 px-2 py-1 rounded">Device</div>
+        <div class="absolute top-1/2 left-1/4 transform -translate-y-1/2 text-xs bg-black/50 px-2 py-1 rounded">Driver</div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xs bg-black/50 px-2 py-1 rounded">Kernel</div>
+        <div class="absolute top-1/2 right-10 transform -translate-y-1/2 text-xs bg-black/50 px-2 py-1 rounded">System</div>
+      </div>
+      <div class="mt-4 text-sm text-slate-300">
+        Data flows through the HDF pipeline. Click below to send a test packet.
+      </div>
+      <button id="send-packet-btn" class="mt-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm transition duration-300">
+        Send Test Packet
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-12 text-center text-slate-400 text-sm">
+    <p>Built with ❤️ using OpenHarmony Technologies | Tailwind CSS & Phosphor Icons</p>
+  </footer>
+
+  <script>
+    // --- Simulate Counter ---
+    document.getElementById('increment-btn').addEventListener('click', () => {
+      const display = document.getElementById('simulator-display');
+      let count = parseInt(display.innerText.split(': ')[1]) || 0;
+      count++;
+      display.innerText = `Count: ${count}`;
+    });
+
+    // --- Send Packet Animation ---
+    document.getElementById('send-packet-btn').addEventListener('click', () => {
+      const btn = document.getElementById('send-packet-btn');
+      btn.innerText = 'Sending...';
+      btn.disabled = true;
+      
+      // Create a moving dot
+      const svg = document.querySelector('#hdf-visualization svg') || document.querySelector('svg');
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", "10%");
+      dot.setAttribute("cy", "50%");
+      dot.setAttribute("r", "6");
+      dot.setAttribute("fill", "#f59e0b");
+      svg.appendChild(dot);
+
+      let pos = 10;
+      const interval = setInterval(() => {
+        pos += 2;
+        dot.setAttribute("cx", `${pos}%`);
+        if (pos > 90) {
+          clearInterval(interval);
+          svg.removeChild(dot);
+          btn.innerText = 'Send Test Packet';
+          btn.disabled = false;
+          // Briefly highlight the last node
+          const lastNode = svg.querySelector('circle[cx="90%"]');
+          lastNode.setAttribute("fill", "#fbbf24");
+          setTimeout(() => {
+            lastNode.setAttribute("fill", "#f59e0b");
+          }, 500);
+        }
+      }, 50);
+    });
+
+    // --- Architecture Interactions ---
+    const layers = document.querySelectorAll('#architecture-diagram > div');
+    layers.forEach(layer => {
+      if (!layer.classList.contains('absolute')) return; // Skip particles
+      layer.addEventListener('mouseenter', () => {
+        layer.classList.add('glow');
+      });
+      layer.addEventListener('mouseleave', () => {
+        layer.classList.remove('glow');
+      });
+      layer.addEventListener('click', () => {
+        alert(`You clicked on: ${layer.innerText.trim()}`);
+      });
+    });
+  </script>
+</body>
+</html>
+```

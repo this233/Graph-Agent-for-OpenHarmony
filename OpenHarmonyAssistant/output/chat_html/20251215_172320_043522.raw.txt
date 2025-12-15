@@ -1,0 +1,254 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 系统类型与部署详解</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00C4FF;
+      --oh-violet: #7B61FF;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #e2e8f0;
+    }
+    .code-block {
+      font-family: 'Fira Code', monospace;
+      background-color: #1e293b;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+      transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.2);
+    }
+    .system-icon {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      margin: 0 auto 1rem;
+      font-size: 1.5rem;
+    }
+    .mini { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+    .small { background: linear-gradient(135deg, #7e22ce, #a855f7); }
+    .standard { background: linear-gradient(135deg, #0f766e, #14b8a6); }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .kernel-table td, .kernel-table th {
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 0.75rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 text-slate-200">
+
+  <!-- Header -->
+  <header class="glass-card py-6 px-4 md:px-8 text-center mb-10">
+    <h1 class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+      OpenHarmony 系统类型与部署详解
+    </h1>
+    <p class="mt-2 text-slate-400">探索 OpenHarmony 的三种基础系统类型及其部署方式</p>
+  </header>
+
+  <main class="container mx-auto px-4 pb-16">
+
+    <!-- 系统类型概览 -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph ph-cpu text-cyan-400 mr-2"></i> 系统类型概览
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Mini System -->
+        <div class="glass-card p-6 text-center cursor-pointer" onclick="switchTab('mini')">
+          <div class="system-icon mini">
+            <i class="ph ph-microchip"></i>
+          </div>
+          <h3 class="text-xl font-bold">轻量系统 (Mini)</h3>
+          <p class="mt-2 text-sm text-slate-400">面向MCU类处理器，最小128KiB内存</p>
+        </div>
+        <!-- Small System -->
+        <div class="glass-card p-6 text-center cursor-pointer" onclick="switchTab('small')">
+          <div class="system-icon small">
+            <i class="ph ph-chip"></i>
+          </div>
+          <h3 class="text-xl font-bold">小型系统 (Small)</h3>
+          <p class="mt-2 text-sm text-slate-400">面向应用处理器，最小1MiB内存</p>
+        </div>
+        <!-- Standard System -->
+        <div class="glass-card p-6 text-center cursor-pointer" onclick="switchTab('standard')">
+          <div class="system-icon standard">
+            <i class="ph ph-monitor"></i>
+          </div>
+          <h3 class="text-xl font-bold">标准系统 (Standard)</h3>
+          <p class="mt-2 text-sm text-slate-400">面向应用处理器，最小128MiB内存</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 详细对比 -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph ph-table text-cyan-400 mr-2"></i> 系统类型详细对比
+      </h2>
+      <div class="overflow-x-auto glass-card p-4">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-700">
+              <th class="py-3 px-4 text-left">类型</th>
+              <th class="py-3 px-4 text-left">处理器</th>
+              <th class="py-3 px-4 text-left">最小内存</th>
+              <th class="py-3 px-4 text-left">核心能力</th>
+              <th class="py-3 px-4 text-left">典型产品</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium">轻量系统 (Mini)</td>
+              <td class="py-3 px-4">MCU类 (Cortex-M, RISC-V 32位)</td>
+              <td class="py-3 px-4">128KiB</td>
+              <td class="py-3 px-4">轻量网络协议、轻量图形、IOT总线</td>
+              <td class="py-3 px-4">传感器、穿戴设备、连接模组</td>
+            </tr>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium">小型系统 (Small)</td>
+              <td class="py-3 px-4">应用处理器 (Cortex-A)</td>
+              <td class="py-3 px-4">1MiB</td>
+              <td class="py-3 px-4">安全、标准图形、多媒体</td>
+              <td class="py-3 px-4">IP Camera、路由器、行车记录仪</td>
+            </tr>
+            <tr class="hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium">标准系统 (Standard)</td>
+              <td class="py-3 px-4">应用处理器 (Cortex-A)</td>
+              <td class="py-3 px-4">128MiB</td>
+              <td class="py-3 px-4">3D GPU、丰富图形、完整应用框架</td>
+              <td class="py-3 px-4">高端冰箱屏、智能电视</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 内核适配 -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph ph-gear text-cyan-400 mr-2"></i> 内核适配关系
+      </h2>
+      <div class="overflow-x-auto glass-card p-4">
+        <table class="min-w-full text-sm kernel-table">
+          <thead>
+            <tr>
+              <th class="py-3 px-4">系统级别</th>
+              <th class="py-3 px-4">LiteOS</th>
+              <th class="py-3 px-4">Linux</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="py-3 px-4 font-medium">轻量系统 (Mini)</td>
+              <td class="py-3 px-4">√</td>
+              <td class="py-3 px-4">×</td>
+            </tr>
+            <tr>
+              <td class="py-3 px-4 font-medium">小型系统 (Small)</td>
+              <td class="py-3 px-4">√</td>
+              <td class="py-3 px-4">√</td>
+            </tr>
+            <tr>
+              <td class="py-3 px-4 font-medium">标准系统 (Standard)</td>
+              <td class="py-3 px-4">×</td>
+              <td class="py-3 px-4">√</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 部署与开发 -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph ph-terminal-window text-cyan-400 mr-2"></i> 部署与开发
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- 部件化设计 -->
+        <div class="glass-card p-6">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="ph ph-puzzle-piece text-violet-400 mr-2"></i> 部件化设计
+          </h3>
+          <p class="mb-4 text-slate-300">
+            OpenHarmony 采用部件化设计，通过将系统能力分解为独立的部件，实现灵活组合以适应各种设备需求。
+          </p>
+          <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/design/figures/Component-Definition.png" alt="部件化设计" class="rounded-lg border border-slate-700">
+          <p class="mt-3 text-sm text-slate-400">
+            部件具有独立的代码目录，可独立编译、部署和测试。
+          </p>
+        </div>
+
+        <!-- Docker 部署 -->
+        <div class="glass-card p-6">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="ph ph-docker-logo text-blue-400 mr-2"></i> Docker 环境部署
+          </h3>
+          <p class="mb-4 text-slate-300">
+            为不同系统类型提供专用 Docker 镜像，简化开发环境搭建。
+          </p>
+          <div class="code-block">
+            <pre class="text-sm"><code># 获取轻量系统镜像
+docker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2
+
+# 获取小型系统镜像
+docker pull swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2
+
+# 进入轻量系统Docker环境 (Ubuntu)
+docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_mini:3.2
+
+# 进入小型系统Docker环境 (Ubuntu)
+docker run -it -v $(pwd):/home/openharmony swr.cn-south-1.myhuaweicloud.com/openharmony-docker/docker_oh_small:3.2</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="glass-card py-6 px-4 text-center text-slate-500 text-sm">
+    <p>© 2025 OpenHarmony 开发者社区 | 构建全场景分布式操作系统</p>
+  </footer>
+
+  <script>
+    function switchTab(type) {
+      alert(`您点击了 "${type}" 系统类型。在完整应用中，这里会展示该类型的详细部署指南和配置选项。`);
+      // 在实际应用中，可以在这里切换显示不同的详细内容面板
+    }
+  </script>
+</body>
+</html>
+```

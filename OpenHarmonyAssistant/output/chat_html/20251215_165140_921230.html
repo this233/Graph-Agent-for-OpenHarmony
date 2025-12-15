@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenHarmony 技术架构 | 交互式可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+        }
+        @keyframes data-flow {
+            0% { transform: translateX(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+        }
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .architecture-layer {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .architecture-layer:hover {
+            transform: scale(1.02);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .data-particle {
+            animation: data-flow 3s linear infinite;
+        }
+        .subsystem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white font-['Inter'] min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="glassmorphism rounded-b-2xl p-4 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="ph ph-cpu-duotone text-2xl text-blue-400"></i>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">OpenHarmony 架构探索</h1>
+            </div>
+            <div class="flex space-x-4">
+                <button class="px-4 py-2 rounded-lg glassmorphism hover:bg-blue-500/20 transition-all">架构概览</button>
+                <button class="px-4 py-2 rounded-lg glassmorphism hover:bg-cyan-500/20 transition-all">子系统详情</button>
+                <button class="px-4 py-2 rounded-lg glassmorphism hover:bg-violet-500/20 transition-all">开发指南</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Hero Section -->
+        <section class="text-center mb-12">
+            <h1 class="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-violet-400 bg-clip-text text-transparent">
+                OpenHarmony 技术架构
+            </h1>
+            <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                分层设计，多内核支持，面向全场景的分布式操作系统
+            </p>
+        </section>
+
+        <!-- 交互式架构图 -->
+        <section class="mb-16">
+            <div class="glassmorphism rounded-2xl p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="ph ph-stack-duotone text-blue-400 mr-3"></i>
+                    交互式架构层次
+                </h2>
+                
+                <!-- 架构层次可视化 -->
+                <div class="relative">
+                    <!-- 数据流动动画 -->
+                    <div class="absolute inset-0 overflow-hidden rounded-xl">
+                        <div class="data-particle absolute top-1/4 w-2 h-2 bg-cyan-400 rounded-full opacity-60"></div>
+                        <div class="data-particle absolute top-1/2 w-2 h-2 bg-blue-400 rounded-full opacity-60" style="animation-delay: 1s;"></div>
+                        <div class="data-particle absolute top-3/4 w-2 h-2 bg-violet-400 rounded-full opacity-60" style="animation-delay: 2s;"></div>
+                    </div>
+
+                    <!-- 架构层次 -->
+                    <div class="space-y-4">
+                        <!-- 应用层 -->
+                        <div class="architecture-layer glassmorphism rounded-xl p-6" data-layer="application">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-xl font-semibold text-violet-300">应用层</h3>
+                                    <p class="text-gray-400 mt-2">系统应用 + 第三方应用，基于FA/PA开发</p>
+                                </div>
+                                <i class="ph ph-app-window-duotone text-2xl text-violet-400"></i>
+                            </div>
+                            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div class="bg-violet-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-device-mobile-camera-duotone text-violet-300"></i>
+                                    <p class="text-sm mt-1">系统应用</p>
+                                </div>
+                                <div class="bg-violet-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-puzzle-piece-duotone text-violet-300"></i>
+                                    <p class="text-sm mt-1">第三方应用</p>
+                                </div>
+                                <div class="bg-violet-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-eye-duotone text-violet-300"></i>
+                                    <p class="text-sm mt-1">FA (UI)</p>
+                                </div>
+                                <div class="bg-violet-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-gear-duotone text-violet-300"></i>
+                                    <p class="text-sm mt-1">PA (后台)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 框架层 -->
+                        <div class="architecture-layer glassmorphism rounded-xl p-6" data-layer="framework">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-xl font-semibold text-cyan-300">框架层</h3>
+                                    <p class="text-gray-400 mt-2">多语言框架支持，ArkUI声明式开发</p>
+                                </div>
+                                <i class="ph ph-code-duotone text-2xl text-cyan-400"></i>
+                            </div>
+                            <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2">
+                                <div class="bg-cyan-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-brackets-curly-duotone text-cyan-300"></i>
+                                    <p class="text-sm mt-1">ArkUI框架</p>
+                                </div>
+                                <div class="bg-cyan-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-cpu-duotone text-cyan-300"></i>
+                                    <p class="text-sm mt-1">Ability框架</p>
+                                </div>
+                                <div class="bg-cyan-500/20 rounded-lg p-3 text-center">
+                                    <i class="ph ph-terminal-window-duotone text-cyan-300"></i>
+                                    <p class="text-sm mt-1">多语言API</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 系统服务层 -->
+                        <div class="architecture-layer glassmorphism rounded-xl p-6" data-layer="system-service">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-xl font-semibold text-blue-300">系统服务层</h3>
+                                    <p class="text-gray-400 mt-2">核心能力集合，支持分布式操作</p>
+                                </div>
+                                <i class="ph ph-gears-duotone text-2xl text-blue-400"></i>
+                            </div>
+                            <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div class="bg-blue-500/20 rounded-lg p-3">
+                                    <h4 class="font-semibold text-blue-200 text-sm">基本能力子系统</h4>
+                                    <ul class="text-xs text-gray-300 mt-2 space-y-1">
+                                    <li>• 分布式软总线</li>
+                                    <li>• 分布式数据管理</li>
+                                    <li>• 分布式任务调度</li>
+                                </ul>
+                                </div>
+                                <div class="bg-blue-500/20 rounded-lg p-3">
+                                    <h4 class="font-semibold text-blue-200 text-sm">基础软件服务</h4>
+                                    <ul class="text-xs text-gray-300 mt-2 space-y-1">
+                                    <li>• 事件通知</li>
+                                    <li>• 多媒体</li>
+                                    <li>• 电话服务</li>
+                                </ul>
+                                </div>
+                                <div class="bg-blue-500/20 rounded-lg p-3">
+                                    <h4 class="font-semibold text-blue-200 text-sm">增强软件服务</h4>
+                                    <ul class="text-xs text-gray-300 mt-2 space-y-1">
+                                    <li>• 智慧屏专有</li>
+                                    <li>• 穿戴专有</li>
+                                    <li>• IoT专有</li>
+                                </ul>
+                                </div>
+                                <div class="bg-blue-500/20 rounded-lg p-3">
+                                    <h4 class="font-semibold text-blue-200 text-sm">硬件服务</h4>
+                                    <ul class="text-xs text-gray-300 mt-2 space-y-1">
+                                    <li>• 位置服务</li>
+                                    <li>• 用户IAM</li>
+                                    <li>• 专有硬件</li>
+                                </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 内核层 -->
+                        <div class="architecture-layer glassmorphism rounded-xl p-6" data-layer="kernel">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-xl font-semibold text-green-300">内核层</h3>
+                                    <p class="text-gray-400 mt-2">多内核设计，统一抽象层</p>
+                                </div>
+                                <i class="ph ph-circuitry-duotone text-2xl text-green-400"></i>
+                            </div>
+                            <div class="mt-4 grid grid-cols-2 gap-4">
+                                <div class="bg-green-500/20 rounded-lg p-4">
+                                    <h4 class="font-semibold text-green-200">内核子系统</h4>
+                                    <div class="flex space-x-2 mt-2">
+                                    <div class="bg-green-600/30 rounded px-2 py-1 text-xs">Linux</div>
+                                    <div class="bg-green-600/30 rounded px-2 py-1 text-xs">LiteOS</div>
+                                </div>
+                                <div class="bg-green-500/20 rounded-lg p-4">
+                                    <h4 class="font-semibold text-green-200">驱动子系统</h4>
+                                    <p class="text-xs text-gray-300 mt-2">HDF统一框架</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 子系统详情 -->
+        <section class="mb-16">
+            <div class="glassmorphism rounded-2xl p-6">
+                <h2 class="text-2xl font-bold mb-6 flex items-center">
+                    <i class="ph ph-puzzle-piece-duotone text-cyan-400 mr-3"></i>
+                    子系统功能详解
+                </h2>
+                
+                <div class="subsystem-grid">
+                    <!-- 分布式软总线 -->
+                    <div class="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
+                        <div class="flex items-center mb-3">
+                            <i class="ph ph-git-branch-duotone text-blue-400 mr-2"></i>
+                            <h3 class="font-semibold text-blue-300">分布式软总线</h3>
+                        </div>
+                        <p class="text-sm text-gray-300">为分布式应用在多设备上的运行、调度、迁移等操作提供基础能力</p>
+                    </div>
+
+                    <!-- ArkUI框架 -->
+                    <div class="bg-cyan-500/10 rounded-xl p-4 border border-cyan-500/20">
+                        <div class="flex items-center mb-3">
+                            <i class="ph ph-palette-duotone text-cyan-400 mr-2"></i>
+                            <h3 class="font-semibold text-cyan-300">ArkUI框架</h3>
+                        </div>
+                        <p class="text-sm text-gray-300">声明式开发范式，更精简的渲染链路，更低内存占用</p>
+                    </div>
+
+                    <!-- HDF驱动框架 -->
+                    <div class="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
+                        <div class="flex items-center mb-3">
+                            <i class="ph ph-circuitry-duotone text-green-400 mr-2"></i>
+                            <h3 class="font-semibold text-green-300">HDF驱动框架</h3>
+                        </div>
+                        <p class="text-sm text-gray-300">统一外设访问能力，驱动开发和管理框架</p>
+                    </div>
+
+                    <!-- 多内核架构 -->
+                    <div class="bg-violet-500/10 rounded-xl p-4 border border-violet-500/20">
+                        <div class="flex items-center mb-3">
+                            <i class="ph ph-cpu-duotone text-violet-400 mr-2"></i>
+                            <h3 class="font-semibold text-violet-300">多内核架构</h3>
+                        </div>
+                        <p class="text-sm text-gray-300">支持Linux和LiteOS，通过KAL屏蔽内核差异</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 开发指南 -->
+        <section class="mb-16">
+            <div class="glassmorphism rounded-2xl p-6">
+                <h2 class="text-2xl font-bold mb-6 flex items-center">
+                    <i class="ph ph-code-duotone text-violet-400 mr-3"></i>
+                    开发框架与工具
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 应用模型 -->
+                    <div class="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-xl p-6 border border-cyan-500/20">
+                        <h3 class="text-xl font-semibold mb-4 text-cyan-300">应用模型框架</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-cyan-500/10 rounded-lg">
+                                <span class="text-sm">Feature Ability (FA)</span>
+                                <i class="ph ph-eye text-cyan-400"></i>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-cyan-500/10 rounded-lg">
+                                <span class="text-sm">Particle Ability (PA)</span>
+                                <i class="ph ph-gear text-cyan-400"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- UI框架 -->
+                    <div class="bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-xl p-6 border border-violet-500/20">
+                        <h3 class="text-xl font-semibold mb-4 text-violet-300">UI开发框架</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-violet-500/10 rounded-lg">
+                                <span class="text-sm">声明式开发范式</span>
+                                <i class="ph ph-star text-violet-400"></i>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-violet-500/10 rounded-lg">
+                                <span class="text-sm">类Web开发范式</span>
+                                <i class="ph ph-globe-stand text-violet-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="glassmorphism rounded-t-2xl mt-12 p-6">
+        <div class="max-w-7xl mx-auto text-center">
+            <p class="text-gray-400">OpenHarmony 技术架构可视化展示 | 基于官方文档构建</p>
+        </div>
+    </footer>
+
+    <script>
+        // 架构层次交互
+        document.querySelectorAll('.architecture-layer').forEach(layer => {
+            layer.addEventListener('click', function() {
+                const layerType = this.getAttribute('data-layer');
+                showLayerDetails(layerType);
+            });
+        });
+
+        function showLayerDetails(layerType) {
+            const details = {
+                'application': '应用层包含系统应用和第三方非系统应用，基于FA/PA开发，支持跨设备调度与分发。',
+                'framework': '框架层提供C/C++/JS多语言支持，ArkUI框架适用于声明式开发。',
+                'system-service': '系统服务层是核心能力集合，包含分布式软总线、数据管理等关键子系统。',
+                'kernel': '内核层采用多内核设计，通过KAL向上提供统一接口。'
+            };
+            
+            // 显示浮动详情卡片
+            const detailCard = document.createElement('div');
+            detailCard.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 glassmorphism rounded-2xl p-6 max-w-md z-50 animate-pulse-glow';
+            detailCard.innerHTML = `
+                <div class="text-center">
+                    <h3 class="text-xl font-semibold mb-4">${getLayerName(layerType)}</h3>
+                    <p class="text-gray-300">${details[layerType]}</p>
+                    <button onclick="this.parentElement.parentElement.remove()" class="mt-4 px-4 py-2 bg-blue-500/20 rounded-lg hover:bg-blue-500/30 transition-all">关闭</button>
+                </div>
+            `;
+            
+            document.body.appendChild(detailCard);
+        }
+
+        function getLayerName(type) {
+            const names = {
+                'application': '应用层',
+                'framework': '框架层', 
+                'system-service': '系统服务层',
+                'kernel': '内核层'
+            };
+            return names[type];
+        }
+
+        // 初始化动画
+        document.addEventListener('DOMContentLoaded', function() {
+            // 为架构层添加浮动动画
+            const layers = document.querySelectorAll('.architecture-layer');
+            layers.forEach((layer, index) => {
+                layer.style.animationDelay = `${index * 0.1}s`;
+                layer.classList.add('animate-float');
+            });
+        });
+    </script>
+</body>
+</html>

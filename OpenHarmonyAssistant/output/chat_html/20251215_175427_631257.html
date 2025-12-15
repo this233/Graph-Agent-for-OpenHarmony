@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="referrer" content="no-referrer">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 多内核设计</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00D5FF;
+      --oh-violet: #8A2BE2;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f1f5f9;
+    }
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .kernel-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+    }
+    .system-card {
+      transition: all 0.3s ease;
+    }
+    .system-card.active {
+      border-color: var(--oh-cyan);
+      box-shadow: 0 0 15px rgba(0, 213, 255, 0.5);
+    }
+    .kernel-icon {
+      transition: all 0.3s ease;
+    }
+    .kernel-icon.active {
+      filter: drop-shadow(0 0 8px var(--oh-cyan));
+    }
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+<!-- [AUTO] Injected image(s) because LLM output had no <img> but RAG provided images -->
+<section class="mx-auto max-w-6xl px-4 py-6">
+  <div class="mb-3 text-slate-300 text-sm">相关图片</div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <figure class="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/40">
+              <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。" referrerpolicy="no-referrer" class="w-full h-auto block"/>
+              <figcaption class="px-4 py-3 text-sm text-slate-300">
+                <div class="font-medium">这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。</div>
+                <div class="text-xs text-slate-400 mt-1">1 OpenHarmony开源项目 > 1.2 技术架构</div>
+              </figcaption>
+            </figure><figure class="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/40">
+              <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001160018656.png" alt="这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。" referrerpolicy="no-referrer" class="w-full h-auto block"/>
+              <figcaption class="px-4 py-3 text-sm text-slate-300">
+                <div class="font-medium">这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。</div>
+                <div class="text-xs text-slate-400 mt-1">1 内核概述 > 1.2 内核架构</div>
+              </figcaption>
+            </figure>
+  </div>
+</section>
+
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 mb-4">
+        OpenHarmony 多内核设计
+      </h1>
+      <p class="text-lg text-slate-300 max-w-3xl mx-auto">
+        面向不同资源级别的设备，OpenHarmony 采用多内核架构，灵活适配从轻量级 IoT 设备到高性能智能终端的多样化需求。
+      </p>
+    </header>
+
+    <!-- Hero Section with Architecture Diagram -->
+    <section class="mb-16">
+      <div class="glass rounded-2xl p-6 shadow-2xl">
+        <h2 class="text-2xl font-semibold mb-4 flex items-center">
+          <i class="ph-lightbulb text-cyan-400 text-xl mr-2"></i> 技术架构概览
+        </h2>
+        <div class="relative bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+          <!-- Simulated Architecture Image -->
+          <div class="w-full h-64 md:h-96 bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center text-center p-4">
+            <div class="flex flex-col md:flex-row items-center justify-between w-full max-w-4xl">
+              <!-- Layers -->
+              <div class="flex flex-col items-center mb-6 md:mb-0">
+                <div class="w-48 h-16 glass rounded-lg flex items-center justify-center mb-2">
+                  <span class="font-mono text-sm">应用层</span>
+                </div>
+                <div class="w-48 h-16 glass rounded-lg flex items-center justify-center mb-2">
+                  <span class="font-mono text-sm">框架层</span>
+                </div>
+                <div class="w-48 h-16 glass rounded-lg flex items-center justify-center mb-2 bg-blue-900/30 border border-blue-700/50">
+                  <span class="font-mono text-sm text-blue-300">系统服务层</span>
+                </div>
+                <div class="w-48 h-16 glass rounded-lg flex items-center justify-center bg-cyan-900/30 border border-cyan-700/50">
+                  <span class="font-mono text-sm text-cyan-300">内核层 (多内核)</span>
+                </div>
+              </div>
+              
+              <!-- Kernel Options -->
+              <div class="flex flex-col items-center">
+                <div class="flex space-x-4 mb-4">
+                  <div class="kernel-icon w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold">L</div>
+                  <div class="kernel-icon w-16 h-16 rounded-full bg-gradient-to-br from-green-600 to-emerald-700 flex items-center justify-center text-white font-bold">L</div>
+                </div>
+                <p class="text-slate-400 text-sm max-w-xs">LiteOS 与 Linux 内核通过 KAL 层向上提供统一接口</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kernel Cards -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph-cpu text-violet-400 text-xl mr-2"></i> 内核类型详解
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- LiteOS-M Card -->
+        <div class="kernel-card glass rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]">
+          <div class="flex items-center mb-4">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold mr-3">L</div>
+            <h3 class="text-xl font-bold">LiteOS-M</h3>
+          </div>
+          <p class="text-slate-300 mb-4">专为资源极度受限的MCU设计，适用于百K级内存设备。</p>
+          <ul class="text-sm text-slate-400 space-y-2">
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>轻量级任务管理、内存管理</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>支持MPU隔离</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>硬件高度解耦</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- LiteOS-A Card -->
+        <div class="kernel-card glass rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]">
+          <div class="flex items-center mb-4">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold mr-3">L</div>
+            <h3 class="text-xl font-bold">LiteOS-A</h3>
+          </div>
+          <p class="text-slate-300 mb-4">面向小型系统，支持M级内存，具备更丰富的内核机制。</p>
+          <ul class="text-sm text-slate-400 space-y-2">
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>虚拟内存、多进程支持</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>统一驱动框架HDF</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>1200+ POSIX接口</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Linux Card -->
+        <div class="kernel-card glass rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]">
+          <div class="flex items-center mb-4">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-bold mr-3">L</div>
+            <h3 class="text-xl font-bold">Linux</h3>
+          </div>
+          <p class="text-slate-300 mb-4">基于LTS内核演进，适用于高性能标准系统。</p>
+          <ul class="text-sm text-slate-400 space-y-2">
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>支持4.19.y / 5.10.y / 6.6.y LTS</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>完整应用框架与3D GPU支持</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-check-circle-fill text-green-400 mt-1 mr-2"></i>
+              <span>GPL-2.0协议合规</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Mapping Table -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph-device-tablet-camera text-amber-400 text-xl mr-2"></i> 系统与内核映射关系
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+          <thead>
+            <tr class="bg-slate-700">
+              <th class="py-3 px-4 text-left">系统级别</th>
+              <th class="py-3 px-4 text-left">轻量系统</th>
+              <th class="py-3 px-4 text-left">小型系统</th>
+              <th class="py-3 px-4 text-left">标准系统</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-700 hover:bg-slate-750">
+              <td class="py-3 px-4 font-medium">LiteOS-M</td>
+              <td class="py-3 px-4 text-green-400">✓</td>
+              <td class="py-3 px-4 text-slate-500">✗</td>
+              <td class="py-3 px-4 text-slate-500">✗</td>
+            </tr>
+            <tr class="border-b border-slate-700 hover:bg-slate-750">
+              <td class="py-3 px-4 font-medium">LiteOS-A</td>
+              <td class="py-3 px-4 text-slate-500">✗</td>
+              <td class="py-3 px-4 text-green-400">✓</td>
+              <td class="py-3 px-4 text-slate-500">✗</td>
+            </tr>
+            <tr class="hover:bg-slate-750">
+              <td class="py-3 px-4 font-medium">Linux</td>
+              <td class="py-3 px-4 text-slate-500">✗</td>
+              <td class="py-3 px-4 text-green-400">✓</td>
+              <td class="py-3 px-4 text-green-400">✓</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- KAL Explanation -->
+    <section class="mb-16">
+      <div class="glass rounded-2xl p-6">
+        <h2 class="text-2xl font-semibold mb-4 flex items-center">
+          <i class="ph-shuffle-angular text-cyan-400 text-xl mr-2"></i> 内核抽象层 (KAL)
+        </h2>
+        <p class="text-slate-300 mb-4">
+          OpenHarmony通过KAL模块屏蔽不同内核间的差异，向上层提供统一的标准接口，实现驱动和应用的一次开发、多系统部署。
+        </p>
+        <div class="flex flex-col md:flex-row items-center justify-between bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+          <div class="mb-4 md:mb-0">
+            <div class="text-sm text-slate-400 mb-1">上层应用与驱动</div>
+            <div class="font-mono text-cyan-300">统一标准接口</div>
+          </div>
+          <div class="text-2xl mx-4 hidden md:block">⇄</div>
+          <div class="mb-4 md:mb-0">
+            <div class="text-sm text-slate-400 mb-1">KAL 层</div>
+            <div class="font-mono text-violet-300">Kernel Abstraction Layer</div>
+          </div>
+          <div class="text-2xl mx-4 hidden md:block">⇄</div>
+          <div>
+            <div class="text-sm text-slate-400 mb-1">底层内核</div>
+            <div class="font-mono text-blue-300">LiteOS / Linux</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-500 text-sm py-8 border-t border-slate-800">
+      <p>OpenHarmony 多内核设计 | 实现从IoT到智能终端的全场景覆盖</p>
+    </footer>
+  </div>
+</body>
+</html>

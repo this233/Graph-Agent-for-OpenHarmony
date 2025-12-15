@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 部件设计原则</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007DFF;
+      --oh-cyan: #00DFFF;
+      --oh-violet: #8A2BE2;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+    }
+    .code {
+      font-family: 'Fira Code', monospace;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glow {
+      box-shadow: 0 0 15px rgba(0, 125, 255, 0.5);
+    }
+    .flow-line {
+      stroke: var(--oh-cyan);
+      stroke-width: 2;
+      stroke-dasharray: 5,5;
+      animation: flow 1.5s linear infinite;
+    }
+    @keyframes flow {
+      to { stroke-dashoffset: -10; }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <div class="max-w-6xl mx-auto">
+    <header class="text-center mb-12">
+      <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+        OpenHarmony 部件设计原则与划分方法
+      </h1>
+      <p class="mt-2 text-slate-400">深入理解部件化架构的核心理念</p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+      <!-- 部件定义卡片 -->
+      <div class="glass rounded-xl p-6 transition-all hover:glow">
+        <div class="flex items-center mb-4">
+          <i class="ph ph-cube text-cyan-400 text-2xl mr-2"></i>
+          <h2 class="text-2xl font-semibold">部件定义</h2>
+        </div>
+        <p class="text-slate-300">
+          系统能力的基本单元，以源码为划分依据，具有独立的文件和目录。
+        </p>
+        <ul class="mt-4 space-y-2 text-slate-400">
+          <li class="flex items-start">
+            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+            <span>具备独立的代码目录</span>
+          </li>
+          <li class="flex items-start">
+            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+            <span>可独立编译出库或可执行文件</span>
+          </li>
+          <li class="flex items-start">
+            <i class="ph ph-check-circle text-green-400 mt-1 mr-2"></i>
+            <span>可独立测试和验证</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SysCap 卡片 -->
+      <div class="glass rounded-xl p-6 transition-all hover:glow">
+        <div class="flex items-center mb-4">
+          <i class="ph ph-plug text-violet-400 text-2xl mr-2"></i>
+          <h2 class="text-2xl font-semibold">SysCap (系统能力)</h2>
+        </div>
+        <p class="text-slate-300">
+          由部件提供，每个SysCap绑定一个或多个应用API。
+        </p>
+        <div class="mt-4 p-4 bg-slate-800 rounded-lg">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-cyan-300">SysCap_A</span>
+            <span class="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">API 1, API 2</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-violet-300">SysCap_B</span>
+            <span class="text-xs bg-violet-900 text-violet-200 px-2 py-1 rounded">API 3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设计原则 -->
+    <div class="glass rounded-xl p-6 mb-12">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-ruler text-blue-400 mr-2"></i> 设计原则
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-cyan-500 transition-colors">
+          <h3 class="font-bold text-cyan-300">规则 1.1</h3>
+          <p class="text-sm mt-1">部件应当实现独立自制原则，解耦。</p>
+        </div>
+        <div class="p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-violet-500 transition-colors">
+          <h3 class="font-bold text-violet-300">规则 1.2</h3>
+          <p class="text-sm mt-1">禁止系统通用部件依赖特定芯片。</p>
+        </div>
+        <div class="p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-blue-500 transition-colors">
+          <h3 class="font-bold text-blue-300">规则 1.5</h3>
+          <p class="text-sm mt-1">禁止部件间反向依赖、循环依赖。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 可视化架构图 -->
+    <div class="glass rounded-xl p-6 mb-12">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-circuitry text-cyan-400 mr-2"></i> 部件依赖关系可视化
+      </h2>
+      <div class="relative h-64 overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
+        <svg width="100%" height="100%" viewBox="0 0 800 200" class="absolute inset-0">
+          <!-- 部件A -->
+          <rect x="50" y="50" width="150" height="100" rx="10" fill="#1e293b" stroke="#0ea5e9" stroke-width="2"/>
+          <text x="125" y="90" text-anchor="middle" fill="#e0f2fe" font-size="14">部件 A</text>
+          <text x="125" y="110" text-anchor="middle" fill="#94a3b8" font-size="10">SysCap_A</text>
+
+          <!-- 部件B -->
+          <rect x="325" y="50" width="150" height="100" rx="10" fill="#1e293b" stroke="#8b5cf6" stroke-width="2"/>
+          <text x="400" y="90" text-anchor="middle" fill="#ede9fe" font-size="14">部件 B</text>
+          <text x="400" y="110" text-anchor="middle" fill="#94a3b8" font-size="10">SysCap_B</text>
+
+          <!-- 部件C -->
+          <rect x="600" y="50" width="150" height="100" rx="10" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
+          <text x="675" y="90" text-anchor="middle" fill="#cffafe" font-size="14">部件 C</text>
+          <text x="675" y="110" text-anchor="middle" fill="#94a3b8" font-size="10">SysCap_C</text>
+
+          <!-- 连接线 -->
+          <line x1="200" y1="100" x2="325" y2="100" class="flow-line"/>
+          <line x1="475" y1="100" x2="600" y2="100" class="flow-line"/>
+        </svg>
+        <div class="absolute bottom-2 left-4 text-xs text-slate-500">
+          <i class="ph ph-arrow-right mr-1"></i> 数据流方向
+        </div>
+      </div>
+      <div class="mt-4 text-sm text-slate-400">
+        <p class="flex items-center"><i class="ph ph-warning text-yellow-400 mr-2"></i> 禁止反向依赖和循环依赖</p>
+        <p class="flex items-center mt-1"><i class="ph ph-prohibit text-red-400 mr-2"></i> 禁止通用部件依赖特定芯片</p>
+      </div>
+    </div>
+
+    <!-- 交互式划分原则 -->
+    <div class="glass rounded-xl p-6">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-lightning text-yellow-400 mr-2"></i> 如何划分部件？
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button id="btn1" class="p-4 text-left rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
+          <div class="font-bold text-cyan-300">独立目录</div>
+          <div class="text-sm text-slate-400 mt-1">每个部件拥有专属的源码目录结构</div>
+        </button>
+        <button id="btn2" class="p-4 text-left rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
+          <div class="font-bold text-violet-300">独立编译</div>
+          <div class="text-sm text-slate-400 mt-1">可独立构建为库或可执行文件</div>
+        </button>
+        <button id="btn3" class="p-4 text-left rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
+          <div class="font-bold text-blue-300">独立测试</div>
+          <div class="text-sm text-slate-400 mt-1">具备独立的测试用例和验证流程</div>
+        </button>
+      </div>
+      <div id="detail" class="mt-6 p-4 bg-slate-800 rounded-lg min-h-[100px] border border-slate-700">
+        <p class="text-slate-300">点击上方按钮查看详细说明...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const detail = document.getElementById('detail');
+    document.getElementById('btn1').addEventListener('click', () => {
+      detail.innerHTML = `
+        <h3 class="font-bold text-cyan-300">独立目录</h3>
+        <p class="text-sm text-slate-400 mt-2">部件的源代码、资源文件、配置文件等都应组织在一个独立的目录下。这有助于清晰地界定部件的边界，便于管理和维护。</p>
+        <pre class="mt-2 text-xs p-2 bg-slate-900 rounded text-cyan-200 code">src/
+├── my_component/
+│   ├── include/
+│   ├── src/
+│   └── BUILD.gn</pre>
+      `;
+    });
+    document.getElementById('btn2').addEventListener('click', () => {
+      detail.innerHTML = `
+        <h3 class="font-bold text-violet-300">独立编译</h3>
+        <p class="text-sm text-slate-400 mt-2">部件应能通过构建系统（如GN）独立编译成静态库、动态库或可执行文件。这确保了部件的可重用性和可移植性。</p>
+        <pre class="mt-2 text-xs p-2 bg-slate-900 rounded text-violet-200 code">// BUILD.gn
+static_library("my_component") {
+  sources = [ "src/my_component.cpp" ]
+  include_dirs = [ "include" ]
+}</pre>
+      `;
+    });
+    document.getElementById('btn3').addEventListener('click', () => {
+      detail.innerHTML = `
+        <h3 class="font-bold text-blue-300">独立测试</h3>
+        <p class="text-sm text-slate-400 mt-2">每个部件应包含自己的单元测试和集成测试。测试代码通常与源码并列存放，确保功能的正确性和稳定性。</p>
+        <pre class="mt-2 text-xs p-2 bg-slate-900 rounded text-blue-200 code">src/
+├── my_component/
+│   ├── src/
+│   ├── test/
+│   │   └── my_component_test.cpp
+│   └── BUILD.gn</pre>
+      `;
+    });
+  </script>
+</body>
+</html>

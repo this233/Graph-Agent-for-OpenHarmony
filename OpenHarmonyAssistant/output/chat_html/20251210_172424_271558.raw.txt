@@ -1,0 +1,228 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007AFF;
+      --oh-cyan: #5AC8FA;
+      --oh-violet: #AF52DE;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer {
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .layer:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 122, 255, 0.3);
+    }
+    .pulse-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--oh-cyan);
+      box-shadow: 0 0 0 0 rgba(90, 200, 250, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(90, 200, 250, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(90, 200, 250, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(90, 200, 250, 0); }
+    }
+    .flow-line {
+      stroke-dasharray: 10;
+      animation: dash 1.5s linear infinite;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -20; }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12 mt-6">
+      <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+        OpenHarmony 技术架构
+      </h1>
+      <p class="mt-3 text-slate-300 max-w-2xl mx-auto">
+        探索开源鸿蒙的分层架构，从内核到应用，每一层都为构建万物互联的世界而生。
+      </p>
+    </header>
+
+    <!-- Interactive Stack Visualization -->
+    <div class="glass rounded-2xl p-6 mb-12 relative overflow-hidden">
+      <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(90,200,250,0.1)_0%,rgba(0,0,0,0)_70%)]"></div>
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph-stack-duotone text-cyan-400 text-3xl mr-2"></i> 分层架构概览
+      </h2>
+      
+      <!-- Stack Diagram -->
+      <div class="relative h-[500px] flex flex-col justify-between pb-4">
+        <!-- Layer 1: 应用框架层 -->
+        <div class="layer glass rounded-xl p-5 z-10 cursor-pointer" onclick="showDetails('app')">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-cyan-300">应用框架层 (Ability)</h3>
+            <span class="px-3 py-1 bg-cyan-900/30 text-cyan-300 rounded-full text-sm">ArkUI, JS UI</span>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">提供应用开发框架和UI组件库，支持ArkTS/JS等多语言开发。</p>
+        </div>
+
+        <!-- Layer 2: 系统服务层 -->
+        <div class="layer glass rounded-xl p-5 z-10 cursor-pointer" onclick="showDetails('service')">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-blue-300">系统服务层</h3>
+            <span class="px-3 py-1 bg-blue-900/30 text-blue-300 rounded-full text-sm">DFX, 安全, 分布式</span>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">提供核心系统服务，如分布式软总线、安全机制、DFX等。</p>
+        </div>
+
+        <!-- Layer 3: 内核层 -->
+        <div class="layer glass rounded-xl p-5 z-10 cursor-pointer" onclick="showDetails('kernel')">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-violet-300">内核层</h3>
+            <span class="px-3 py-1 bg-violet-900/30 text-violet-300 rounded-full text-sm">LiteOS, Linux</span>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">支持多种内核，如LiteOS-M、LiteOS-A和Linux，适应不同设备资源。</p>
+        </div>
+
+        <!-- Connecting Lines -->
+        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <line x1="50%" y1="15%" x2="50%" y2="35%" class="flow-line" stroke="rgba(90,200,250,0.5)" stroke-width="1"/>
+          <line x1="50%" y1="45%" x2="50%" y2="65%" class="flow-line" stroke="rgba(0,122,255,0.5)" stroke-width="1"/>
+          <line x1="50%" y1="75%" x2="50%" y2="95%" class="flow-line" stroke="rgba(175,82,222,0.5)" stroke-width="1"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div id="detailPanel" class="glass rounded-2xl p-6 mb-12 transition-all duration-500 ease-in-out transform opacity-0 translate-y-4">
+      <div class="flex justify-between items-start">
+        <div>
+          <h2 id="detailTitle" class="text-2xl font-bold text-white"></h2>
+          <p id="detailDesc" class="mt-3 text-slate-300"></p>
+        </div>
+        <button onclick="hideDetails()" class="text-slate-400 hover:text-white">
+          <i class="ph-x text-2xl"></i>
+        </button>
+      </div>
+      <div id="detailContent" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <!-- 动态内容将通过JS填充 -->
+      </div>
+    </div>
+
+    <!-- Key Features -->
+    <div class="glass rounded-2xl p-6">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center">
+        <i class="ph-lightning-duotone text-yellow-400 text-3xl mr-2"></i> 核心特性
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass p-5 rounded-xl border border-white/10">
+          <div class="flex items-center mb-3">
+            <div class="pulse-dot mr-3"></div>
+            <h3 class="font-bold text-lg">分布式能力</h3>
+          </div>
+          <p class="text-slate-300 text-sm">一次开发，多端部署。设备虚拟化，数据和任务无缝流转。</p>
+        </div>
+        <div class="glass p-5 rounded-xl border border-white/10">
+          <div class="flex items-center mb-3">
+            <div class="pulse-dot mr-3 bg-violet-500"></div>
+            <h3 class="font-bold text-lg">统一OS</h3>
+          </div>
+          <p class="text-slate-300 text-sm">一套操作系统适配从百KB到GB级别的所有智能设备。</p>
+        </div>
+        <div class="glass p-5 rounded-xl border border-white/10">
+          <div class="flex items-center mb-3">
+            <div class="pulse-dot mr-3 bg-green-500"></div>
+            <h3 class="font-bold text-lg">开放生态</h3>
+          </div>
+          <p class="text-slate-300 text-sm">完全开源，社区驱动，共建共享的万物互联生态。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-center text-slate-500 text-sm">
+      <p>© 2025 OpenHarmony. 本演示页面为交互式技术架构展示，旨在帮助开发者快速理解核心概念。</p>
+    </footer>
+  </div>
+
+  <script>
+    const details = {
+      app: {
+        title: "应用框架层 (Ability)",
+        desc: "这是OpenHarmony为开发者提供的应用开发框架。它支持多种UI框架，包括基于ArkTS的声明式开发范式和兼容JS的类Web开发范式。",
+        content: [
+          { name: "ArkUI", desc: "新一代UI开发框架，支持声明式编程。" },
+          { name: "Ability", desc: "应用的基本组成单元，分为Page Ability和Service Ability。" },
+          { name: "JS UI Framework", desc: "兼容类Web的开发方式，适合轻量级应用。" },
+          { name: "多语言支持", desc: "支持ArkTS, JS, eTS, C/C++等。" }
+        ]
+      },
+      service: {
+        title: "系统服务层",
+        desc: "提供OpenHarmony核心系统能力，包括分布式软总线、安全机制、DFX（可维可测可修可调）等基础服务。",
+        content: [
+          { name: "分布式软总线", desc: "实现设备间自发现、自组网、高带宽低时延通信。" },
+          { name: "分布式数据管理", desc: "数据跨设备同步，应用状态协同。" },
+          { name: "安全子系统", desc: "提供设备认证、应用权限管理等安全机制。" },
+          { name: "DFX子系统", desc: "提供日志、调试、性能分析等开发运维工具。" }
+        ]
+      },
+      kernel: {
+        title: "内核层",
+        desc: "OpenHarmony采用多内核设计，支持针对不同资源受限的设备选用最合适的OS内核。",
+        content: [
+          { name: "LiteOS-M", desc: "面向MCU类处理器，如百KB级别内存设备。" },
+          { name: "LiteOS-A", desc: "面向应用处理器，支持轻量级Linux-like系统。" },
+          { name: "Linux", desc: "面向大内存设备，如标准系统设备。" },
+          { name: "内核抽象层 (KAL)", desc: "屏蔽不同内核间的差异，向上提供统一接口。" }
+        ]
+      }
+    };
+
+    function showDetails(layer) {
+      const detail = details[layer];
+      document.getElementById('detailTitle').textContent = detail.title;
+      document.getElementById('detailDesc').textContent = detail.desc;
+      
+      const contentEl = document.getElementById('detailContent');
+      contentEl.innerHTML = '';
+      detail.content.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'glass p-3 rounded-lg';
+        div.innerHTML = `<div class="font-semibold text-cyan-300">${item.name}</div><div class="text-slate-400 text-xs mt-1">${item.desc}</div>`;
+        contentEl.appendChild(div);
+      });
+
+      const panel = document.getElementById('detailPanel');
+      panel.classList.remove('opacity-0', 'translate-y-4');
+      panel.classList.add('opacity-100', 'translate-y-0');
+    }
+
+    function hideDetails() {
+      const panel = document.getElementById('detailPanel');
+      panel.classList.remove('opacity-100', 'translate-y-0');
+      panel.classList.add('opacity-0', 'translate-y-4');
+    }
+  </script>
+</body>
+</html>
+```

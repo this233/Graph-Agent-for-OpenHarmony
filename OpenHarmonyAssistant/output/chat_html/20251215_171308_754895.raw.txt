@@ -1,0 +1,230 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构可视化</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00D5FF;
+      --oh-violet: #8A2BE2;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer-card {
+      transition: all 0.3s ease;
+    }
+    .layer-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+    }
+    .glow {
+      box-shadow: 0 0 15px rgba(0, 119, 237, 0.5);
+    }
+    .code-block {
+      font-family: 'Fira Code', monospace;
+      background: #1e293b;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .pulse-animation {
+      animation: pulse 2s infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-4xl font-bold mb-2">OpenHarmony 技术架构详解</h1>
+      <p class="text-lg text-slate-300">分层设计 · 组件化 · 弹性部署</p>
+    </header>
+
+    <!-- Hero Image Placeholder / Interactive Stack -->
+    <div class="mb-12 relative h-96 rounded-2xl overflow-hidden glass flex flex-col justify-between p-6">
+      <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 z-0"></div>
+      <div class="relative z-10 flex flex-col items-center justify-center h-full">
+        <h2 class="text-2xl font-semibold mb-4">交互式架构图</h2>
+        <p class="text-center text-slate-300 mb-6">悬停图层查看详细信息</p>
+        <div class="flex space-x-4">
+          <button id="btnLight" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition">轻量系统</button>
+          <button id="btnSmall" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 transition">小型系统</button>
+          <button id="btnStandard" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition">标准系统</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Layers -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold mb-6 text-center">四层架构概览</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Layer 1: Kernel -->
+        <div class="layer-card glass rounded-xl p-6 border-l-4 border-blue-500">
+          <div class="flex items-center mb-3">
+            <i class="ph ph-cpu text-2xl mr-2 text-blue-400"></i>
+            <h3 class="text-xl font-semibold">内核层</h3>
+          </div>
+          <ul class="space-y-2 text-sm text-slate-300">
+            <li><strong>多内核设计:</strong> Linux / LiteOS</li>
+            <li><strong>KAL抽象层:</strong> 屏蔽差异</li>
+            <li><strong>驱动框架(HDF):</strong> 统一访问</li>
+          </ul>
+        </div>
+
+        <!-- Layer 2: System Services -->
+        <div class="layer-card glass rounded-xl p-6 border-l-4 border-cyan-500">
+          <div class="flex items-center mb-3">
+            <i class="ph ph-plug text-2xl mr-2 text-cyan-400"></i>
+            <h3 class="text-xl font-semibold">系统服务层</h3>
+          </div>
+          <ul class="space-y-2 text-sm text-slate-300">
+            <li>分布式软总线</li>
+            <li>分布式数据管理</li>
+            <li>图形、安全、AI等子系统</li>
+            <li>可裁剪的软件服务集</li>
+          </ul>
+        </div>
+
+        <!-- Layer 3: Framework -->
+        <div class="layer-card glass rounded-xl p-6 border-l-4 border-violet-500">
+          <div class="flex items-center mb-3">
+            <i class="ph ph-code-simple text-2xl mr-2 text-violet-400"></i>
+            <h3 class="text-xl font-semibold">框架层</h3>
+          </div>
+          <ul class="space-y-2 text-sm text-slate-300">
+            <li>C/C++/JS 用户程序框架</li>
+            <li>ArkUI UI框架</li>
+            <li>Ability框架</li>
+            <li>多语言API接口</li>
+          </ul>
+        </div>
+
+        <!-- Layer 4: Application -->
+        <div class="layer-card glass rounded-xl p-6 border-l-4 border-green-500">
+          <div class="flex items-center mb-3">
+            <i class="ph ph-app-window text-2xl mr-2 text-green-400"></i>
+            <h3 class="text-xl font-semibold">应用层</h3>
+          </div>
+          <ul class="space-y-2 text-sm text-slate-300">
+            <li>系统应用</li>
+            <li>第三方非系统应用</li>
+            <li>FA (有UI) & PA (无UI)</li>
+            <li>跨设备调度与分发</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold mb-6 text-center">核心技术特性</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass rounded-xl p-6">
+          <h3 class="text-xl font-semibold mb-3 flex items-center">
+            <i class="ph ph-link text-blue-400 mr-2"></i> 硬件互助，资源共享
+          </h3>
+          <ul class="list-disc pl-5 space-y-1 text-slate-300">
+            <li>分布式软总线：设备间无缝连接</li>
+            <li>分布式数据管理：数据跨设备同步</li>
+            <li>分布式任务调度：智能选择运行设备</li>
+            <li>设备虚拟化：构建超级虚拟终端</li>
+          </ul>
+        </div>
+        <div class="glass rounded-xl p-6">
+          <h3 class="text-xl font-semibold mb-3 flex items-center">
+            <i class="ph ph-rocket-launch text-cyan-400 mr-2"></i> 一次开发，多端部署
+          </h3>
+          <ul class="list-disc pl-5 space-y-1 text-slate-300">
+            <li>统一开发框架和UI</li>
+            <li>API一致性保证兼容性</li>
+            <li>预览终端能力适配</li>
+            <li>按需弹性部署</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Types -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold mb-6 text-center">系统类型与适用场景</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass rounded-xl p-6 border-t-4 border-yellow-500">
+          <h3 class="text-xl font-semibold mb-2">轻量系统 (Mini)</h3>
+          <p class="text-sm text-slate-300 mb-3">面向MCU类处理器，最小128KiB内存</p>
+          <ul class="text-xs text-slate-400 list-disc pl-5">
+            <li>Arm Cortex-M, RISC-V 32位</li>
+            <li>智能家居模组、传感器、穿戴设备</li>
+            <li>轻量级网络协议、图形框架</li>
+          </ul>
+        </div>
+        <div class="glass rounded-xl p-6 border-t-4 border-purple-500">
+          <h3 class="text-xl font-semibold mb-2">小型系统 (Small)</h3>
+          <p class="text-sm text-slate-300 mb-3">面向应用处理器，最小1MiB内存</p>
+          <ul class="text-xs text-slate-400 list-disc pl-5">
+            <li>Arm Cortex-A</li>
+            <li>IP Camera、电子猫眼、路由器</li>
+            <li>标准图形框架、视频编解码</li>
+          </ul>
+        </div>
+        <div class="glass rounded-xl p-6 border-t-4 border-green-500">
+          <h3 class="text-xl font-semibold mb-2">标准系统 (Standard)</h3>
+          <p class="text-sm text-slate-300 mb-3">面向应用处理器，最小128MiB内存</p>
+          <ul class="text-xs text-slate-400 list-disc pl-5">
+            <li>Arm Cortex-A</li>
+            <li>高端冰箱屏、智能电视</li>
+            <li>3D GPU、丰富动效、完整应用框架</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-500 text-sm mt-12">
+      <p>© 2025 OpenHarmony 可视化技术架构演示</p>
+    </footer>
+  </div>
+
+  <script>
+    // 模拟交互效果
+    document.querySelectorAll('.layer-card').forEach(card => {
+      card.addEventListener('mouseenter', () => {
+        card.classList.add('glow');
+      });
+      card.addEventListener('mouseleave', () => {
+        card.classList.remove('glow');
+      });
+    });
+
+    // 系统类型按钮交互
+    document.getElementById('btnLight').addEventListener('click', () => {
+      alert("已切换到轻量系统视图");
+    });
+    document.getElementById('btnSmall').addEventListener('click', () => {
+      alert("已切换到小型系统视图");
+    });
+    document.getElementById('btnStandard').addEventListener('click', () => {
+      alert("已切换到标准系统视图");
+    });
+  </script>
+</body>
+</html>
+```

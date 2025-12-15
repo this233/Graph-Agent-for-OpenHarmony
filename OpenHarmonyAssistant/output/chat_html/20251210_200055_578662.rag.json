@@ -1,0 +1,404 @@
+{
+  "query": "请解释OpenHarmony的技术架构",
+  "chunks": {
+    "ids": [
+      "chunk-8ffe6094de58792a11212edd9effd696",
+      "chunk-a61c9f2abbb1c93d65eefd20769be72a",
+      "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+      "chunk-090aa1156a376b1b0a66ec331d76b8ea",
+      "chunk-ac2141f3a95786a32c7b065db13b03cc",
+      "chunk-434e807902b097dd4520d4285360c349",
+      "chunk-359fbf44eece16380cf39125256c764b",
+      "chunk-518001c6690349b4b2b3fecc587af116",
+      "chunk-7c7d0946b1a7a2354b0060f9da21b8d8",
+      "chunk-8899708fb1f1e40f85496d19a90dc6aa"
+    ],
+    "contents": [
+      "# 1 OpenHarmony开源项目  \n## 1.2 技术架构  \nOpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统 \\> 子系统 \\> 组件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。OpenHarmony技术架构如下所示：  \n![](figures/1.png)  \n**内核层**  \n-   内核子系统：采用多内核（Linux内核或者LiteOS）设计，支持针对不同资源受限设备选用适合的OS内核。内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽多内核差异，对上层提供基础的内核能力，包括进程/线程管理、内存管理、文件系统、网络管理和外设管理等。  \n-   驱动子系统：驱动框架（HDF）是系统硬件生态开放的基础，提供统一外设访问能力和驱动开发、管理框架。  \n**系统服务层**  \n系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。该层包含以下几个部分：  \n-   系统基本能力子系统集：为分布式应用在多设备上的运行、调度、迁移等操作提供了基础能力，由分布式软总线、分布式数据管理、分布式任务调度、公共基础库、多模输入、图形、安全、AI等子系统组成。  \n-   基础软件服务子系统集：提供公共的、通用的软件服务，由事件通知、电话、多媒体、DFX（Design For X） 等子系统组成。  \n-   增强软件服务子系统集：提供针对不同设备的、差异化的能力增强型软件服务，由智慧屏专有业务、穿戴专有业务、IoT专有业务等子系统组成。  \n-   硬件服务子系统集：提供硬件服务，由位置服务、用户IAM、穿戴专有硬件服务、IoT专有硬件服务等子系统组成。  \n根据不同设备形态的部署环境，基础软件服务子系统集、增强软件服务子系统集、硬件服务子系统集内部可以按子系统粒度裁剪，每个子系统内部又可以按功能粒度裁剪。  \n**框架层**  \n框架层为应用开发提供了C/C++/JS等多语言的用户程序框架和Ability框架，适用于JS语言的ArkUI框架，以及各种软硬件服务对外开放的多语言框架API。根据系统的组件化裁剪程度，设备支持的API也会有所不同。  \n**应用层**  \n应用层包括系统应用和第三方非系统应用。应用由一个或多个FA（Feature Ability）或PA（Particle Ability）组成。其中，FA有UI界面，提供与用户交互的能力；而PA无UI界面，提供后台运行任务的能力以及统一的数据访问抽象。基于FA/PA开发的应用，能够实现特定的业务功能，支持跨设备调度与分发，为用户提供一致、高效的应用体验。",
+      "# 1 OpenHarmony开源项目  \n## 1.5 详细特征  \n在介绍OpenHarmony特性前，需要先明确以下两个基本概念：  \n-   子系统  \nOpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统 \\> 子系统 \\> 组件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。子系统是一个逻辑概念，它具体由对应的组件构成。  \n-   组件  \n对子系统的进一步拆分，可复用的软件单元，它包含源码、配置文件、资源文件和编译脚本；能独立构建，以二进制方式集成，具备独立验证能力的二进制单元。  \n以下为OpenHarmony中相关的子系统简介，详细介绍见子系统Readme文档，入口：[https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme](https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme)。  \n| 子系统        | 简 介                                                        | 适用范围         |\n| -------- | -------- | -------- |\n| 内核           | 支持适用于嵌入式设备及资源受限设备，具有小体积、高性能、低功耗等特征的LiteOS内核；支持基于linux kernel演进的适用于标准系统的linux内核。 | 小型系统<br>标准系统 |\n| 分布式文件     | 提供本地同步JS文件接口。                                     | 标准系统         |\n| 图形           | 主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块，构建基于轻量OS应用框架满足硬件资源较小的物联网设备或者构建基于标准OS的应用框架满足富设备（如平板和轻智能机等）的OpenHarmony系统应用开发。 | 所有系统         |\n| 驱动           | OpenHarmony驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座，旨在为开发者提供更精准、更高效的开发环境，力求做到一次开发，多系统部署。 | 所有系统         |\n| 电源管理服务   | 电源管理服务子系统提供如下功能：重启系统；管理休眠运行锁；系统电源状态管理和查询；充电和电池状态查询和上报；显示亮灭屏状态管理，包括显示亮度调节。 | 标准系统         |\n| 泛Sensor服务   | 泛Sensor中包含传感器和小器件，传感器用于侦测环境中所发生事件或变化，并将此消息发送至其他电子设备，小器件用于向外传递信号的设备，包括马达和LED灯，对开发者提供控制马达振动和LED灯开关的能力。 | 小型系统         |\n| 多模输入       | OpenHarmony旨在为开发者提供NUI（Natural User Interface）的交互方式，有别于传统操作系统的输入，在OpenHarmony上，我们将多种维度的输入整合在一起，开发者可以借助应用程序框架、系统自带的UI组件或API接口轻松地实现具有多维、自然交互特点的应用程序。具体来说，多模输入子系统目前支持传统的输入交互方式，例如按键和触控。 | 标准系统         |\n| 启动恢复       | 启动恢复负责在内核启动之后，应用启动之前的操作系统中间层的启动。并提供系统属性查询、修改及设备恢复出厂设置的功能。 | 所有系统         |\n| 升级服务       | 可支持OpenHarmony设备的OTA（Over The Air）升级。             | 标准系统         |\n| 帐号           | 支持在端侧对接厂商云帐号应用，提供分布式帐号登录状态查询和更新的管理能力。 | 标准系统         |\n| 编译构建       | 编译构建子系统提供了一个基于Gn和ninja的编译构建框架。        | 所有系统         |\n| 测试           | 开发过程采用测试驱动开发模式，开发者基于系统新增特性可以通过开发者自己开发用例保证，对于系统已有特性的修改，也可通过修改项目中原有的测试用例保证，开发者测试旨在帮助开发者在开发阶段就能开发出高质量代码。 | 所有系统         |\n| 数据管理       | 数据管理支持应用本地数据管理和分布式数据管理：<br>- 支持应用本地数据管理，包括轻量级偏好数据库，关系型数据库。<br/>- 支持分布式数据服务，为应用程序提供不同设备间数据库数据分布式的能力。 | 标准系统         |\n| 语言编译运行时 | 语言运行时提供了JS、C/C++语言程序的编译、执行环境，提供支撑运行时的基础库，以及关联的API接口、编译器和配套工具。 | 所有系统         |\n| 分布式任务调度 | 提供系统服务的启动、注册、查询及管理能力。                   | 所有系统         |\n| JS UI框架      | JS UI框架是OpenHarmony UI开发框架，支持类Web范式编程。       | 所有系统         |\n| 媒体           | 提供音频、视频、相机等简单有效的媒体组件开发接口，使得应用开发者轻松使用系统的多媒体资源。 | 所有系统         |\n| 事件通知       | 公共事件管理实现了订阅、退订、发布、接收公共事件（例如亮灭屏事件、USB插拔事件）的能力。 | 标准系统         |\n| 杂散软件服务   | 提供设置时间的能力。                                         | 标准系统         |\n| 包管理子系统   | 提供包安装、卸载、更新、查询等能力。                         | 所有系统         |\n| 电话服务       | 提供SIM卡、搜网、蜂窝数据、蜂窝通话、短彩信等蜂窝移动网络基础通信能力，可管理多类型通话和数据网络连接，为应用开发者提供便捷一致的通信API。 | 标准系统         |\n| 公共基础类库   | 公共基础库存放OpenHarmony通用的基础组件。这些基础组件可被OpenHarmony各业务子系统及上层应用所使用。 | 所有系统         |\n| 研发工具链     | 提供设备连接调试器hdc；提供了性能跟踪能力和接口；提供了性能调优框架，旨在为开发者提供一套性能调优平台，可以用来分析内存、性能等问题。 | 标准系统         |\n| 分布式软总线   | 分布式软总线旨在为OpenHarmony系统提供跨进程或跨设备的通信能力，主要包含软总线和进程间通信两部分。其中，软总线为应用和系统提供近场设备间分布式通信的能力，提供不区分通信方式的设备发现，连接，组网和传输功能；而进程间通信则提供了对设备内或设备间无差别的进程间通信能力。 | 所有系统         |\n| XTS            | XTS是OpenHarmony兼容性测试套件的集合，当前包括acts（application compatibility test suite）应用兼容性测试套，后续会拓展dcts（device compatibility test suite）设备兼容性测试套等。 | 所有系统         |\n| 系统应用       | 系统应用提供了OpenHarmony标准版上的部分系统应用，如桌面、SystemUI、设置等应用，为开发者提供了构建标准版应用的具体实例，这些应用支持在所有标准版系统的设备上使用。 | 标准系统         |\n| DFX            | DFX是OpenHarmony非功能属性能力，包含日志系统、应用和系统事件日志接口、事件日志订阅服务、故障信息生成采集等功能。 | 所有系统         |\n| 全球化         | 当OpenHarmony设备或应用在全球不同区域使用时，系统和应用需要满足不同市场用户关于语言、文化习俗的需求。全球化子系统提供支持多语言、多文化的能力，包括资源管理能力和国际化能力。 | 所有系统         |\n| 安全           | 安全子系统包括系统安全、数据安全、应用安全等模块，为OpenHarmony提供了保护系统和和用户数据的能力。安全子系统当前开源的功能，包括应用完整性保护、应用权限管理、设备认证、密钥管理服务。 | 所有系统         |",
+      "# 1 内核概述  \n### 1.3 多内核架构和基本组成  \n业界的内核有很多，但无论是什么内核，基本上有几个最重要的组成单元是每个内核均要具备的，分别是：  \n- 负责持久化数据，并让应用程序能够方便的访问持久化数据的“文件系统”。  \n- 负责管理进程地址空间的“内存管理”。  \n- 负责管理多个进程的“进程管理”或者“任务管理“。  \n- 负责本机操作系统和另外一个设备上操作系统通信的“网络”。  \nOpenHarmony采用了多内核结构，支持Linux和LiteOS，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备上述组成单元，只是实现方式有所不同。多个内核通过KAL（Kernel Abstraction Layer）模块，向上提供统一的标准接口。  \n内核子系统位于OpenHarmony下层。需要特别注意的是，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽内核间差异，对上层提供基础的内核能力。  \n**图2** OpenHarmony架构图  \n![1_zh-cn_image_0000001128794202](figures/1_zh-cn_image_0000001128794202.png)",
+      "# 1 OpenHarmony开源项目  \n## 1.4 系统类型  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。",
+      "# 1 快速入门概述  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \nOpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n**表1** 基础类型系统简介  \n| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini&nbsp;system） | MCU类处理器（例如Arm&nbsp;Cortex-M、RISC-V&nbsp;32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP&nbsp;Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard&nbsp;system） | 应用处理器（例如Arm&nbsp;Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D&nbsp;GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |  \n本文通过介绍OpenHarmony系统的开发环境搭建、编译、烧录、调测以及运行“Hello World”等，引导开发者快速熟悉OpenHarmony设备开发的基本流程和方法。",
+      "# 1 XTS子系统<a name=\"ZH-CN_TOPIC_0000001117409671\"></a>  \n## 1.2 系统类型<a name=\"section125090457443\"></a>  \nOpenHarmony支持如下几种系统类型：  \n-   轻量系统（mini system）  \n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。典型的开发板型号是Multi-modalV200Z-R。  \n-   小型系统（small system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。典型的开发板型号是Hispark_Taurus。  \n-   标准系统（standard system）  \n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。典型的开发板型号是润和DAYU200。",
+      "# 1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a>  \n## 1.1 系统类型  \n在正式学习OpenHarmony开发前，开发者需要先了解系统类型，方便后续根据自身业务匹配对应的系统及对应文档资源。  \nOpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持在128KiB到xGiB RAM资源的设备上运行系统组件，设备开发者可基于目标硬件能力自由选择系统组件进行集成。  \n为了保证在不同硬件上集成的易用性，OpenHarmony当前定义了三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。这三种基础系统类型的参考定义如下：  \n-   轻量系统（mini system）  \n面向MCU类处理器，例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n-   小型系统（small system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n-   标准系统（standard system）  \n面向应用处理器，例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony也提供了一系列可选的系统组件，方便设备开发者按需配置，以支撑其特色功能的扩展或定制开发。系统将这些可选的系统组件组合为一系列描述为特性或功能的系统能力，以方便设备开发者理解和选择。",
+      "# 1 概述  \n## 1.3 基本概念  \n**表2** 基本概念  \n| 名词 | 介绍 |\n| -------- | -------- |\n| 子系统 | 是一个逻辑概念，它由一个或多个具体的部件组成。OpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统&nbsp;&gt;&nbsp;子系统&nbsp;&gt;&nbsp;部件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的子系统或部件。 |\n| 部件 | 系统最小的可复用、可配置、可裁剪的功能单元。部件具备目录独立可并行开发、可独立编译、可独立测试的特征。 |\n| hb | OpenHarmony的命令行工具，用来执行编译命令。 |\n| kv | 键值对(key-value)，描述数据存储的格式。 |",
+      "# 1 OpenHarmony开源项目  \n## 1.3 技术特性  \n**硬件互助，资源共享**  \n主要通过下列模块达成  \n-   分布式软总线  \n分布式软总线是多设备终端的统一基座，为设备间的无缝互联提供了统一的分布式通信能力，能够快速发现并连接设备，高效地传输任务和数据。  \n-   分布式数据管理  \n分布式数据管理基于分布式软总线，实现了应用程序数据和用户数据的分布式管理。用户数据不再与单一物理设备绑定，业务逻辑与数据存储分离，应用跨设备运行时数据无缝衔接，为打造一致、流畅的用户体验创造了基础条件  \n-   分布式任务调度  \n分布式任务调度基于分布式软总线、分布式数据管理、分布式Profile等技术特性，构建统一的分布式服务管理（发现、同步、注册、调用）机制，支持对跨设备的应用进行远程启动、远程调用、绑定/解绑、以及迁移等操作，能够根据不同设备的能力、位置、业务运行状态、资源使用情况并结合用户的习惯和意图，选择最合适的设备运行分布式任务  \n-   设备虚拟化  \n分布式设备虚拟化平台可以实现不同设备的资源融合、设备管理、数据处理，将周边设备作为手机能力的延伸，共同形成一个超级虚拟终端。  \n**一次开发，多端部署**  \nOpenHarmony提供用户程序框架、Ability框架以及UI框架，能够保证开发的应用在多终端运行时保证一致性。一次开发、多端部署。  \n多终端软件平台API具备一致性，确保用户程序的运行兼容性。  \n-   支持在开发过程中预览终端的能力适配情况（CPU/内存/外设/软件资源等）。\n-   支持根据用户程序与软件平台的兼容性来调度用户呈现。  \n**统一OS，弹性部署**  \nOpenHarmony通过组件化和组件弹性化等设计方法，做到硬件资源的可大可小，在多种终端设备间，按需弹性部署，全面覆盖了ARM、RISC-V、x86等各种CPU，从百KiB到GiB级别的RAM。",
+      "# 1 概述  \n## 1.1 简介  \nOpenHarmony采用多内核（Linux内核或者LiteOS）设计，支持系统在不同资源容量的设备部署。当相同的硬件部署不同内核时，如何能够让设备驱动程序在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担，是OpenHarmony驱动子系统需要解决的重要问题。  \n为了缩减驱动开发者的驱动开发周期，降低三方设备驱动集成难度，OpenHarmony驱动子系统支持以下关键特性和能力。  \n- 弹性化的框架能力  \n在传统的驱动框架能力的基础上，OpenHarmony驱动子系统通过构建弹性化的框架能力，可支持在百K级别到百兆级容量的终端产品形态部署。  \n- 规范化的驱动接口  \n定义了常见驱动接口，为驱动开发者和使用者提供丰富、稳定接口，并和未来开放的面向手机、平板、智慧屏等设备驱动接口保持API兼容性。  \n- 组件化的驱动模型  \n支持组件化的驱动模型，为开发者提供更精细化的驱动管理，开发者可以对驱动进行组件化拆分，使得驱动开发者可以更多关注驱动与硬件交互部分。同时系统也预置了部分模板化的驱动模型组件，如网络设备模型等。  \n- 归一化的配置界面  \n提供统一的配置界面，构建跨平台的配置转换和生成工具，实现跨平台的无缝切换。"
+    ],
+    "metadata": [
+      {
+        "id": "chunk-8ffe6094de58792a11212edd9effd696",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony采用分层架构设计，包含内核层、系统服务层、框架层和应用层。内核层支持多内核选择和统一驱动框架；系统服务层提供分布式能力、基础服务及硬件服务等核心功能；框架层为应用开发提供多语言支持；应用层支持系统与第三方应用，具备跨设备调度能力。整体架构支持按设备需求进行组件裁剪，实现灵活部署。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.2 技术架构"
+      },
+      {
+        "id": "chunk-a61c9f2abbb1c93d65eefd20769be72a",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony采用分层架构设计，包含内核层、系统服务层、框架层和应用层，通过子系统和组件实现功能模块化。系统支持多设备部署，可根据需求裁剪组件。主要子系统包括内核、图形、驱动、分布式文件、电源管理、安全等，涵盖系统基础功能、用户界面、设备管理、数据服务等核心能力，适用于从嵌入式设备到标准系统的各类场景。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.5 详细特征"
+      },
+      {
+        "id": "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony采用多内核架构，支持Linux和LiteOS两种内核。所有内核均包含文件系统、内存管理、进程管理和网络四大核心模块。通过内核抽象层（KAL）屏蔽内核差异，为上层提供统一接口，实现跨设备类型的灵活适配，满足不同规格产品的资源需求。",
+        "breadcrumb": "1 内核概述 > 1.3 多内核架构和基本组成"
+      },
+      {
+        "id": "chunk-090aa1156a376b1b0a66ec331d76b8ea",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony系统分为三种类型：轻量系统面向MCU处理器，内存128KiB起，适用于智能家居传感器等简单设备；小型系统面向Cortex-A处理器，内存1MiB起，支持图形框架和多媒体，适用于IP摄像头等产品；标准系统同样面向Cortex-A处理器，内存128MiB起，具备完整应用框架和3D图形能力，适用于高端显示屏设备。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.4 系统类型"
+      },
+      {
+        "id": "chunk-ac2141f3a95786a32c7b065db13b03cc",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md",
+        "summary": "OpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持从128KiB到xGiB内存的设备。系统提供三种基础类型：轻量系统（MCU处理器，128KiB内存，适用于智能家居模组等）、小型系统（应用处理器，1MiB内存，支持摄像头、路由器等）、标准系统（应用处理器，128MiB内存，适用于高端显示屏）。本文旨在引导开发者完成环境搭建、编译、烧录及运行示例，快速掌握开发流程。",
+        "breadcrumb": "1 快速入门概述"
+      },
+      {
+        "id": "chunk-434e807902b097dd4520d4285360c349",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/XTS子系统.md",
+        "summary": "OpenHarmony系统支持三种类型：轻量系统面向MCU处理器，适用于内存128KiB以上的传感器、穿戴设备等；小型系统面向Cortex-A处理器，支持1MiB以上内存，用于IP Camera、路由器等；标准系统面向Cortex-A处理器，支持128MiB以上内存，提供完整应用框架，适用于高端冰箱显示屏等。",
+        "breadcrumb": "1 XTS子系统<a name=\"ZH-CN_TOPIC_0000001117409671\"></a> > 1.2 系统类型<a name=\"section125090457443\"></a>"
+      },
+      {
+        "id": "chunk-359fbf44eece16380cf39125256c764b",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/device-dev-guide.md",
+        "summary": "OpenHarmony是一款面向全场景的开源分布式操作系统，采用组件化设计，支持从128KiB到xGiB内存的设备运行。系统定义了三种基础类型：轻量系统（面向MCU处理器，内存≥128KiB，适用于传感器、穿戴设备）、小型系统（面向应用处理器，内存≥1MiB，适用于IP Camera、路由器）和标准系统（面向应用处理器，内存≥128MiB，适用于高端冰箱显示屏）。开发者可根据硬件能力选择系统组件进行集成，并支持可选组件扩展功能。",
+        "breadcrumb": "1 导读<a name=\"ZH-CN_TOPIC_0000001152533331\"></a> > 1.1 系统类型"
+      },
+      {
+        "id": "chunk-518001c6690349b4b2b3fecc587af116",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/porting-minichip-overview.md",
+        "summary": "本文档介绍了OpenHarmony系统架构中的四个基本概念：子系统是由多个部件组成的逻辑单元，系统采用内核层至应用层的分层设计；部件是系统最小的可复用功能单元；hb是系统的编译命令行工具；kv指键值对数据存储格式。系统支持根据设备需求裁剪子系统和部件。",
+        "breadcrumb": "1 概述 > 1.3 基本概念"
+      },
+      {
+        "id": "chunk-7c7d0946b1a7a2354b0060f9da21b8d8",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony是一个开源操作系统，具备三大技术特性：  \n1. 硬件互助资源共享：通过分布式软总线、数据管理、任务调度和设备虚拟化，实现多设备间无缝连接与资源协同，形成超级虚拟终端。  \n2. 一次开发多端部署：提供统一开发框架，确保应用在不同终端上保持界面和功能一致性。  \n3. 统一OS弹性部署：采用组件化设计，支持灵活适配从百KiB到GiB内存的各种设备架构（如ARM/x86/RISC-V）。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.3 技术特性"
+      },
+      {
+        "id": "chunk-8899708fb1f1e40f85496d19a90dc6aa",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/driver/driver-overview-foundation.md",
+        "summary": "OpenHarmony驱动子系统采用多内核设计，支持设备在不同内核间平滑迁移。通过弹性化框架、规范化接口、组件化模型和归一化配置界面，降低驱动开发难度与维护成本，提升跨平台兼容性，适用于百K至百兆级容量的设备部署。",
+        "breadcrumb": "1 概述 > 1.1 简介"
+      }
+    ]
+  },
+  "codes": {
+    "ids": [
+      "code-dbe9dfecc548a807e453fa56b0332678",
+      "code-1ea72fa922238d2b1d2a7f3c219b8944",
+      "code-76786c4e431c0c326b1c297a391be090"
+    ],
+    "contents": [
+      "# 1 OpenHarmony 社区贡献流程  \n## 1.1 贡献准备 (代码下载)  \n### 1.1.2 获取代码  \n1.  **Fork主干仓**：在OpenHarmony gitcode组织下找到您感兴趣的仓库，点击右上角的 \"Fork\" 按钮，创建一份个人名下的代码副本（个人仓）。\n2.  **Clone到本地**：将您的个人仓克隆（clone）到本地计算机，作为您的本地工作空间。\n```bash\ngit clone git@gitcode.com:{your_gitcode_id}/{repository_name}.git\ncd {repository_name}\n\n3.  **创建开发分支**：基于最新的主干代码创建一个新的本地分支，用于本次贡献。\n\n```bash",
+      "--log-level LOG_LEVEL\nspecifies the log level during compilationyou can select three levels: debug, info and error\n--fast-rebuild        it will skip prepare, preloader, gn_gen steps so we can enable it only when there is no change\nfor gn related script\n--device-type DEVICE_TYPE\nspecifies device type\n--build-variant BUILD_VARIANT\nspecifies device operating mode\n```  \n- hb build后无参数，会按照设置好的代码路径、产品进行编译，编译选项使用与之前保持一致。-f 选项将删除当前产品所有编译产品，等同于hb clean + hb build。  \n- hb build {component_name}：基于设置好的产品对应的单板、内核，单独编译部件（e.g.：hb build kv_store)。  \n- hb build -p ipcamera@hisilicon：免set编译产品，该命令可以跳过set步骤，直接编译产品。  \n- 在device/board/device_company下单独执行hb build会进入内核选择界面，选择完成后会根据当前路径的单板、选择的内核编译出仅包含内核、驱动的镜像。  \n**hb clean**  \n清除out目录对应产品的编译产物，仅保留args.gn、build.log。清除指定路径可输入路径参数：hb clean out/board/product，默认将清除当前hb set的产品对应out路径。  \n```shell\nhb clean\nusage: hb clean [-h] [out_path]\n\npositional arguments:\nout_path    clean a specified path.\n\noptional arguments:\n-h, --help  show this help message and exit\n```  \n> **说明：**\n>\n> - 设备开发过程中详细的编译环境搭建及编译步骤请参考[快速入门中的环境搭建及编译章节。](../quick-start/quickstart-overview.md)\n> - OpenHarmony还为开发者提供了Docker编译环境，可以省略编译工具的安装，具体使用请参考[Docker编译指导。](../get-code/gettools-acquire.md)",
+      "- hb set -root dir 可直接设置代码根目录  \n- hb set -p 设置要编译的产品  \n**hb env**  \n查看当前设置信息。  \n```shell\nhb env\n[OHOS INFO] root path: xxx\n[OHOS INFO] board: hispark_taurus\n[OHOS INFO] kernel: liteos\n[OHOS INFO] product: ipcamera\n[OHOS INFO] product path: xxx/vendor/hisilicon/ipcamera\n[OHOS INFO] device path: xxx/device/hisilicon/hispark_taurus/sdk_linux_4.19\n```  \n**hb build**  \n编译产品、部件、模块或芯片解决方案。  \n```shell\nhb build -h\nusage: hb build [-h] [-b BUILD_TYPE] [-c COMPILER] [-t [TEST [TEST ...]]] [-cpu TARGET_CPU] [--dmverity] [--tee]\n[-p PRODUCT] [-f] [-n] [-T [TARGET [TARGET ...]]] [-v] [-shs] [--patch] [--compact-mode]\n[--gn-args GN_ARGS] [--keep-ninja-going] [--build-only-gn] [--log-level LOG_LEVEL] [--fast-rebuild]\n[--device-type DEVICE_TYPE] [--build-variant BUILD_VARIANT]\n[component [component ...]]\n\npositional arguments:\ncomponent             name of the component, mini/small only\n\noptional arguments:\n-h, --help            show this help message and exit\n-b BUILD_TYPE, --build_type BUILD_TYPE\nrelease or debug version, mini/small only\n-c COMPILER, --compiler COMPILER\nspecify compiler, mini/small only\n-t [TEST [TEST ...]], --test [TEST [TEST ...]]\ncompile test suit\n-cpu TARGET_CPU, --target-cpu TARGET_CPU\nselect cpu\n--dmverity            enable dmverity\n--tee                 Enable tee\n-p PRODUCT, --product PRODUCT\nbuild a specified product with {product_name}@{company}\n-f, --full            full code compilation\n-n, --ndk             compile ndk\n-T [TARGET [TARGET ...]], --target [TARGET [TARGET ...]]\ncompile single target\n-v, --verbose         show all command lines while building\n-shs, --sign_haps_by_server\nsign haps by server\n--patch               apply product patch before compiling\n--compact-mode        compatible with standard build system set to false if we use build.sh as build entrance\n--gn-args GN_ARGS     specifies gn build arguments, eg: --gn-args=\"foo=\"bar\" enable=true blah=7\"\n--keep-ninja-going    keeps ninja going until 1000000 jobs fail\n--build-only-gn       only do gn parse, do not run ninja\n--log-level LOG_LEVEL\nspecifies the log level during compilationyou can select three levels: debug, info and error\n--fast-rebuild        it will skip prepare, preloader, gn_gen steps so we can enable it only when there is no change\nfor gn related script\n--device-type DEVICE_TYPE\nspecifies device type\n--build-variant BUILD_VARIANT\nspecifies device operating mode\n```  \n- hb build后无参数，会按照设置好的代码路径、产品进行编译，编译选项使用与之前保持一致。-f 选项将删除当前产品所有编译产品，等同于hb clean + hb build。  \n- hb build {component_name}：基于设置好的产品对应的单板、内核，单独编译部件（e.g.：hb build kv_store)。  \n- hb build -p ipcamera@hisilicon：免set编译产品，该命令可以跳过set步骤，直接编译产品。  \n- 在device/board/device_company下单独执行hb build会进入内核选择界面，选择完成后会根据当前路径的单板、选择的内核编译出仅包含内核、驱动的镜像。  \n**hb clean**  \n清除out目录对应产品的编译产物，仅保留args.gn、build.log。清除指定路径可输入路径参数：hb clean out/board/product，默认将清除当前hb set的产品对应out路径。  \n```shell\nhb clean\nusage: hb clean [-h] [out_path]\n\npositional arguments:\nout_path    clean a specified path.\n\noptional arguments:\n-h, --help  show this help message and exit"
+    ],
+    "metadata": [
+      {
+        "id": "code-dbe9dfecc548a807e453fa56b0332678",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/contribute/贡献流程.md",
+        "summary": "该文档说明OpenHarmony社区代码贡献流程：首先需要fork项目仓库到个人账户，然后将代码克隆到本地工作空间，最后基于主干创建开发分支用于后续代码修改和提交。",
+        "breadcrumb": "1 OpenHarmony 社区贡献流程 > 1.1 贡献准备 (代码下载) > 1.1.2 获取代码"
+      },
+      {
+        "id": "code-1ea72fa922238d2b1d2a7f3c219b8944",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-build-all.md",
+        "summary": "该文档介绍了OpenHarmony构建工具hb的使用方法，包括build和clean命令。hb build支持指定日志级别、快速重建、设备类型等编译选项，可进行全量编译或单独部件编译。hb clean用于清除指定输出目录的编译产物。文档还提供了免set编译、内核选择等特殊使用场景说明。",
+        "breadcrumb": "1 编译构建指导 > 1.3 编译构建使用指导 > 1.3.2 编译命令"
+      },
+      {
+        "id": "code-76786c4e431c0c326b1c297a391be090",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/subsystems/subsys-build-all.md",
+        "summary": "这是一个针对OpenHarmony项目的编译工具hb的使用说明。主要功能包括：设置代码根目录和产品配置（hb set）、查看当前环境信息（hb env）、编译产品/部件（hb build）以及清理编译产物（hb clean）。支持多种编译选项和参数，可实现完整编译、单独部件编译和快速重建等操作。",
+        "breadcrumb": "1 编译构建指导 > 1.3 编译构建使用指导 > 1.3.2 编译命令"
+      }
+    ]
+  },
+  "tables": {
+    "ids": [
+      "table-a61c9f2abbb1c93d65eefd20769be72a",
+      "table-b72a2e07c43e376e04c6a82241dfc854",
+      "table-894f4846c76bb6834ae567247f0adad7"
+    ],
+    "contents": [
+      "# 1 OpenHarmony开源项目  \n## 1.5 详细特征  \n在介绍OpenHarmony特性前，需要先明确以下两个基本概念：  \n-   子系统  \nOpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统 \\> 子系统 \\> 组件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。子系统是一个逻辑概念，它具体由对应的组件构成。  \n-   组件  \n对子系统的进一步拆分，可复用的软件单元，它包含源码、配置文件、资源文件和编译脚本；能独立构建，以二进制方式集成，具备独立验证能力的二进制单元。  \n以下为OpenHarmony中相关的子系统简介，详细介绍见子系统Readme文档，入口：[https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme](https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme)。  \n| 子系统        | 简 介                                                        | 适用范围         |\n| -------- | -------- | -------- |\n| 内核           | 支持适用于嵌入式设备及资源受限设备，具有小体积、高性能、低功耗等特征的LiteOS内核；支持基于linux kernel演进的适用于标准系统的linux内核。 | 小型系统<br>标准系统 |\n| 分布式文件     | 提供本地同步JS文件接口。                                     | 标准系统         |\n| 图形           | 主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块，构建基于轻量OS应用框架满足硬件资源较小的物联网设备或者构建基于标准OS的应用框架满足富设备（如平板和轻智能机等）的OpenHarmony系统应用开发。 | 所有系统         |\n| 驱动           | OpenHarmony驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座，旨在为开发者提供更精准、更高效的开发环境，力求做到一次开发，多系统部署。 | 所有系统         |\n| 电源管理服务   | 电源管理服务子系统提供如下功能：重启系统；管理休眠运行锁；系统电源状态管理和查询；充电和电池状态查询和上报；显示亮灭屏状态管理，包括显示亮度调节。 | 标准系统         |\n| 泛Sensor服务   | 泛Sensor中包含传感器和小器件，传感器用于侦测环境中所发生事件或变化，并将此消息发送至其他电子设备，小器件用于向外传递信号的设备，包括马达和LED灯，对开发者提供控制马达振动和LED灯开关的能力。 | 小型系统         |\n| 多模输入       | OpenHarmony旨在为开发者提供NUI（Natural User Interface）的交互方式，有别于传统操作系统的输入，在OpenHarmony上，我们将多种维度的输入整合在一起，开发者可以借助应用程序框架、系统自带的UI组件或API接口轻松地实现具有多维、自然交互特点的应用程序。具体来说，多模输入子系统目前支持传统的输入交互方式，例如按键和触控。 | 标准系统         |\n| 启动恢复       | 启动恢复负责在内核启动之后，应用启动之前的操作系统中间层的启动。并提供系统属性查询、修改及设备恢复出厂设置的功能。 | 所有系统         |\n| 升级服务       | 可支持OpenHarmony设备的OTA（Over The Air）升级。             | 标准系统         |\n| 帐号           | 支持在端侧对接厂商云帐号应用，提供分布式帐号登录状态查询和更新的管理能力。 | 标准系统         |\n| 编译构建       | 编译构建子系统提供了一个基于Gn和ninja的编译构建框架。        | 所有系统         |\n| 测试           | 开发过程采用测试驱动开发模式，开发者基于系统新增特性可以通过开发者自己开发用例保证，对于系统已有特性的修改，也可通过修改项目中原有的测试用例保证，开发者测试旨在帮助开发者在开发阶段就能开发出高质量代码。 | 所有系统         |\n| 数据管理       | 数据管理支持应用本地数据管理和分布式数据管理：<br>- 支持应用本地数据管理，包括轻量级偏好数据库，关系型数据库。<br/>- 支持分布式数据服务，为应用程序提供不同设备间数据库数据分布式的能力。 | 标准系统         |\n| 语言编译运行时 | 语言运行时提供了JS、C/C++语言程序的编译、执行环境，提供支撑运行时的基础库，以及关联的API接口、编译器和配套工具。 | 所有系统         |\n| 分布式任务调度 | 提供系统服务的启动、注册、查询及管理能力。                   | 所有系统         |\n| JS UI框架      | JS UI框架是OpenHarmony UI开发框架，支持类Web范式编程。       | 所有系统         |\n| 媒体           | 提供音频、视频、相机等简单有效的媒体组件开发接口，使得应用开发者轻松使用系统的多媒体资源。 | 所有系统         |\n| 事件通知       | 公共事件管理实现了订阅、退订、发布、接收公共事件（例如亮灭屏事件、USB插拔事件）的能力。 | 标准系统         |\n| 杂散软件服务   | 提供设置时间的能力。                                         | 标准系统         |\n| 包管理子系统   | 提供包安装、卸载、更新、查询等能力。                         | 所有系统         |\n| 电话服务       | 提供SIM卡、搜网、蜂窝数据、蜂窝通话、短彩信等蜂窝移动网络基础通信能力，可管理多类型通话和数据网络连接，为应用开发者提供便捷一致的通信API。 | 标准系统         |\n| 公共基础类库   | 公共基础库存放OpenHarmony通用的基础组件。这些基础组件可被OpenHarmony各业务子系统及上层应用所使用。 | 所有系统         |\n| 研发工具链     | 提供设备连接调试器hdc；提供了性能跟踪能力和接口；提供了性能调优框架，旨在为开发者提供一套性能调优平台，可以用来分析内存、性能等问题。 | 标准系统         |\n| 分布式软总线   | 分布式软总线旨在为OpenHarmony系统提供跨进程或跨设备的通信能力，主要包含软总线和进程间通信两部分。其中，软总线为应用和系统提供近场设备间分布式通信的能力，提供不区分通信方式的设备发现，连接，组网和传输功能；而进程间通信则提供了对设备内或设备间无差别的进程间通信能力。 | 所有系统         |\n| XTS            | XTS是OpenHarmony兼容性测试套件的集合，当前包括acts（application compatibility test suite）应用兼容性测试套，后续会拓展dcts（device compatibility test suite）设备兼容性测试套等。 | 所有系统         |\n| 系统应用       | 系统应用提供了OpenHarmony标准版上的部分系统应用，如桌面、SystemUI、设置等应用，为开发者提供了构建标准版应用的具体实例，这些应用支持在所有标准版系统的设备上使用。 | 标准系统         |\n| DFX            | DFX是OpenHarmony非功能属性能力，包含日志系统、应用和系统事件日志接口、事件日志订阅服务、故障信息生成采集等功能。 | 所有系统         |\n| 全球化         | 当OpenHarmony设备或应用在全球不同区域使用时，系统和应用需要满足不同市场用户关于语言、文化习俗的需求。全球化子系统提供支持多语言、多文化的能力，包括资源管理能力和国际化能力。 | 所有系统         |\n| 安全           | 安全子系统包括系统安全、数据安全、应用安全等模块，为OpenHarmony提供了保护系统和和用户数据的能力。安全子系统当前开源的功能，包括应用完整性保护、应用权限管理、设备认证、密钥管理服务。 | 所有系统         |",
+      "# 1 移植子系统概述  \nOpenHarmony系统功能按照“系统 &gt; 子系统 &gt; 部件”逐级展开，支持根据实际需求裁剪某些非必要的部件，本文以部分子系统、部件为例进行介绍。若想使用OpenHarmony系统的能力，需要对相应子系统进行适配。  \nOpenHarmony芯片适配常见子系统列表如下（详见表1），需结合具体芯片再做增删减操作。  \n**表1** OpenHarmony子系统  \n| 子系统 | 作用 |\n| -------- | -------- |\n| applications | 应用程序demo。可将应用相关源码存放在此目录下。 |\n| kernel | 内核子系统。负责任务调度、内存管理等常见的内核功能。 |\n| hiviewdfx | 可维可测子系统。提供日志相关功能。 |\n| communication | 通信子系统。包含Wi-Fi，蓝牙功能。 |\n| iothardware | IOT外设子系统。提供常见的外设接口，例如GPIO，I2C，SPI等。 |\n| startup | 启动子系统。内核启动后运行的第一个子系统，负责在内核启动之后到应用启动之前的系统关键进程和服务的启动过程的功能。 |\n| update | 升级子系统。用来支持OpenHarmony设备的OTA升级。 |\n| utils | 公共基础库子系统。提供了一些常用的C、C++开发增强API。 |\n| distributed_schedule | 分布式调度子系统。负责跨设备部件管理，提供访问和控制远程组件的能力，支持分布式场景下的应用协同。 |\n| security | 安全子系统。包括系统安全、数据安全、应用安全等功能，为OpenHarmony提供有效保护应用和用户数据的能力。当前开源的功能，包括应用完整性保护、应用权限管理、设备认证、密钥管理服务、数据传输管控。 |\n| test | 测试子系统。OpenHarmony为开发者提供了一套全面的自测试框架，开发者可根据测试需求开发相关测试用例，开发阶段提前发现缺陷，大幅提高代码质量。 |",
+      "## 1 概述  \n目前OpenHarmony已经成立了SIG组[sig_devboard](https://gitee.com/openharmony/community/blob/master/sig/sig_devboard/sig_devboard_cn.md)。该SIG组以支持更多第三方开发板为目标，提供开发板移植的支撑。  \n在了解开发板移植前，需要先了解一下OpenHarmony对设备的分类。不同设备类型的移植方法会有较大差异。  \n| 设备类型    | 硬件要求        | 支持的内核          |\n|---------|-------------|----------------|\n| 轻量系统类设备 | 内存>128KB    | LiteOS-M       |\n| 小型系统类设备 | 内存>1MB、有MMU | LiteOS-A、Linux |\n| 标准系统类设备 | 内存>128MB    |  Linux       |"
+    ],
+    "metadata": [
+      {
+        "id": "table-a61c9f2abbb1c93d65eefd20769be72a",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+        "summary": "OpenHarmony采用分层架构，包含内核、系统服务、框架和应用层，通过子系统和组件实现功能模块化。子系统涵盖内核、图形、驱动、安全等基础功能，支持分布式能力与多设备部署，适配不同系统规模（小型/标准系统）。各子系统可独立构建并灵活裁剪，提供统一开发体验。",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.5 详细特征"
+      },
+      {
+        "id": "table-b72a2e07c43e376e04c6a82241dfc854",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/porting-minichip-subsys-overview.md",
+        "summary": "OpenHarmony移植子系统包括内核、通信、安全、启动、分布式调度等核心模块，涵盖系统基础功能、外设接口、日志、升级及测试框架，需根据具体芯片进行适配和裁剪。",
+        "breadcrumb": "1 移植子系统概述"
+      },
+      {
+        "id": "table-894f4846c76bb6834ae567247f0adad7",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/Readme-CN.md",
+        "summary": "OpenHarmony针对不同设备类型设定硬件与内核要求：轻量系统（内存>128KB，LiteOS-M）、小型系统（内存>1MB，LiteOS-A/Linux）和标准系统（内存>128MB，Linux）。SIG_devboard致力于支持第三方开发板移植。",
+        "breadcrumb": "1 概述"
+      }
+    ]
+  },
+  "images": {
+    "ids": [
+      "image-df70d6e22188fbd728da99590c45affd",
+      "image-efc4b6a935c15c5fb81a011328d87ba0",
+      "image-f074a4e4d08fef9a67cf9903c29be443"
+    ],
+    "contents": [
+      "这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。",
+      "这张图片展示了OpenHarmony系统的架构层次，从上到下分为应用层、框架层、系统服务层和内核层。应用层包括系统应用和扩展应用；框架层涵盖系统基本能力和基础软件服务；系统服务层提供分布式任务调度和数据管理等功能；内核层则包含Linux Kernel、LiteOS等内核系统以及HDF硬件驱动框架，整体体现了OpenHarmony的模块化设计和功能分布。",
+      "这张图片展示了OpenHarmony系统的架构层次，从应用层到内核层的详细组成。应用层包括系统应用和扩展应用；框架层涵盖系统基本能力子系统集、基础软件服务子系统集和增强软件服务子系统集；系统服务层涉及硬件服务子系统集；内核层则包含Linux Kernel和LiteOS等内核子系统，通过KAL模块提供统一接口，以及HDF硬件驱动框架。整体体现了OpenHarmony的多内核架构和各层级的功能模块。"
+    ],
+    "metadata": [
+      {
+        "id": "image-df70d6e22188fbd728da99590c45affd",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png",
+        "local_path": "/root/code/docs/zh-cn/figures/1.png",
+        "caption": "这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。",
+        "md_file_path": "/root/code/docs/zh-cn/OpenHarmony-Overview_zh.md",
+        "parent_chunk_id": "chunk-8ffe6094de58792a11212edd9effd696",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.2 技术架构",
+        "width": 1783,
+        "height": 866,
+        "format": "PNG",
+        "file_size_kb": 245.09
+      },
+      {
+        "id": "image-efc4b6a935c15c5fb81a011328d87ba0",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/figures/zh-cn_image_0000001167753296.png",
+        "local_path": "/root/code/docs/zh-cn/device-dev/porting/figures/zh-cn_image_0000001167753296.png",
+        "caption": "这张图片展示了OpenHarmony系统的架构层次，从上到下分为应用层、框架层、系统服务层和内核层。应用层包括系统应用和扩展应用；框架层涵盖系统基本能力和基础软件服务；系统服务层提供分布式任务调度和数据管理等功能；内核层则包含Linux Kernel、LiteOS等内核系统以及HDF硬件驱动框架，整体体现了OpenHarmony的模块化设计和功能分布。",
+        "md_file_path": "/root/code/docs/zh-cn/device-dev/porting/porting-linux-kernel.md",
+        "parent_chunk_id": "chunk-b85199b2a3c8be186b88aa318948520c",
+        "breadcrumb": "1 一种快速移植OpenHarmony Linux内核的方法 > 1.2 移植到三方芯片平台的整体思路 > 1.2.1 内核态层和用户态层",
+        "width": 1267,
+        "height": 616,
+        "format": "PNG",
+        "file_size_kb": 167.95
+      },
+      {
+        "id": "image-f074a4e4d08fef9a67cf9903c29be443",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/1_zh-cn_image_0000001128794202.png",
+        "local_path": "/root/code/docs/zh-cn/device-dev/kernel/figures/1_zh-cn_image_0000001128794202.png",
+        "caption": "这张图片展示了OpenHarmony系统的架构层次，从应用层到内核层的详细组成。应用层包括系统应用和扩展应用；框架层涵盖系统基本能力子系统集、基础软件服务子系统集和增强软件服务子系统集；系统服务层涉及硬件服务子系统集；内核层则包含Linux Kernel和LiteOS等内核子系统，通过KAL模块提供统一接口，以及HDF硬件驱动框架。整体体现了OpenHarmony的多内核架构和各层级的功能模块。",
+        "md_file_path": "/root/code/docs/zh-cn/device-dev/kernel/kernel-overview.md",
+        "parent_chunk_id": "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+        "breadcrumb": "1 内核概述 > 1.3 多内核架构和基本组成",
+        "width": 554,
+        "height": 269,
+        "format": "PNG",
+        "file_size_kb": 80.94
+      }
+    ]
+  },
+  "timing": {
+    "stage1_embedding": 0.23235845565795898,
+    "stage2_rerank": 12.003822088241577,
+    "stage3_spread": 1.9414455890655518,
+    "stage4_final_rerank": 8.612357139587402,
+    "total": 145.13411808013916,
+    "stage5_report": 122.34413480758667
+  },
+  "rag_context": "# 用户问题\n请解释OpenHarmony的技术架构\n\n# 核心回答\nOpenHarmony采用分层架构设计，从下到上依次为内核层、系统服务层、框架层和应用层。内核层采用多内核设计，支持Linux内核和LiteOS内核，通过内核抽象层（KAL）屏蔽内核差异，提供统一的进程管理、内存管理、文件系统等基础能力。系统服务层是OpenHarmony的核心能力集合，包含系统基本能力子系统集、基础软件服务子系统集、增强软件服务子系统集和硬件服务子系统集，为分布式应用提供基础支撑。框架层为应用开发提供多语言框架和API，应用层包括系统应用和第三方应用。系统功能按照'系统>子系统>组件'逐级展开，支持根据设备资源情况进行组件裁剪，实现从128KiB到xGiB内存设备的弹性部署。\n\n## 关键要点\n- 分层架构设计：内核层、系统服务层、框架层、应用层\n- 多内核支持：Linux内核和LiteOS内核\n- 组件化设计支持弹性裁剪\n- 支持三种系统类型：轻量系统、小型系统、标准系统\n- 分布式能力：软总线、数据管理、任务调度\n\n# 详细内容\n\n## 1. 整体架构层次\n\nOpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照'系统>子系统>组件'逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。内核层负责最基础的系统功能，包括多内核子系统和驱动子系统。系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。框架层为应用开发提供了C/C++/JS等多语言的用户程序框架和Ability框架，适用于JS语言的ArkUI框架，以及各种软硬件服务对外开放的多语言框架API。应用层包括系统应用和第三方非系统应用，应用由一个或多个FA（Feature Ability）或PA（Particle Ability）组成。其中FA有UI界面，提供与用户交互的能力；PA无UI界面，提供后台运行任务的能力以及统一的数据访问抽象。基于FA/PA开发的应用，能够实现特定的业务功能，支持跨设备调度与分发，为用户提供一致、高效的应用体验。这种分层架构设计使得OpenHarmony能够适应不同硬件能力的设备，从资源受限的嵌入式设备到功能丰富的智能设备。\n\n**本节要点：**\n- 四层架构设计\n- 系统>子系统>组件功能展开\n- 支持组件裁剪\n- FA/PA应用模型\n\n**来源：**\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n  定位: 1 OpenHarmony开源项目 > 1.2 技术架构\n  相关性: 详细描述了OpenHarmony的分层架构和各层功能\n\n## 2. 内核层架构\n\n内核层采用多内核设计，支持针对不同资源受限设备选用适合的OS内核。内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽多内核差异，对上层提供基础的内核能力，包括进程/线程管理、内存管理、文件系统、网络管理和外设管理等。OpenHarmony支持Linux内核和LiteOS内核，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备文件系统、内存管理、进程管理、网络等核心组成单元，只是实现方式有所不同。多个内核通过KAL模块，向上提供统一的标准接口。驱动子系统是系统硬件生态开放的基础，驱动框架（HDF）提供统一外设访问能力和驱动开发、管理框架。内核子系统位于OpenHarmony下层，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层通过屏蔽内核间差异，对上层提供基础的内核能力。这种设计使得相同的硬件部署不同内核时，设备驱动程序能够在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担。\n\n**本节要点：**\n- 多内核设计：Linux和LiteOS\n- 内核抽象层（KAL）统一接口\n- 驱动框架（HDF）标准化\n- 支持不同资源等级设备\n\n**来源：**\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n  定位: 1 OpenHarmony开源项目 > 1.2 技术架构\n  相关性: 详细说明内核层的多内核架构和驱动子系统\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n  定位: 1 内核概述 > 1.3 多内核架构和基本组成\n  相关性: 深入解释多内核架构的基本组成单元\n\n## 3. 系统服务层架构\n\n系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。该层包含四个主要部分：系统基本能力子系统集为分布式应用在多设备上的运行、调度、迁移等操作提供了基础能力，由分布式软总线、分布式数据管理、分布式任务调度、公共基础库、多模输入、图形、安全、AI等子系统组成。基础软件服务子系统集提供公共的、通用的软件服务，由事件通知、电话、多媒体、DFX等子系统组成。增强软件服务子系统集提供针对不同设备的、差异化的能力增强型软件服务，由智慧屏专有业务、穿戴专有业务、IoT专有业务等子系统组成。硬件服务子系统集提供硬件服务，由位置服务、用户IAM、穿戴专有硬件服务、IoT专有硬件服务等子系统组成。根据不同设备形态的部署环境，基础软件服务子系统集、增强软件服务子系统集、硬件服务子系统集内部可以按子系统粒度裁剪，每个子系统内部又可以按功能粒度裁剪。系统基本能力子系统集中的分布式软总线是多设备终端的统一基座，为设备间的无缝互联提供了统一的分布式通信能力，能够快速发现并连接设备，高效地传输任务和数据。分布式数据管理基于分布式软总线，实现了应用程序数据和用户数据的分布式管理。分布式任务调度基于分布式软总线、分布式数据管理、分布式Profile等技术特性，构建统一的分布式服务管理机制。\n\n**本节要点：**\n- 四个子系统集：基本能力、基础软件、增强软件、硬件服务\n- 支持按粒度和功能裁剪\n- 分布式能力核心\n- 硬件生态开放\n\n**来源：**\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n  定位: 1 OpenHarmony开源项目 > 1.2 技术架构\n  相关性: 详细描述系统服务层的组成和功能\n\n## 4. 系统类型与部署\n\nOpenHarmony支持三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。轻量系统面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。小型系统面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。标准系统面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。OpenHarmony通过组件化和组件弹性化等设计方法，做到硬件资源的可大可小，在多种终端设备间，按需弹性部署，全面覆盖了ARM、RISC-V、x86等各种CPU，从百KiB到GiB级别的RAM。\n\n**本节要点：**\n- 三种系统类型：轻量系统、小型系统、标准系统\n- 不同内存和处理器要求\n- 支持弹性部署\n- 组件化设计\n\n**来源：**\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n  定位: 1 OpenHarmony开源项目 > 1.4 系统类型\n  相关性: 详细说明三种系统类型的硬件要求和应用场景\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md`\n  定位: 1 快速入门概述\n  相关性: 补充说明系统类型的定义和开发方法\n\n## 5. 子系统与组件架构\n\n子系统是OpenHarmony架构中的逻辑概念，它具体由对应的组件构成。系统功能按照'系统>子系统>组件'逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。组件是对子系统的进一步拆分，是可复用的软件单元，包含源码、配置文件、资源文件和编译脚本；能独立构建，以二进制方式集成，具备独立验证能力的二进制单元。OpenHarmony包含丰富的子系统，包括内核子系统支持适用于嵌入式设备及资源受限设备的LiteOS内核和基于linux kernel演进的适用于标准系统的linux内核。图形子系统主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块。驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座。分布式软总线子系统为OpenHarmony系统提供跨进程或跨设备的通信能力。数据管理子系统支持应用本地数据管理和分布式数据管理。分布式任务调度子系统提供系统服务的启动、注册、查询及管理能力。这些子系统根据不同的系统类型有不同的适用范围，有些适用于所有系统，有些仅适用于标准系统或小型系统。\n\n**本节要点：**\n- 子系统逻辑概念\n- 组件可复用单元\n- 丰富子系统集合\n- 不同适用范围\n\n**来源：**\n- 文件: `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n  定位: 1 OpenHarmony开源项目 > 1.5 详细特征\n  相关性: 详细说明子系统和组件的概念及其在架构中的作用\n\n# 相关图片\n\n## 图片 1\n![OpenHarmony技术架构图，展示了从内核层到应用层的分层结构及各层的主要功能模块](https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png)\n\n**说明：** OpenHarmony技术架构图，展示了从内核层到应用层的分层结构及各层的主要功能模块\n\n**上下文：** 该图片位于OpenHarmony技术架构章节中，用于直观展示系统的整体架构设计\n\n**与问题的相关性：** 直接展示了用户询问的技术架构层次和组成\n\n**尺寸：** 1783x866像素\n**建议显示方式：** full-width\n\n**来源文件：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n**定位：** 1 OpenHarmony开源项目 > 1.2 技术架构\n\n## 图片 2\n![OpenHarmony多内核架构图，展示了Linux内核和LiteOS内核通过KAL模块向上层提供统一接口的架构设计](https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/1_zh-cn_image_0000001128794202.png)\n\n**说明：** OpenHarmony多内核架构图，展示了Linux内核和LiteOS内核通过KAL模块向上层提供统一接口的架构设计\n\n**上下文：** 位于内核概述章节中，用于说明多内核架构的实现方式\n\n**与问题的相关性：** 详细展示了内核层的架构设计，是技术架构的重要组成部分\n\n**尺寸：** 554x269像素\n**建议显示方式：** inline\n\n**来源文件：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.3 多内核架构和基本组成\n\n# 相关表格\n\n## 表格 1: OpenHarmony子系统简介\n\n**描述：** 详细列出了OpenHarmony中的主要子系统及其功能简介和适用范围\n\n| 子系统        | 简 介                                                        | 适用范围         |\n| -------- | -------- | -------- |\n| 内核           | 支持适用于嵌入式设备及资源受限设备，具有小体积、高性能、低功耗等特征的LiteOS内核；支持基于linux kernel演进的适用于标准系统的linux内核。 | 小型系统<br>标准系统 |\n| 分布式文件     | 提供本地同步JS文件接口。                                     | 标准系统         |\n| 图形           | 主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块，构建基于轻量OS应用框架满足硬件资源较小的物联网设备或者构建基于标准OS的应用框架满足富设备（如平板和轻智能机等）的OpenHarmony系统应用开发。 | 所有系统         |\n| 驱动           | OpenHarmony驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座，旨在为开发者提供更精准、更高效的开发环境，力求做到一次开发，多系统部署。 | 所有系统         |\n| 电源管理服务   | 电源管理服务子系统提供如下功能：重启系统；管理休眠运行锁；系统电源状态管理和查询；充电和电池状态查询和上报；显示亮灭屏状态管理，包括显示亮度调节。 | 标准系统         |\n| 泛Sensor服务   | 泛Sensor中包含传感器和小器件，传感器用于侦测环境中所发生事件或变化，并将此消息发送至其他电子设备，小器件用于向外传递信号的设备，包括马达和LED灯，对开发者提供控制马达振动和LED灯开关的能力。 | 小型系统         |\n| 多模输入       | OpenHarmony旨在为开发者提供NUI（Natural User Interface）的交互方式，有别于传统操作系统的输入，在OpenHarmony上，我们将多种维度的输入整合在一起，开发者可以借助应用程序框架、系统自带的UI组件或API接口轻松地实现具有多维、自然交互特点的应用程序。具体来说，多模输入子系统目前支持传统的输入交互方式，例如按键和触控。 | 标准系统         |\n| 启动恢复       | 启动恢复负责在内核启动之后，应用启动之前的操作系统中间层的启动。并提供系统属性查询、修改及设备恢复出厂设置的功能。 | 所有系统         |\n| 升级服务       | 可支持OpenHarmony设备的OTA（Over The Air）升级。             | 标准系统         |\n| 帐号           | 支持在端侧对接厂商云帐号应用，提供分布式帐号登录状态查询和更新的管理能力。 | 标准系统         |\n| 编译构建       | 编译构建子系统提供了一个基于Gn和ninja的编译构建框架。        | 所有系统         |\n| 测试           | 开发过程采用测试驱动开发模式，开发者基于系统新增特性可以通过开发者自己开发用例保证，对于系统已有特性的修改，也可通过修改项目中原有的测试用例保证，开发者测试旨在帮助开发者在开发阶段就能开发出高质量代码。 | 所有系统         |\n| 数据管理       | 数据管理支持应用本地数据管理和分布式数据管理：<br>- 支持应用本地数据管理，包括轻量级偏好数据库，关系型数据库。<br/>- 支持分布式数据服务，为应用程序提供不同设备间数据库数据分布式的能力。 | 标准系统         |\n| 语言编译运行时 | 语言运行时提供了JS、C/C++语言程序的编译、执行环境，提供支撑运行时的基础库，以及关联的API接口、编译器和配套工具。 | 所有系统         |\n| 分布式任务调度 | 提供系统服务的启动、注册、查询及管理能力。                   | 所有系统         |\n| JS UI框架      | JS UI框架是OpenHarmony UI开发框架，支持类Web范式编程。       | 所有系统         |\n| 媒体           | 提供音频、视频、相机等简单有效的媒体组件开发接口，使得应用开发者轻松使用系统的多媒体资源。 | 所有系统         |\n| 事件通知       | 公共事件管理实现了订阅、退订、发布、接收公共事件（例如亮灭屏事件、USB插拔事件）的能力。 | 标准系统         |\n| 杂散软件服务   | 提供设置时间的能力。                                         | 标准系统         |\n| 包管理子系统   | 提供包安装、卸载、更新、查询等能力。                         | 所有系统         |\n| 电话服务       | 提供SIM卡、搜网、蜂窝数据、蜂窝通话、短彩信等蜂窝移动网络基础通信能力，可管理多类型通话和数据网络连接，为应用开发者提供便捷一致的通信API。 | 标准系统         |\n| 公共基础类库   | 公共基础库存放OpenHarmony通用的基础组件。这些基础组件可被OpenHarmony各业务子系统及上层应用所使用。 | 所有系统         |\n| 研发工具链     | 提供设备连接调试器hdc；提供了性能跟踪能力和接口；提供了性能调优框架，旨在为开发者提供一套性能调优平台，可以用来分析内存、性能等问题。 | 标准系统         |\n| 分布式软总线   | 分布式软总线旨在为OpenHarmony系统提供跨进程或跨设备的通信能力，主要包含软总线和进程间通信两部分。其中，软总线为应用和系统提供近场设备间分布式通信的能力，提供不区分通信方式的设备发现，连接，组网和传输功能；而进程间通信则提供了对设备内或设备间无差别的进程间通信能力。 | 所有系统         |\n\n**关键数据：**\n- 内核子系统支持LiteOS和Linux内核\n- 分布式软总线提供跨设备通信能力\n- 图形子系统支持所有系统\n- 驱动子系统兼容不同内核\n\n**来源文件：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`\n**定位：** 1 OpenHarmony开源项目 > 1.5 详细特征\n\n## 表格 2: 系统类型硬件要求\n\n**描述：** 详细说明了OpenHarmony三种系统类型对硬件的要求，包括处理器类型、最小内存和主要能力特征\n\n| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini system） | MCU类处理器（例如Arm Cortex-M、RISC-V 32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small system） | 应用处理器（例如Arm Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard system） | 应用处理器（例如Arm Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |\n\n**关键数据：**\n- 轻量系统：MCU处理器，128KiB内存\n- 小型系统：应用处理器，1MiB内存\n- 标准系统：应用处理器，128MiB内存\n- 不同能力特征对应不同应用场景\n\n**来源文件：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md`\n**定位：** 1 快速入门概述\n\n# 相关概念\n\n- 分层架构\n- 多内核设计\n- 分布式系统\n- 组件化\n- 弹性部署\n- 内核抽象层\n- 驱动框架\n\n# 推荐阅读\n\n- **OpenHarmony子系统详细文档**: 深入了解各个子系统的具体功能和技术实现细节\n- **OpenHarmony设备开发指南**: 学习如何在具体硬件设备上部署和开发OpenHarmony系统\n- **分布式能力开发指南**: 掌握OpenHarmony分布式软总线、数据管理和任务调度的开发方法\n",
+  "report": {
+    "success": true,
+    "report_data": {
+      "answer": {
+        "summary": "OpenHarmony采用分层架构设计，从下到上依次为内核层、系统服务层、框架层和应用层。内核层采用多内核设计，支持Linux内核和LiteOS内核，通过内核抽象层（KAL）屏蔽内核差异，提供统一的进程管理、内存管理、文件系统等基础能力。系统服务层是OpenHarmony的核心能力集合，包含系统基本能力子系统集、基础软件服务子系统集、增强软件服务子系统集和硬件服务子系统集，为分布式应用提供基础支撑。框架层为应用开发提供多语言框架和API，应用层包括系统应用和第三方应用。系统功能按照'系统>子系统>组件'逐级展开，支持根据设备资源情况进行组件裁剪，实现从128KiB到xGiB内存设备的弹性部署。",
+        "key_points": [
+          "分层架构设计：内核层、系统服务层、框架层、应用层",
+          "多内核支持：Linux内核和LiteOS内核",
+          "组件化设计支持弹性裁剪",
+          "支持三种系统类型：轻量系统、小型系统、标准系统",
+          "分布式能力：软总线、数据管理、任务调度"
+        ],
+        "sections": [
+          {
+            "title": "整体架构层次",
+            "content": "OpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照'系统>子系统>组件'逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。内核层负责最基础的系统功能，包括多内核子系统和驱动子系统。系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。框架层为应用开发提供了C/C++/JS等多语言的用户程序框架和Ability框架，适用于JS语言的ArkUI框架，以及各种软硬件服务对外开放的多语言框架API。应用层包括系统应用和第三方非系统应用，应用由一个或多个FA（Feature Ability）或PA（Particle Ability）组成。其中FA有UI界面，提供与用户交互的能力；PA无UI界面，提供后台运行任务的能力以及统一的数据访问抽象。基于FA/PA开发的应用，能够实现特定的业务功能，支持跨设备调度与分发，为用户提供一致、高效的应用体验。这种分层架构设计使得OpenHarmony能够适应不同硬件能力的设备，从资源受限的嵌入式设备到功能丰富的智能设备。",
+            "highlights": [
+              "四层架构设计",
+              "系统>子系统>组件功能展开",
+              "支持组件裁剪",
+              "FA/PA应用模型"
+            ],
+            "sources": [
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+                "location": "1 OpenHarmony开源项目 > 1.2 技术架构",
+                "relevance": "详细描述了OpenHarmony的分层架构和各层功能"
+              }
+            ]
+          },
+          {
+            "title": "内核层架构",
+            "content": "内核层采用多内核设计，支持针对不同资源受限设备选用适合的OS内核。内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽多内核差异，对上层提供基础的内核能力，包括进程/线程管理、内存管理、文件系统、网络管理和外设管理等。OpenHarmony支持Linux内核和LiteOS内核，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备文件系统、内存管理、进程管理、网络等核心组成单元，只是实现方式有所不同。多个内核通过KAL模块，向上提供统一的标准接口。驱动子系统是系统硬件生态开放的基础，驱动框架（HDF）提供统一外设访问能力和驱动开发、管理框架。内核子系统位于OpenHarmony下层，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层通过屏蔽内核间差异，对上层提供基础的内核能力。这种设计使得相同的硬件部署不同内核时，设备驱动程序能够在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担。",
+            "highlights": [
+              "多内核设计：Linux和LiteOS",
+              "内核抽象层（KAL）统一接口",
+              "驱动框架（HDF）标准化",
+              "支持不同资源等级设备"
+            ],
+            "sources": [
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+                "location": "1 OpenHarmony开源项目 > 1.2 技术架构",
+                "relevance": "详细说明内核层的多内核架构和驱动子系统"
+              },
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+                "location": "1 内核概述 > 1.3 多内核架构和基本组成",
+                "relevance": "深入解释多内核架构的基本组成单元"
+              }
+            ]
+          },
+          {
+            "title": "系统服务层架构",
+            "content": "系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。该层包含四个主要部分：系统基本能力子系统集为分布式应用在多设备上的运行、调度、迁移等操作提供了基础能力，由分布式软总线、分布式数据管理、分布式任务调度、公共基础库、多模输入、图形、安全、AI等子系统组成。基础软件服务子系统集提供公共的、通用的软件服务，由事件通知、电话、多媒体、DFX等子系统组成。增强软件服务子系统集提供针对不同设备的、差异化的能力增强型软件服务，由智慧屏专有业务、穿戴专有业务、IoT专有业务等子系统组成。硬件服务子系统集提供硬件服务，由位置服务、用户IAM、穿戴专有硬件服务、IoT专有硬件服务等子系统组成。根据不同设备形态的部署环境，基础软件服务子系统集、增强软件服务子系统集、硬件服务子系统集内部可以按子系统粒度裁剪，每个子系统内部又可以按功能粒度裁剪。系统基本能力子系统集中的分布式软总线是多设备终端的统一基座，为设备间的无缝互联提供了统一的分布式通信能力，能够快速发现并连接设备，高效地传输任务和数据。分布式数据管理基于分布式软总线，实现了应用程序数据和用户数据的分布式管理。分布式任务调度基于分布式软总线、分布式数据管理、分布式Profile等技术特性，构建统一的分布式服务管理机制。",
+            "highlights": [
+              "四个子系统集：基本能力、基础软件、增强软件、硬件服务",
+              "支持按粒度和功能裁剪",
+              "分布式能力核心",
+              "硬件生态开放"
+            ],
+            "sources": [
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+                "location": "1 OpenHarmony开源项目 > 1.2 技术架构",
+                "relevance": "详细描述系统服务层的组成和功能"
+              }
+            ]
+          },
+          {
+            "title": "系统类型与部署",
+            "content": "OpenHarmony支持三种基础系统类型，设备开发者通过选择基础系统类型完成必选组件集配置后，便可实现其最小系统的开发。轻量系统面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。小型系统面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行领域的行车记录仪等。标准系统面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。OpenHarmony通过组件化和组件弹性化等设计方法，做到硬件资源的可大可小，在多种终端设备间，按需弹性部署，全面覆盖了ARM、RISC-V、x86等各种CPU，从百KiB到GiB级别的RAM。",
+            "highlights": [
+              "三种系统类型：轻量系统、小型系统、标准系统",
+              "不同内存和处理器要求",
+              "支持弹性部署",
+              "组件化设计"
+            ],
+            "sources": [
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+                "location": "1 OpenHarmony开源项目 > 1.4 系统类型",
+                "relevance": "详细说明三种系统类型的硬件要求和应用场景"
+              },
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md",
+                "location": "1 快速入门概述",
+                "relevance": "补充说明系统类型的定义和开发方法"
+              }
+            ]
+          },
+          {
+            "title": "子系统与组件架构",
+            "content": "子系统是OpenHarmony架构中的逻辑概念，它具体由对应的组件构成。系统功能按照'系统>子系统>组件'逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。组件是对子系统的进一步拆分，是可复用的软件单元，包含源码、配置文件、资源文件和编译脚本；能独立构建，以二进制方式集成，具备独立验证能力的二进制单元。OpenHarmony包含丰富的子系统，包括内核子系统支持适用于嵌入式设备及资源受限设备的LiteOS内核和基于linux kernel演进的适用于标准系统的linux内核。图形子系统主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块。驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座。分布式软总线子系统为OpenHarmony系统提供跨进程或跨设备的通信能力。数据管理子系统支持应用本地数据管理和分布式数据管理。分布式任务调度子系统提供系统服务的启动、注册、查询及管理能力。这些子系统根据不同的系统类型有不同的适用范围，有些适用于所有系统，有些仅适用于标准系统或小型系统。",
+            "highlights": [
+              "子系统逻辑概念",
+              "组件可复用单元",
+              "丰富子系统集合",
+              "不同适用范围"
+            ],
+            "sources": [
+              {
+                "file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+                "location": "1 OpenHarmony开源项目 > 1.5 详细特征",
+                "relevance": "详细说明子系统和组件的概念及其在架构中的作用"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png",
+          "caption": "OpenHarmony技术架构图，展示了从内核层到应用层的分层结构及各层的主要功能模块",
+          "context": "该图片位于OpenHarmony技术架构章节中，用于直观展示系统的整体架构设计",
+          "relevance": "直接展示了用户询问的技术架构层次和组成",
+          "source_file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+          "location": "1 OpenHarmony开源项目 > 1.2 技术架构",
+          "dimensions": "1783x866像素",
+          "suggested_display": "full-width"
+        },
+        {
+          "url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/1_zh-cn_image_0000001128794202.png",
+          "caption": "OpenHarmony多内核架构图，展示了Linux内核和LiteOS内核通过KAL模块向上层提供统一接口的架构设计",
+          "context": "位于内核概述章节中，用于说明多内核架构的实现方式",
+          "relevance": "详细展示了内核层的架构设计，是技术架构的重要组成部分",
+          "source_file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+          "location": "1 内核概述 > 1.3 多内核架构和基本组成",
+          "dimensions": "554x269像素",
+          "suggested_display": "inline"
+        }
+      ],
+      "tables": [
+        {
+          "title": "OpenHarmony子系统简介",
+          "description": "详细列出了OpenHarmony中的主要子系统及其功能简介和适用范围",
+          "content": "| 子系统        | 简 介                                                        | 适用范围         |\n| -------- | -------- | -------- |\n| 内核           | 支持适用于嵌入式设备及资源受限设备，具有小体积、高性能、低功耗等特征的LiteOS内核；支持基于linux kernel演进的适用于标准系统的linux内核。 | 小型系统<br>标准系统 |\n| 分布式文件     | 提供本地同步JS文件接口。                                     | 标准系统         |\n| 图形           | 主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块，构建基于轻量OS应用框架满足硬件资源较小的物联网设备或者构建基于标准OS的应用框架满足富设备（如平板和轻智能机等）的OpenHarmony系统应用开发。 | 所有系统         |\n| 驱动           | OpenHarmony驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座，旨在为开发者提供更精准、更高效的开发环境，力求做到一次开发，多系统部署。 | 所有系统         |\n| 电源管理服务   | 电源管理服务子系统提供如下功能：重启系统；管理休眠运行锁；系统电源状态管理和查询；充电和电池状态查询和上报；显示亮灭屏状态管理，包括显示亮度调节。 | 标准系统         |\n| 泛Sensor服务   | 泛Sensor中包含传感器和小器件，传感器用于侦测环境中所发生事件或变化，并将此消息发送至其他电子设备，小器件用于向外传递信号的设备，包括马达和LED灯，对开发者提供控制马达振动和LED灯开关的能力。 | 小型系统         |\n| 多模输入       | OpenHarmony旨在为开发者提供NUI（Natural User Interface）的交互方式，有别于传统操作系统的输入，在OpenHarmony上，我们将多种维度的输入整合在一起，开发者可以借助应用程序框架、系统自带的UI组件或API接口轻松地实现具有多维、自然交互特点的应用程序。具体来说，多模输入子系统目前支持传统的输入交互方式，例如按键和触控。 | 标准系统         |\n| 启动恢复       | 启动恢复负责在内核启动之后，应用启动之前的操作系统中间层的启动。并提供系统属性查询、修改及设备恢复出厂设置的功能。 | 所有系统         |\n| 升级服务       | 可支持OpenHarmony设备的OTA（Over The Air）升级。             | 标准系统         |\n| 帐号           | 支持在端侧对接厂商云帐号应用，提供分布式帐号登录状态查询和更新的管理能力。 | 标准系统         |\n| 编译构建       | 编译构建子系统提供了一个基于Gn和ninja的编译构建框架。        | 所有系统         |\n| 测试           | 开发过程采用测试驱动开发模式，开发者基于系统新增特性可以通过开发者自己开发用例保证，对于系统已有特性的修改，也可通过修改项目中原有的测试用例保证，开发者测试旨在帮助开发者在开发阶段就能开发出高质量代码。 | 所有系统         |\n| 数据管理       | 数据管理支持应用本地数据管理和分布式数据管理：<br>- 支持应用本地数据管理，包括轻量级偏好数据库，关系型数据库。<br/>- 支持分布式数据服务，为应用程序提供不同设备间数据库数据分布式的能力。 | 标准系统         |\n| 语言编译运行时 | 语言运行时提供了JS、C/C++语言程序的编译、执行环境，提供支撑运行时的基础库，以及关联的API接口、编译器和配套工具。 | 所有系统         |\n| 分布式任务调度 | 提供系统服务的启动、注册、查询及管理能力。                   | 所有系统         |\n| JS UI框架      | JS UI框架是OpenHarmony UI开发框架，支持类Web范式编程。       | 所有系统         |\n| 媒体           | 提供音频、视频、相机等简单有效的媒体组件开发接口，使得应用开发者轻松使用系统的多媒体资源。 | 所有系统         |\n| 事件通知       | 公共事件管理实现了订阅、退订、发布、接收公共事件（例如亮灭屏事件、USB插拔事件）的能力。 | 标准系统         |\n| 杂散软件服务   | 提供设置时间的能力。                                         | 标准系统         |\n| 包管理子系统   | 提供包安装、卸载、更新、查询等能力。                         | 所有系统         |\n| 电话服务       | 提供SIM卡、搜网、蜂窝数据、蜂窝通话、短彩信等蜂窝移动网络基础通信能力，可管理多类型通话和数据网络连接，为应用开发者提供便捷一致的通信API。 | 标准系统         |\n| 公共基础类库   | 公共基础库存放OpenHarmony通用的基础组件。这些基础组件可被OpenHarmony各业务子系统及上层应用所使用。 | 所有系统         |\n| 研发工具链     | 提供设备连接调试器hdc；提供了性能跟踪能力和接口；提供了性能调优框架，旨在为开发者提供一套性能调优平台，可以用来分析内存、性能等问题。 | 标准系统         |\n| 分布式软总线   | 分布式软总线旨在为OpenHarmony系统提供跨进程或跨设备的通信能力，主要包含软总线和进程间通信两部分。其中，软总线为应用和系统提供近场设备间分布式通信的能力，提供不区分通信方式的设备发现，连接，组网和传输功能；而进程间通信则提供了对设备内或设备间无差别的进程间通信能力。 | 所有系统         |",
+          "key_data": [
+            "内核子系统支持LiteOS和Linux内核",
+            "分布式软总线提供跨设备通信能力",
+            "图形子系统支持所有系统",
+            "驱动子系统兼容不同内核"
+          ],
+          "source_file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md",
+          "location": "1 OpenHarmony开源项目 > 1.5 详细特征"
+        },
+        {
+          "title": "系统类型硬件要求",
+          "description": "详细说明了OpenHarmony三种系统类型对硬件的要求，包括处理器类型、最小内存和主要能力特征",
+          "content": "| 类型 | 处理器 | 最小内存 | 能力 |\n| :--------: | :--------: | -------- | -------- |\n| 轻量系统（mini system） | MCU类处理器（例如Arm Cortex-M、RISC-V 32位的设备） | 128KiB | 提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。 |\n| 小型系统（small system） | 应用处理器（例如Arm Cortex-A的设备） | 1MiB | 提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。 |\n| 标准系统（standard system） | 应用处理器（例如Arm Cortex-A的设备） | 128MiB | 提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。 |",
+          "key_data": [
+            "轻量系统：MCU处理器，128KiB内存",
+            "小型系统：应用处理器，1MiB内存",
+            "标准系统：应用处理器，128MiB内存",
+            "不同能力特征对应不同应用场景"
+          ],
+          "source_file": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/quick-start/quickstart-overview.md",
+          "location": "1 快速入门概述"
+        }
+      ],
+      "codes": [],
+      "related_concepts": [
+        "分层架构",
+        "多内核设计",
+        "分布式系统",
+        "组件化",
+        "弹性部署",
+        "内核抽象层",
+        "驱动框架"
+      ],
+      "further_reading": [
+        {
+          "title": "OpenHarmony子系统详细文档",
+          "reason": "深入了解各个子系统的具体功能和技术实现细节"
+        },
+        {
+          "title": "OpenHarmony设备开发指南",
+          "reason": "学习如何在具体硬件设备上部署和开发OpenHarmony系统"
+        },
+        {
+          "title": "分布式能力开发指南",
+          "reason": "掌握OpenHarmony分布式软总线、数据管理和任务调度的开发方法"
+        }
+      ]
+    },
+    "error": ""
+  }
+}

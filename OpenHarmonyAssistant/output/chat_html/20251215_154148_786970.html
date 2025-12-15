@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenHarmony 技术架构 - 交互式可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.8); }
+        }
+        @keyframes data-flow {
+            0% { transform: translateX(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(400%); opacity: 0; }
+        }
+        .glass-effect {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .architecture-layer {
+            transition: all 0.3s ease;
+        }
+        .architecture-layer:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        .data-particle {
+            animation: data-flow 3s linear infinite;
+        }
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        .animate-pulse-glow {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-inter min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="glass-effect fixed top-0 w-full z-50">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-blue-500 rounded-lg animate-pulse-glow"></div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                        OpenHarmony Architecture
+                    </h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-300 flex items-center space-x-2">
+                        <i class="ph ph-git-fork"></i>
+                        <span>探索架构</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="pt-20 pb-16">
+        <div class="container mx-auto px-6">
+            <!-- Hero 区域 -->
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-6xl font-bold mb-6">
+                    <span class="bg-gradient-to-r from-blue-400 via-cyan-400 to-violet-400 bg-clip-text text-transparent">
+                        OpenHarmony 技术架构
+                    </span>
+                </h1>
+                <p class="text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
+                    整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。
+                    系统功能按照"系统 > 子系统 > 组件"逐级展开，支持多设备部署和组件裁剪。
+                </p>
+            </div>
+
+            <!-- 交互式架构图 -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+                <!-- 左侧 - 架构层级选择器 -->
+                <div class="glass-effect rounded-2xl p-6">
+                    <h2 class="text-2xl font-semibold mb-6 flex items-center space-x-2">
+                        <i class="ph ph-stack text-blue-400"></i>
+                        <span>架构层级</span>
+                    </h2>
+                    <div class="space-y-4" id="layerSelector">
+                        <div class="layer-option p-4 rounded-xl border border-blue-500/30 bg-blue-500/10 cursor-pointer transition-all duration-300"
+                         data-layer="application">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-semibold text-blue-300">应用层</h3>
+                                <i class="ph ph-caret-right text-blue-400"></i>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-2">系统应用和第三方非系统应用，基于FA/PA开发</p>
+                        </div>
+                        <div class="layer-option p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 cursor-pointer transition-all duration-300"
+                         data-layer="framework">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-semibold text-cyan-300">框架层</h3>
+                                <i class="ph ph-caret-right text-cyan-400"></i>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-2">ArkUI框架、用户程序框架、多语言API</p>
+                        </div>
+                        <div class="layer-option p-4 rounded-xl border border-violet-500/30 bg-violet-500/10 cursor-pointer transition-all duration-300"
+                         data-layer="system-service">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-semibold text-violet-300">系统服务层</h3>
+                                <i class="ph ph-caret-right text-violet-400"></i>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-2">核心能力集合，包含四大子系统集</p>
+                        </div>
+                        <div class="layer-option p-4 rounded-xl border border-green-500/30 bg-green-500/10 cursor-pointer transition-all duration-300"
+                         data-layer="kernel">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-semibold text-green-300">内核层</h3>
+                                <i class="ph ph-caret-right text-green-400"></i>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-2">多内核设计（Linux/LiteOS）、驱动子系统</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中间 - 架构可视化 -->
+                <div class="lg:col-span-2">
+                    <div class="glass-effect rounded-2xl p-6 h-full">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-2xl font-semibold flex items-center space-x-2">
+                                <i class="ph ph-circuitry text-cyan-400"></i>
+                                <span>架构可视化</span>
+                            </h2>
+                            <button id="animateDataFlow" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-all duration-300 flex items-center space-x-2">
+                                <i class="ph ph-play"></i>
+                                <span>数据流动</span>
+                            </button>
+                        </div>
+
+                        <!-- 架构图容器 -->
+                        <div class="relative h-96 bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                            <!-- 数据流动粒子 -->
+                            <div class="absolute inset-0 pointer-events-none">
+                                <div class="data-particle absolute top-1/4 w-2 h-2 bg-blue-400 rounded-full opacity-0"></div>
+                                <div class="data-particle absolute top-1/2 w-2 h-2 bg-cyan-400 rounded-full opacity-0" style="animation-delay: 0.5s"></div>
+                                <div class="data-particle absolute top-3/4 w-2 h-2 bg-violet-400 rounded-full opacity-0" style="animation-delay: 1s"></div>
+                            </div>
+
+                            <!-- 架构层级 -->
+                            <div class="absolute inset-4 flex flex-col justify-between">
+                                <!-- 应用层 -->
+                                <div class="architecture-layer application-layer bg-gradient-to-r from-blue-500/20 to-blue-600/20 border border-blue-400/30 rounded-lg p-4 transform transition-all duration-500"
+                                 style="height: 18%">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="font-semibold text-blue-300">应用层</h3>
+                                        <div class="flex space-x-2">
+                                            <span class="px-2 py-1 bg-blue-500/30 rounded text-xs">FA/PA</span>
+                                        </div>
+                                        <div class="text-xs text-slate-400 mt-2">系统应用、第三方应用</div>
+                                </div>
+
+                                <!-- 框架层 -->
+                                <div class="architecture-layer framework-layer bg-gradient-to-r from-cyan-500/20 to-cyan-600/20 border border-cyan-400/30 rounded-lg p-4 transform transition-all duration-500"
+                                 style="height: 22%">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="font-semibold text-cyan-300">框架层</h3>
+                                        <div class="flex space-x-2">
+                                            <span class="px-2 py-1 bg-cyan-500/30 rounded text-xs">ArkUI</span>
+                                            <span class="px-2 py-1 bg-cyan-500/30 rounded text-xs">API</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-slate-400 mt-2">用户程序框架、Ability框架</div>
+                                </div>
+
+                                <!-- 系统服务层 -->
+                                <div class="architecture-layer system-service-layer bg-gradient-to-r from-violet-500/20 to-violet-600/20 border border-violet-400/30 rounded-lg p-4 transform transition-all duration-500"
+                                 style="height: 35%">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="font-semibold text-violet-300">系统服务层</h3>
+                                        <div class="flex space-x-1">
+                                            <span class="px-1 py-0.5 bg-violet-500/30 rounded text-xs">基本能力</span>
+                                            <span class="px-1 py-0.5 bg-violet-500/30 rounded text-xs">软总线</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-slate-400 mt-2">四大子系统集，支持裁剪</div>
+                                </div>
+
+                                <!-- 内核层 -->
+                                <div class="architecture-layer kernel-layer bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-400/30 rounded-lg p-4 transform transition-all duration-500"
+                                 style="height: 25%">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="font-semibold text-green-300">内核层</h3>
+                                        <div class="flex space-x-2">
+                                            <span class="px-2 py-1 bg-green-500/30 rounded text-xs">Linux</span>
+                                            <span class="px-2 py-1 bg-green-500/30 rounded text-xs">LiteOS</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-slate-400 mt-2">多内核设计、驱动框架(HDF)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 子系统详情面板 -->
+            <div class="glass-effect rounded-2xl p-6 mb-8">
+                <h2 class="text-2xl font-semibold mb-6 flex items-center space-x-2">
+                    <i class="ph ph-gear text-violet-400"></i>
+                    <span>子系统详情</span>
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="subsystemGrid">
+                    <!-- 子系统卡片将通过JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 多内核架构展示 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="glass-effect rounded-2xl p-6">
+                    <h2 class="text-2xl font-semibold mb-6 flex items-center space-x-2">
+                        <i class="ph ph-cpu text-green-400"></i>
+                        <span>多内核架构</span>
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                                    <i class="ph ph-penguin text-white"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-green-300">Linux 内核</h3>
+                                    <p class="text-sm text-slate-400">适用于标准系统的演进内核</p>
+                                </div>
+                            </div>
+                            <div class="text-xs px-2 py-1 bg-green-500/30 rounded">标准系统</div>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                    <i class="ph ph-lightning text-white"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-blue-300">LiteOS 内核</h3>
+                                    <p class="text-sm text-slate-400">小体积、高性能、低功耗</p>
+                                </div>
+                            </div>
+                            <div class="text-xs px-2 py-1 bg-blue-500/30 rounded">小型系统</div>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-slate-800/50 rounded-lg">
+                        <p class="text-sm text-slate-400">通过内核抽象层(KAL)屏蔽多内核差异，向上提供统一标准接口</p>
+                    </div>
+                </div>
+
+                <div class="glass-effect rounded-2xl p-6">
+                    <h2 class="text-2xl font-semibold mb-6 flex items-center space-x-2">
+                        <i class="ph ph-flow-arrow text-cyan-400"></i>
+                        <span>数据流演示</span>
+                    </h2>
+                    <div class="relative h-48 bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                        <!-- 简化的数据流可视化 -->
+                        <div class="absolute inset-4 flex items-center justify-center">
+                            <div class="w-full h-1 bg-gradient-to-r from-transparent via-blue-400 to-transparent"></div>
+                        </div>
+                        <div class="absolute top-1/2 left-0 right-0 flex justify-between px-4">
+                                <div class="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+                                <div class="w-3 h-3 bg-cyan-400 rounded-full animate-pulse" style="animation-delay: 0.5s"></div>
+                                <div class="w-3 h-3 bg-violet-400 rounded-full animate-pulse" style="animation-delay: 1s"></div>
+                            </div>
+                        </div>
+                        <button id="startDemo" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-all duration-300">
+                            启动演示
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <footer class="glass-effect border-t border-slate-700/50 py-8">
+        <div class="container mx-auto px-6 text-center">
+            <p class="text-slate-400">OpenHarmony 技术架构可视化演示 | 基于官方文档构建</p>
+            <p class="text-slate-500 text-sm mt-2">支持多设备部署和组件裁剪的分层架构</p>
+        </div>
+    </footer>
+
+    <script>
+        // 子系统数据
+        const subsystems = [
+            { name: "分布式软总线", category: "system-service", color: "blue", desc: "提供跨进程或跨设备的通信能力", scope: "所有系统" },
+            { name: "图形子系统", category: "system-service", color: "cyan", desc: "UI组件、动画、窗口管理等模块", scope: "所有系统" },
+            { name: "安全子系统", category: "system-service", color: "green", desc: "系统安全、数据安全、应用安全", scope: "所有系统" },
+            { name: "驱动子系统", category: "kernel", color: "violet", desc: "C面向对象编程模型，归一化驱动平台", scope: "所有系统" },
+            { name: "ArkUI框架", category: "framework", color: "pink", desc: "适用于JS语言的声明式UI框架", scope: "所有系统" },
+            { name: "分布式数据管理", category: "system-service", color: "indigo", desc: "本地和分布式数据管理服务", scope: "标准系统" },
+            { name: "媒体子系统", category: "system-service", color: "orange", desc: "音频、视频、相机等媒体组件", scope: "所有系统" },
+            { name: "电源管理服务", category: "system-service", color: "yellow", desc: "休眠管理、电源状态、充电管理", scope: "标准系统" },
+            { name: "泛Sensor服务", category: "system-service", color: "emerald", desc: "传感器和小器件控制", scope: "小型系统" }
+        ];
+
+        // 初始化子系统网格
+        function initializeSubsystemGrid() {
+            const grid = document.getElementById('subsystemGrid');
+            grid.innerHTML = '';
+            
+            subsystems.forEach(subsystem => {
+                const card = document.createElement('div');
+                card.className = `bg-${subsystem.color}-500/10 border border-${subsystem.color}-500/30 rounded-xl p-4 transition-all duration-300 hover:scale-105 cursor-pointer`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-semibold text-${subsystem.color}-300">${subsystem.name}</h3>
+                        <span class="text-xs px-2 py-1 bg-${subsystem.color}-500/30 rounded">${subsystem.scope}</span>
+                    </div>
+                    <p class="text-sm text-slate-400">${subsystem.desc}</p>
+                    <div class="mt-3 flex items-center space-x-2 text-xs text-slate-500">
+                        <i class="ph ph-category"></i>
+                        <span>${subsystem.category === 'kernel' ? '内核层' : 
+                               subsystem.category === 'system-service' ? '系统服务层' :
+                               subsystem.category === 'framework' ? '框架层' : '应用层'}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // 层级交互
+        function setupLayerInteractions() {
+            const layerOptions = document.querySelectorAll('.layer-option');
+            const architectureLayers = document.querySelectorAll('.architecture-layer');
+            
+            layerOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    const layer = this.dataset.layer;
+                    
+                    // 重置所有选项
+                    layerOptions.forEach(opt => {
+                        opt.classList.remove('bg-opacity-30', 'scale-105');
+                        opt.classList.add('bg-opacity-10');
+                    });
+                    
+                    // 激活当前选项
+                    this.classList.remove('bg-opacity-10');
+                    this.classList.add('bg-opacity-30', 'scale-105');
+                    
+                    // 高亮对应的架构层
+                    architectureLayers.forEach(archLayer => {
+                        archLayer.classList.remove('scale-105', 'shadow-2xl');
+                    });
+                    
+                    const targetLayer = document.querySelector(`.${layer}-layer`);
+                    if (targetLayer) {
+                        targetLayer.classList.add('scale-105', 'shadow-2xl');
+                    }
+                });
+            });
+        }
+
+        // 数据流动动画
+        function setupDataFlowAnimation() {
+            const animateButton = document.getElementById('animateDataFlow');
+            const dataParticles = document.querySelectorAll('.data-particle');
+            let isAnimating = false;
+            
+            animateButton.addEventListener('click', function() {
+                isAnimating = !isAnimating;
+                
+                dataParticles.forEach(particle => {
+                    if (isAnimating) {
+                        particle.style.animationPlayState = 'running';
+                        animateButton.innerHTML = '<i class="ph ph-pause"></i><span>暂停流动</span>';
+                    } else {
+                        particle.style.animationPlayState = 'paused';
+                        animateButton.innerHTML = '<i class="ph ph-play"></i><span>数据流动</span>';
+                    }
+                });
+            });
+        }
+
+        // 演示控制
+        function setupDemoControl() {
+            const startButton = document.getElementById('startDemo');
+            
+            startButton.addEventListener('click', function() {
+                this.innerHTML = '<i class="ph ph-spinner animate-spin"></i><span>演示中...</span>';
+                this.disabled = true;
+                
+                setTimeout(() => {
+                    this.innerHTML = '启动演示';
+                    this.disabled = false;
+                    
+                    // 触发所有数据粒子动画
+                    const dataParticles = document.querySelectorAll('.data-particle');
+                    dataParticles.forEach(particle => {
+                        particle.style.animationPlayState = 'running';
+                    });
+                    
+                    setTimeout(() => {
+                        dataParticles.forEach(particle => {
+                            particle.style.animationPlayState = 'paused';
+                        });
+                    }, 3000);
+                }, 5000);
+            });
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSubsystemGrid();
+            setupLayerInteractions();
+            setupDataFlowAnimation();
+            setupDemoControl();
+            
+            // 初始激活应用层
+            document.querySelector('.layer-option[data-layer="application"]').click();
+        });
+    </script>
+</body>
+</html>

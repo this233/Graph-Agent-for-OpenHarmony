@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="referrer" content="no-referrer">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构详解</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+    .card-glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glow-border {
+      box-shadow: 0 0 15px rgba(96, 165, 250, 0.5);
+    }
+    .layer {
+      transition: all 0.3s ease;
+    }
+    .layer:hover {
+      transform: translateY(-5px);
+    }
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(96, 165, 250, 0.7);
+      animation: float 4s infinite ease-in-out;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+<!-- [AUTO] Injected image(s) because LLM output had no <img> but RAG provided images -->
+<section class="mx-auto max-w-6xl px-4 py-6">
+  <div class="mb-3 text-slate-300 text-sm">相关图片</div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <figure class="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/40">
+              <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。" referrerpolicy="no-referrer" class="w-full h-auto block"/>
+              <figcaption class="px-4 py-3 text-sm text-slate-300">
+                <div class="font-medium">这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。</div>
+                <div class="text-xs text-slate-400 mt-1">1 OpenHarmony开源项目 > 1.2 技术架构</div>
+              </figcaption>
+            </figure>
+  </div>
+</section>
+
+
+  <!-- Header -->
+  <header class="p-6 text-center border-b border-slate-800">
+    <h1 class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+      OpenHarmony 技术架构详解
+    </h1>
+    <p class="mt-2 text-slate-400">全场景、分布式、组件化操作系统</p>
+  </header>
+
+  <!-- Hero Section with Architecture Diagram -->
+  <section class="relative py-12 px-4 overflow-hidden">
+    <div class="max-w-6xl mx-auto text-center">
+      <h2 class="text-2xl font-semibold mb-4">OpenHarmony 架构总览</h2>
+      <div class="relative mx-auto w-full max-w-4xl h-96 rounded-xl overflow-hidden border border-slate-700 card-glass">
+        <!-- 动态粒子背景 -->
+        <div id="particles" class="absolute inset-0"></div>
+        <!-- 架构图层 -->
+        <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-4/5 h-5/6 flex flex-col justify-between">
+          <!-- 应用层 -->
+          <div class="layer w-full p-4 text-center rounded-lg card-glass glow-border">
+            <i class="ph-light ph-app-window text-blue-400 text-2xl mx-auto"></i>
+            <p class="mt-2 font-semibold">应用层</p>
+            <p class="text-xs text-slate-400">系统应用、第三方应用</p>
+          </div>
+          <!-- 框架层 -->
+          <div class="layer w-full p-4 text-center rounded-lg card-glass glow-border">
+            <i class="ph-light ph-brackets-curly text-cyan-400 text-2xl mx-auto"></i>
+            <p class="mt-2 font-semibold">框架层</p>
+            <p class="text-xs text-slate-400">ArkUI、应用框架、DFX</p>
+          </div>
+          <!-- 系统服务层 -->
+          <div class="layer w-full p-4 text-center rounded-lg card-glass glow-border">
+            <i class="ph-light ph-cpu text-violet-400 text-2xl mx-auto"></i>
+            <p class="mt-2 font-semibold">系统服务层</p>
+            <p class="text-xs text-slate-400">分布式软总线、安全、多媒体</p>
+          </div>
+          <!-- 内核层 -->
+          <div class="layer w-full p-4 text-center rounded-lg card-glass glow-border">
+            <i class="ph-light ph-chip text-amber-400 text-2xl mx-auto"></i>
+            <p class="mt-2 font-semibold">内核层</p>
+            <p class="text-xs text-slate-400">LiteOS、Linux、驱动子系统</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- System Types -->
+  <section class="py-12 px-4">
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-2xl font-semibold mb-6 text-center">基础系统类型</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Mini System -->
+        <div class="p-6 rounded-xl card-glass border border-slate-700 hover:border-cyan-500 transition-colors">
+          <div class="flex items-center mb-4">
+            <i class="ph-light ph-microchip text-cyan-400 text-2xl mr-2"></i>
+            <h3 class="text-xl font-bold">轻量系统</h3>
+          </div>
+          <p class="text-sm text-slate-300">面向MCU类处理器（如 Arm Cortex-M）</p>
+          <ul class="mt-4 text-sm space-y-2">
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>最小内存: 128KiB</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>LiteOS-M 内核</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>适用于穿戴设备、传感器</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Small System -->
+        <div class="p-6 rounded-xl card-glass border border-slate-700 hover:border-violet-500 transition-colors">
+          <div class="flex items-center mb-4">
+            <i class="ph-light ph-cpu text-violet-400 text-2xl mr-2"></i>
+            <h3 class="text-xl font-bold">小型系统</h3>
+          </div>
+          <p class="text-sm text-slate-300">面向应用处理器（如 Arm Cortex-A）</p>
+          <ul class="mt-4 text-sm space-y-2">
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>最小内存: 1MiB</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>LiteOS-A / Linux 内核</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>多媒体、图形框架</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Standard System -->
+        <div class="p-6 rounded-xl card-glass border border-slate-700 hover:border-blue-500 transition-colors">
+          <div class="flex items-center mb-4">
+            <i class="ph-light ph-monitor text-blue-400 text-2xl mr-2"></i>
+            <h3 class="text-xl font-bold">标准系统</h3>
+          </div>
+          <p class="text-sm text-slate-300">面向高性能应用处理器</p>
+          <ul class="mt-4 text-sm space-y-2">
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>最小内存: 128MiB</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>Linux 内核</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-check-circle text-green-400 mt-1 mr-2"></i>
+              <span>完整应用框架、3D GPU</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Kernel & Driver -->
+  <section class="py-12 px-4">
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-2xl font-semibold mb-6 text-center">内核与驱动子系统</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Kernel -->
+        <div class="p-6 rounded-xl card-glass border border-slate-700">
+          <h3 class="text-xl font-bold mb-4 flex items-center">
+            <i class="ph-light ph-cpu text-amber-400 mr-2"></i> 多内核架构
+          </h3>
+          <ul class="space-y-3 text-sm">
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>支持 <strong>LiteOS-M</strong>（轻量系统）和 <strong>LiteOS-A/Linux</strong>（小型/标准系统）</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>通过 <strong>KAL</strong>（内核抽象层）提供统一接口</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>适配不同资源等级设备</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Driver -->
+        <div class="p-6 rounded-xl card-glass border border-slate-700">
+          <h3 class="text-xl font-bold mb-4 flex items-center">
+            <i class="ph-light ph-plug text-green-400 mr-2"></i> 统一驱动框架 (HDF)
+          </h3>
+          <ul class="space-y-3 text-sm">
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>弹性化框架，支持百K到百兆设备</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>规范化接口，一次开发多系统部署</span>
+            </li>
+            <li class="flex items-start">
+              <i class="ph-fill ph-dot-outline text-cyan-400 mt-1 mr-2"></i>
+              <span>组件化模型，降低开发与维护成本</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-8 text-center text-slate-500 text-sm border-t border-slate-800">
+    <p>© 2025 OpenHarmony 技术架构详解 | 基于开源鸿蒙官方文档构建</p>
+  </footer>
+
+  <script>
+    // 粒子动画
+    const particlesContainer = document.getElementById('particles');
+    function createParticle() {
+      const particle = document.createElement('div');
+      particle.classList.add('particle');
+      particle.style.width = `${Math.random() * 10 + 2}px`;
+      particle.style.height = particle.style.width;
+      particle.style.left = `${Math.random() * 100}%`;
+      particle.style.top = `${Math.random() * 100}%`;
+      particle.style.animationDelay = `${Math.random() * 2}s`;
+      particlesContainer.appendChild(particle);
+
+      // 自动移除粒子
+      setTimeout(() => {
+        particle.remove();
+      }, 4000);
+    }
+
+    setInterval(createParticle, 300);
+  </script>
+</body>
+</html>

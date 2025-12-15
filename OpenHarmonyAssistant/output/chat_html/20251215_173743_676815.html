@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="referrer" content="no-referrer">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 架构与系统详解</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a; /* slate-900 */
+      color: #f1f5f9; /* slate-50 */
+    }
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6); /* slate-800 with opacity */
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    }
+    .active-layer {
+      border-left: 4px solid #0ea5e9; /* cyan-500 */
+    }
+    .glow {
+      box-shadow: 0 0 15px rgba(14, 165, 233, 0.5);
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <div class="container mx-auto px-4 py-10 max-w-6xl">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+        OpenHarmony 架构与系统详解
+      </h1>
+      <p class="mt-3 text-slate-400 max-w-2xl mx-auto">
+        探索开源鸿蒙的分层架构、系统类型与内核适配策略，深入理解其设计理念。
+      </p>
+    </header>
+
+    <!-- System Types Table -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+        <i class="ph ph-cpu text-cyan-400"></i> 系统类型与资源需求
+      </h2>
+      <div class="overflow-x-auto glass rounded-xl p-4">
+        <table class="min-w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-700">
+              <th class="py-2 px-4">类型</th>
+              <th class="py-2 px-4">处理器</th>
+              <th class="py-2 px-4">最小内存</th>
+              <th class="py-2 px-4">能力</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium text-cyan-300">轻量系统（mini system）</td>
+              <td class="py-3 px-4">MCU类（如 Arm Cortex-M）</td>
+              <td class="py-3 px-4">128KiB</td>
+              <td class="py-3 px-4">轻量级网络协议、图形框架、IOT总线组件</td>
+            </tr>
+            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium text-violet-300">小型系统（small system）</td>
+              <td class="py-3 px-4">应用处理器（如 Arm Cortex-A）</td>
+              <td class="py-3 px-4">1MiB</td>
+              <td class="py-3 px-4">安全、图形、多媒体能力</td>
+            </tr>
+            <tr class="hover:bg-slate-800/50">
+              <td class="py-3 px-4 font-medium text-blue-300">标准系统（standard system）</td>
+              <td class="py-3 px-4">应用处理器（如 Arm Cortex-A）</td>
+              <td class="py-3 px-4">128MiB</td>
+              <td class="py-3 px-4">3D GPU、丰富图形动效、完整应用框架</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Architecture Diagram -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+        <i class="ph ph-stack text-cyan-400"></i> 分层架构概览
+      </h2>
+      <div class="relative bg-slate-900 rounded-xl overflow-hidden border border-slate-700 shadow-2xl">
+        <img src="https://gite formulate="1783x866" class="w-full h-auto opacity-90" alt="OpenHarmony 架构图" referrerpolicy="no-referrer">
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+      </div>
+    </section>
+
+    <!-- Interactive Layers -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+        <i class="ph ph-layers text-cyan-400"></i> 逐层解析
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Layer 1: 内核层 -->
+        <div class="layer-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer" onclick="showLayerDetails(0)">
+          <div class="flex items-start gap-3">
+            <div class="bg-cyan-500/10 p-2 rounded-lg">
+              <i class="ph ph-cpu text-cyan-400 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold">内核层 (Kernel Layer)</h3>
+              <p class="text-sm text-slate-400 mt-1">提供基础的内核能力，支持多内核设计。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 2: 系统服务层 -->
+        <div class="layer-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer" onclick="showLayerDetails(1)">
+          <div class="flex items-start gap-3">
+            <div class="bg-violet-500/10 p-2 rounded-lg">
+              <i class="ph ph-gear text-violet-400 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold">系统服务层 (System Service Layer)</h3>
+              <p class="text-sm text-slate-400 mt-1">核心能力集合，支持分布式、图形、安全等服务。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 3: 框架层 -->
+        <div class="layer-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer" onclick="showLayerDetails(2)">
+          <div class="flex items-start gap-3">
+            <div class="bg-blue-500/10 p-2 rounded-lg">
+              <i class="ph ph-layout text-blue-400 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold">框架层 (Framework Layer)</h3>
+              <p class="text-sm text-slate-400 mt-1">提供应用开发框架和多语言API。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 4: 应用层 -->
+        <div class="layer-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer" onclick="showLayerDetails(3)">
+          <div class="flex items-start gap-3">
+            <div class="bg-emerald-500/10 p-2 rounded-lg">
+              <i class="ph ph-app-window text-emerald-400 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold">应用层 (Application Layer)</h3>
+              <p class="text-sm text-slate-400 mt-1">系统应用与第三方应用构成。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer Detail Panel -->
+      <div id="layer-detail" class="mt-8 glass rounded-xl p-6 hidden">
+        <h3 id="detail-title" class="text-xl font-bold mb-3"></h3>
+        <div id="detail-content" class="prose prose-invert max-w-none"></div>
+      </div>
+    </section>
+
+    <!-- Kernel Adaptation -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+        <i class="ph ph-plug text-cyan-400"></i> 内核适配策略
+      </h2>
+      <div class="glass rounded-xl p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+            <h4 class="font-semibold text-cyan-300">LiteOS</h4>
+            <p class="text-sm mt-2">适用于资源受限的轻量和小型系统，如传感器、穿戴设备。</p>
+          </div>
+          <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+            <h4 class="font-semibold text-violet-300">Linux</h4>
+            <p class="text-sm mt-2">适用于小型和标准系统，提供更强的多媒体与图形能力。</p>
+          </div>
+          <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+            <h4 class="font-semibold text-blue-300">KAL (Kernel Abstraction Layer)</h4>
+            <p class="text-sm mt-2">屏蔽多内核差异，向上提供统一接口。</p>
+          </div>
+        </div>
+        <div class="mt-6 text-sm text-slate-400">
+          <p>OpenHarmony 通过多内核设计，灵活适配从MCU到应用处理器的广泛设备。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-500 text-sm mt-16 pb-6">
+      <p>© 2025 OpenHarmony Explorer | 基于官方文档构建</p>
+    </footer>
+  </div>
+
+  <script>
+    const layerData = [
+      {
+        title: "内核层 (Kernel Layer)",
+        content: `
+          <p>内核层是OpenHarmony的核心基础，采用多内核设计，支持LiteOS和Linux。</p>
+          <ul class="list-disc pl-5 mt-3 space-y-1">
+            <li><strong>内核子系统：</strong>通过KAL（Kernel Abstraction Layer）屏蔽内核差异，提供进程/线程管理、内存管理、文件系统、网络管理等基础能力。</li>
+            <li><strong>驱动子系统：</strong>HDF（Hardware Driver Foundation）提供统一外设访问能力和驱动开发管理框架。</li>
+          </ul>
+        `
+      },
+      {
+        title: "系统服务层 (System Service Layer)",
+        content: `
+          <p>该层是OpenHarmony的核心能力集合，通过框架层为应用提供服务。</p>
+          <ul class="list-disc pl-5 mt-3 space-y-1">
+            <li><strong>系统基本能力子系统集：</strong>包括分布式软总线、分布式数据管理、分布式任务调度、图形、安全、AI等。</li>
+            <li><strong>基础/增强/硬件软件服务子系统集：</strong>支持事件通知、电话、多媒体、DFX、位置服务、用户IAM等，可按需裁剪。</li>
+          </ul>
+        `
+      },
+      {
+        title: "框架层 (Framework Layer)",
+        content: `
+          <p>为应用开发提供多语言支持和开发框架。</p>
+          <ul class="list-disc pl-5 mt-3 space-y-1">
+            <li><strong>用户程序框架：</strong>支持C/C++/JS等语言。</li>
+            <li><strong>Ability框架：</strong>支持FA（有UI）和PA（无UI）能力。</li>
+            <li><strong>ArkUI框架：</strong>专为JS语言设计，用于构建声明式UI。</li>
+            <li><strong>多语言框架API：</strong>对外开放硬件和软件服务。</li>
+          </ul>
+        `
+      },
+      {
+        title: "应用层 (Application Layer)",
+        content: `
+          <p>包含系统应用和第三方非系统应用。</p>
+          <ul class="list-disc pl-5 mt-3 space-y-1">
+            <li><strong>FA (Feature Ability)：</strong>有UI界面，提供交互能力。</li>
+            <li><strong>PA (Particle Ability)：</strong>无UI，提供后台任务和数据访问。</li>
+            <li>应用可跨设备调度与分发，提供一致、高效体验。</li>
+          </ul>
+        `
+      }
+    ];
+
+    function showLayerDetails(index) {
+      const detail = layerData[index];
+      document.getElementById('detail-title').textContent = detail.title;
+      document.getElementById('detail-content').innerHTML = detail.content;
+      document.getElementById('layer-detail').classList.remove('hidden');
+      document.querySelectorAll('.layer-card').forEach((el, i) => {
+        if (i === index) {
+          el.classList.add('active-layer', 'glow');
+        } else {
+          el.classList.remove('active-layer', 'glow');
+        }
+      });
+      window.scrollTo({ top: document.getElementById('layer-detail').offsetTop - 100, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,296 @@
+{
+  "query": "讲讲OpenHarmony 的多内核设计",
+  "chunks": {
+    "ids": [
+      "chunk-44e24013e6b937bc87af6a99248022c0",
+      "chunk-97e82fa81973fcc540b0283266c1ab93",
+      "chunk-841d08653dc8ff3436044dbe36c168ee",
+      "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+      "chunk-8899708fb1f1e40f85496d19a90dc6aa",
+      "chunk-30e35f99d7d4282f3a95c89c6cd9c511",
+      "chunk-b2c6dad5e79f84c72da808e730b33fab",
+      "chunk-bcf1e551a95b72df6b1258cddb616c1f",
+      "chunk-c94391a9cb2a7122690f61c1a5697980",
+      "chunk-cc9518b0d0d8a33570f1960df8569c5e"
+    ],
+    "contents": [
+      "# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>",
+      "# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |",
+      "# 1 内核概述  \n## 1.1 简介  \nOpenHarmony 轻量级内核是基于IoT领域轻量级物联网操作系统Huawei LiteOS内核演进发展的新一代内核，包含LiteOS-M和LiteOS-A两类内核。LiteOS-M内核主要应用于轻量系统，面向的MCU（Microprocessor Unit）一般是百K级内存，可支持MPU（Memory Protection Unit）隔离，业界类似的内核有FreeRTOS或ThreadX等；LiteOS-A内核主要应用于小型系统，面向设备一般是M级内存，可支持MMU（Memory Management Unit）隔离，业界类似的内核有Zircon或Darwin等。  \n> ![icon-note.gif](public_sys-resources/icon-note.gif) **说明：**\n> OpenHarmony针对不同量级的系统，分别使用了不同形态的内核，小型系统支持LiteOS和Linux，本开发指南适用于LiteOS-A内核，linux内核的相关操作请参考[Linux内核概述](../kernel/kernel-standard-overview.md)。  \n为适应IoT产业的高速发展，OpenHarmony 轻量级内核不断优化和扩展，能够带给应用开发者友好的开发体验和统一开放的生态系统能力。轻量级内核LiteOS-A重要的新特性如下：  \n- 新增了丰富的内核机制\n新增虚拟内存、系统调用、多核、轻量级IPC（Inter-Process Communication，进程间通信）、DAC（Discretionary Access Control，自主访问控制）等机制，丰富了内核能力；为了更好的兼容软件和开发者体验，新增支持多进程，使得应用之间内存隔离、相互不影响，提升系统的健壮性。  \n- 引入统一驱动框架HDF（Hardware Driver Foundation）\n引入统一驱动框架HDF，统一驱动标准，为设备厂商提供了更统一的接入方式，使驱动更加容易移植，力求做到一次开发，多系统部署。  \n- 支持1200+标准POSIX接口\n更加全面的支持POSIX标准接口，使得应用软件易于开发和移植，给应用开发者提供了更友好的开发体验。  \n- 内核和硬件高解耦\n轻量级内核与硬件高度解耦，新增单板，内核代码不用修改。",
+      "# 1 内核概述  \n### 1.3 多内核架构和基本组成  \n业界的内核有很多，但无论是什么内核，基本上有几个最重要的组成单元是每个内核均要具备的，分别是：  \n- 负责持久化数据，并让应用程序能够方便的访问持久化数据的“文件系统”。  \n- 负责管理进程地址空间的“内存管理”。  \n- 负责管理多个进程的“进程管理”或者“任务管理“。  \n- 负责本机操作系统和另外一个设备上操作系统通信的“网络”。  \nOpenHarmony采用了多内核结构，支持Linux和LiteOS，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备上述组成单元，只是实现方式有所不同。多个内核通过KAL（Kernel Abstraction Layer）模块，向上提供统一的标准接口。  \n内核子系统位于OpenHarmony下层。需要特别注意的是，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽内核间差异，对上层提供基础的内核能力。  \n**图2** OpenHarmony架构图  \n![1_zh-cn_image_0000001128794202](figures/1_zh-cn_image_0000001128794202.png)",
+      "# 1 概述  \n## 1.1 简介  \nOpenHarmony采用多内核（Linux内核或者LiteOS）设计，支持系统在不同资源容量的设备部署。当相同的硬件部署不同内核时，如何能够让设备驱动程序在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担，是OpenHarmony驱动子系统需要解决的重要问题。  \n为了缩减驱动开发者的驱动开发周期，降低三方设备驱动集成难度，OpenHarmony驱动子系统支持以下关键特性和能力。  \n- 弹性化的框架能力  \n在传统的驱动框架能力的基础上，OpenHarmony驱动子系统通过构建弹性化的框架能力，可支持在百K级别到百兆级容量的终端产品形态部署。  \n- 规范化的驱动接口  \n定义了常见驱动接口，为驱动开发者和使用者提供丰富、稳定接口，并和未来开放的面向手机、平板、智慧屏等设备驱动接口保持API兼容性。  \n- 组件化的驱动模型  \n支持组件化的驱动模型，为开发者提供更精细化的驱动管理，开发者可以对驱动进行组件化拆分，使得驱动开发者可以更多关注驱动与硬件交互部分。同时系统也预置了部分模板化的驱动模型组件，如网络设备模型等。  \n- 归一化的配置界面  \n提供统一的配置界面，构建跨平台的配置转换和生成工具，实现跨平台的无缝切换。",
+      "# 1 OpenHarmony 4.0 Release  \n## 1.2 特性说明  \n### 1.2.27 内核  \n- 支持HCK内核接口框架。  \n- 支持Linux内核config多级分层配置。  \n- 代码执行权限管控能力增强，新增了以下能力：\n- 支持安全内存机制。\n- 支持不同场景的代码执行权限管控策略。\n- 支持代码执行权限管控的全生命周期管理能力。\n- 支持解析可执行文件获取代码段信息。\n- 支持代码页的完整性保护能力。",
+      "# 1 OpenHarmony 4.0 Beta1  \n## 1.1 版本概述  \n### 1.1.13 内核  \n- 支持HCK内核接口框架。  \n- 支持Linux内核config多级分层配置。",
+      "# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.3 Linux<a name=\"section143373618411\"></a>  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y / 6.6.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \nLinux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)；  \nLinux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)；  \nLinux社区LTS 6.6.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-6.6.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。",
+      "# 1 内核概述  \n## 1.3 Linux  \n### 1.3.1 linux内核概述  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \n- Linux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)。  \n- Linux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。",
+      "# 1 Linux内核概述  \n标准系统类设备是面向应用处理器的设备，支持的设备最小内存为128MiB。OpenHarmony选择Linux内核作为基础内核，可以对不同资源受限的设备产品配置出适合的OS内核，为上层提供基础的操作系统能力。"
+    ],
+    "metadata": [
+      {
+        "id": "chunk-44e24013e6b937bc87af6a99248022c0",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md",
+        "summary": "OpenHarmony根据系统级别采用不同内核：轻量系统和小型系统使用LiteOS，小型系统和标准系统使用Linux。LiteOS适用于轻量系统和小型系统，Linux适用于小型系统和标准系统。",
+        "breadcrumb": "1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>"
+      },
+      {
+        "id": "chunk-97e82fa81973fcc540b0283266c1ab93",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony根据设备能力划分为三类系统：轻量系统面向MCU处理器，适用于内存128KiB的物联网设备；小型系统面向应用处理器，支持1MiB内存，具备多媒体功能；标准系统面向高性能应用处理器，需128MiB内存，支持丰富图形和完整应用框架。内核适配方面，LiteOS-M用于轻量系统，LiteOS-A和Linux用于小型系统，标准系统仅支持Linux内核。",
+        "breadcrumb": "1 内核概述 > 1.4 不同内核适配的系统及设备类型"
+      },
+      {
+        "id": "chunk-841d08653dc8ff3436044dbe36c168ee",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-small-overview.md",
+        "summary": "OpenHarmony轻量级内核包含LiteOS-M（适用于百K级内存MCU）和LiteOS-A（适用于M级内存设备）两类。LiteOS-A内核新增了虚拟内存、多进程、系统调用等机制，引入统一驱动框架HDF，支持1200多个POSIX接口，实现了内核与硬件的高度解耦，为开发者提供友好的开发体验和统一的生态系统支持。",
+        "breadcrumb": "1 内核概述 > 1.1 简介"
+      },
+      {
+        "id": "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony采用多内核架构，支持Linux和LiteOS两种内核。所有内核均包含文件系统、内存管理、进程管理和网络四大核心模块。通过内核抽象层（KAL）屏蔽内核差异，为上层提供统一接口，实现跨设备类型的灵活适配，满足不同规格产品的资源需求。",
+        "breadcrumb": "1 内核概述 > 1.3 多内核架构和基本组成"
+      },
+      {
+        "id": "chunk-8899708fb1f1e40f85496d19a90dc6aa",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/driver/driver-overview-foundation.md",
+        "summary": "OpenHarmony驱动子系统采用多内核设计，支持设备在不同内核间平滑迁移。通过弹性化框架、规范化接口、组件化模型和归一化配置界面，降低驱动开发难度与维护成本，提升跨平台兼容性，适用于百K至百兆级容量的设备部署。",
+        "breadcrumb": "1 概述 > 1.1 简介"
+      },
+      {
+        "id": "chunk-30e35f99d7d4282f3a95c89c6cd9c511",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/release-notes/OpenHarmony-v4.0-release.md",
+        "summary": "OpenHarmony 4.0内核版本新增多项安全与配置增强功能，包括HCK内核接口框架、Linux内核多级分层配置，并加强了代码执行权限管控，涵盖安全内存机制、多场景策略、生命周期管理、可执行文件解析和代码页完整性保护。",
+        "breadcrumb": "1 OpenHarmony 4.0 Release > 1.2 特性说明 > 1.2.27 内核"
+      },
+      {
+        "id": "chunk-b2c6dad5e79f84c72da808e730b33fab",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/release-notes/OpenHarmony-v4.0-beta1.md",
+        "summary": "OpenHarmony 4.0 Beta1 版本中，内核部分实现了两项关键更新：支持HCK内核接口框架以及Linux内核配置的多级分层功能。",
+        "breadcrumb": "1 OpenHarmony 4.0 Beta1 > 1.1 版本概述 > 1.1.13 内核"
+      },
+      {
+        "id": "chunk-bcf1e551a95b72df6b1258cddb616c1f",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md",
+        "summary": "OpenHarmony的Linux内核基于Linux LTS 4.19.y/5.10.y/6.6.y分支，整合CVE补丁与系统特性构建通用内核基线。厂商在此基础上适配芯片驱动，编译生成对应内核镜像。所有补丁遵循GPL-2.0协议。",
+        "breadcrumb": "1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.3 Linux<a name=\"section143373618411\"></a>"
+      },
+      {
+        "id": "chunk-c94391a9cb2a7122690f61c1a5697980",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony的Linux内核基于Linux LTS 4.19.y/5.10.y分支开发，整合CVE补丁与系统特性形成通用内核基线。厂商根据芯片平台适配对应驱动补丁，构建时集成架构专用代码生成内核镜像。所有代码遵循GPL-2.0协议。",
+        "breadcrumb": "1 内核概述 > 1.3 Linux > 1.3.1 linux内核概述"
+      },
+      {
+        "id": "chunk-cc9518b0d0d8a33570f1960df8569c5e",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-standard-overview.md",
+        "summary": "OpenHarmony采用Linux内核作为基础内核，支持最小128MiB内存的设备。该系统可针对不同资源受限设备灵活配置内核，为上层应用提供基础操作系统能力。",
+        "breadcrumb": "1 Linux内核概述"
+      }
+    ]
+  },
+  "codes": {
+    "ids": [
+      "code-16abe30f8921aa98bb60bd37920c4661",
+      "code-6db594ba52877199a185d121a6af08a5",
+      "code-d2d6d8a13ede3c145d94d79b036ab401"
+    ],
+    "contents": [
+      "# 1 内核概述  \n## 1.3 目录<a name=\"section161941989596\"></a>  \n```text\n/kernel/liteos_a\n├── apps                   # 用户态的init和shell应用程序\n├── arch                   # 体系架构的目录，如arm等\n│   └── arm                # arm架构代码\n├── bsd                    # freebsd相关的驱动和适配层模块代码引入，例如USB等\n├── compat                 # 内核接口兼容性目录\n│   └── posix              # posix相关接口\n├── drivers                # 内核驱动\n│   └── char               # 字符设备\n│       ├── mem            # 访问物理IO设备驱动\n│       ├── quickstart     # 系统快速启动接口目录\n│       ├── random         # 随机数设备驱动\n│       └── video          # framebuffer驱动框架\n├── figures                # 内核架构图\n├── fs                     # 文件系统模块，主要来源于NuttX开源项目\n│   ├── fat                # fat文件系统\n│   ├── jffs2              # jffs2文件系统\n│   ├── include            # 对外暴露头文件存放目录\n│   ├── nfs                # nfs文件系统\n│   ├── proc               # proc文件系统\n│   ├── ramfs              # ramfs文件系统\n│   └── vfs                # vfs层\n├── kernel                 # 进程、内存、IPC等模块\n│   ├── base               # 基础内核，包括调度、内存等模块\n│   ├── common             # 内核通用组件\n│   ├── extended           # 扩展内核，包括动态加载、vdso、liteipc等模块\n│   ├── include            # 对外暴露头文件存放目录\n│   └── user               # 加载init进程\n├── lib                    # 内核的lib库\n├── net                    # 网络模块，主要来源于lwip开源项目\n├── platform               # 支持不同的芯片平台代码，如Hi3516DV300等\n│   ├── hw                 # 时钟与中断相关逻辑代码\n│   ├── include            # 对外暴露头文件存放目录\n│   └── uart               # 串口相关逻辑代码\n├── security               # 安全特性相关的代码，包括进程权限管理和虚拟id映射管理\n├── shell                  # 接收用户输入的命令，内核去执行\n├── syscall                # 系统调用\n├── testsuilts             # 测试套件\n└── tools                  # 构建工具及相关配置和代码\n```",
+      "# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.4 目录<a name=\"section21571344112\"></a>  \n```\nkernel/\n├── linux\n│   ├── common_modules                     # linux内核通用模块仓\n│   ├── linux-4.19                         # OpenHarmony linux-4.19 Common kernel\n│   ├── linux-5.10                         # OpenHarmony linux-5.10 Common kernel\n│   ├── linux-6.6                          # OpenHarmony linux-6.6  Common kernel\n│   ├── build\n│   │   ├── BUILD.gn                       # 编译框架GN文件\n│   │   ├── kernel.mk                      # 内核编译文件\n│   │   └── ohos.build                     # 内核编译组件文件\n│   ├── patches\n│   │   ├── linux-4.19                     # linux-4.19 相关patch\n│   │   │   ├── common_patch\n│   │   │   │   └── hdf.patch              # linux-4.19 HDF patches\n│   │   │   └── hispark_taurus_patch\n│   │   │       └── hispark_taurus.patch   # linux-4.19 hispark_taurus SOC patches\n│   │   ├── linux-5.10\n│   │   │   ├── common_patch\n│   │   │   │   └── hdf.patch              # linux-5.10 HDF patches\n│   │   │   └── hispark_taurus_patch\n│   │   │   │   └── hispark_taurus.patch   # linux-5.10 hispark_taurus SOC patches\n│   │   │   └── rk3568_patch\n│   │   │       ├── kernel.patch           # linux-5.10 rk3568 SOC patches\n│   │   │       └── hdf.patch              # linux-5.10 rk3568 定制 HDF patches\n│   │   └── linux-6.6\n│   │       └── rk3568_patch\n│   │           ├── kernel.patch           # linux-6.6  rk3568 SOC patches\n│   │           └── hdf.patch              # linux-6.6  rk3568 定制 HDF patches\n│   └── config\n│       ├── linux-4.19\n│       │   └── arch\n│       │       └── arm\n│       │          └── configs\n│       │              ├── hispark_taurus_small_defconfig        # 厂商Hisilicon对应的开源开发板hispark_taurus小型系统的defconfig\n│       │              ├── hispark_taurus_standard_defconfig     # 厂商Hisilicon对应的开源开发板hispark_taurus标准系统的defconfig\n│       │              ├── small_common_defconfig                # 小型系统的内核的common defconfig\n│       │              └── standard_common_defconfig             # 标准系统的内核的common defconfig\n│       └── linux-5.10 or linux-6.6\n│           ├── base_defconfig                                # 内核必选或安全红线模块基础配置\n│           ├── type                                          # 形态配置目录\n│           │   ├── small_defconfig                           # 小型系统常用配置文件\n│           │   └── standard_defconfig                        # 标准系统常用配置文件\n│           ├── form                                          # 版本配置目录\n│           │   └── debug_defconfig                           # 调试版本配置文件（示例目前无配置需求）\n│           ├── rk3568                                        # 厂商平台配置目录\n│           │   └── arch\n│           │       └── arm64_defconfig                       # 芯片单板64位版本相关配置文件\n│           └── product                                       # 相关产品类型配置目录\n│               └── phone_defconfig                           # 手机类型产品相关配置文件\n└── liteos_a               # liteos内核基线代码\n├── apps               # 用户态的init和shell应用程序\n├── arch               # 体系架构的目录，如arm等\n│   └── arm            # arm架构代码\n├── bsd                # freebsd相关的驱动和适配层模块代码引入，例如USB等\n├── compat             # 内核接口兼容性目录\n│   └── posix          # posix相关接口\n├── drivers            # 内核驱动\n│   └── char           # 字符设备\n│       ├── mem        # 访问物理IO设备驱动\n│       ├── quickstart # 系统快速启动接口目录\n│       ├── random     # 随机数设备驱动\n│       └── video      # framebuffer驱动框架\n├── fs                 # 文件系统模块，主要来源于NuttX开源项目\n│   ├── fat            # fat文件系统\n│   ├── jffs2          # jffs2文件系统\n│   ├── include        # 对外暴露头文件存放目录\n│   ├── nfs            # nfs文件系统\n│   ├── proc           # proc文件系统\n│   ├── ramfs          # ramfs文件系统\n│   └── vfs            # vfs层\n├── kernel             # 进程、内存、IPC等模块\n│   ├── base           # 基础内核，包括调度、内存等模块\n│   ├── common         # 内核通用组件\n│   ├── extended       # 扩展内核，包括动态加载、vdso、liteipc等模块\n│   ├── include        # 对外暴露头文件存放目录\n│   └── user           # 加载init进程\n├── lib                # 内核的lib库\n├── net                # 网络模块，主要来源于lwip开源项目\n├── platform           # 支持不同的芯片平台代码，如hispark_taurus等\n│   ├── hw             # 时钟与中断相关逻辑代码\n│   ├── include        # 对外暴露头文件存放目录\n│   └── uart           # 串口相关逻辑代码\n├── platform           # 支持不同的芯片平台代码，如hispark_taurus等\n├── security           # 安全特性相关的代码，包括进程权限管理和虚拟id映射管理\n├── syscall            # 系统调用\n└── tools              # 构建工具及相关配置和代码\n```",
+      "# 1 移植内核  \n## 1.1 移植芯片架构  \n芯片架构的移植是内核移植的基础，在OpenHarmony中芯片架构移植是可选过程，如果当前OpenHarmony已经支持对应芯片架构则不需要移植操作，在“liteos_m/arch”目录下可看到当前已经支持的架构，如表1：  \n**表1** OpenHarmony已支持的架构  \n| **系列** | **型号** |\n| -------- | -------- |\n| arm | arm9<br/>cortex-m3<br/>cortex-m4<br/>cortex-m7<br/>cortex-m33 |\n| csky | v2 |\n| risc-v | nuclei<br/>riscv32 |\n| xtensa | lx6 |  \n如果当前OpenHarmony尚未支持对应芯片架构，则需要芯片厂商自行适配，arch/include目录包含了通用的芯片架构适配所需要实现的函数。部分芯片架构代码由汇编实现，而汇编代码会因编译器的不同而不同，因此在具体的芯片架构下，还包含使用不同编译器（iar、keil、gcc等）编译的架构代码。  \n```\nkernel/liteos_m/arch          # 不同版本路径有差异。\n├── arm                       # arm系列。\n│   ├── arm9\n│   ├── cortex-m3\n│   ├── cortex-m33\n│   │   ├── gcc               # 使用gcc编译器编译的架构代码。\n│   │   └── iar               # 使用iar编译器编译的架构代码。\n│   ├── cortex-m4\n│   ├── cortex-m7\n├── csky                      # csky系列。\n├── include                   # 包含通用的芯片架构所需要实现的函数。\n│   ├── los_arch.h            # 定义芯片架构初始化所需要的函数。\n│   ├── los_atomic.h          # 定义芯片架构所需要实现的原子操作函数。\n│   ├── los_context.h         # 定义芯片架构所需要实现的任务上下文相关函数。\n│   ├── los_interrupt.h       # 定义芯片架构所需要实现的中断和异常相关的函数。\n│   └── los_timer.h           # 定义芯片架构所需要实现的系统时钟相关的函数。\n├── risc-v                    # risc-v系列。\n│   ├── nuclei\n│   └── riscv32\n└── xtensa                    # xtensa系列。\n└── lx6\n```"
+    ],
+    "metadata": [
+      {
+        "id": "code-16abe30f8921aa98bb60bd37920c4661",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-small-overview.md",
+        "summary": "该代码展示了LiteOS-A内核的目录结构，包含进程调度、内存管理、文件系统、设备驱动、网络模块等核心组件，支持多种硬件架构和芯片平台，是一个面向嵌入式系统的轻量级操作系统内核。",
+        "breadcrumb": "1 内核概述 > 1.3 目录<a name=\"section161941989596\"></a>"
+      },
+      {
+        "id": "code-6db594ba52877199a185d121a6af08a5",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md",
+        "summary": "该代码目录展示了OpenHarmony操作系统的内核子系统结构，包含Linux内核（4.19/5.10/6.6版本）和LiteOS-A内核的完整代码组织。目录涵盖了内核源码、编译配置、设备驱动、文件系统、网络模块及针对不同硬件平台的补丁文件，为系统内核的构建和定制提供完整框架支持。",
+        "breadcrumb": "1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.4 目录<a name=\"section21571344112\"></a>"
+      },
+      {
+        "id": "code-d2d6d8a13ede3c145d94d79b036ab401",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/porting-minichip-kernel.md",
+        "summary": "该文档说明OpenHarmony内核移植流程，重点描述芯片架构移植。文档列出已支持的架构（ARM/CSKY/RISC-V/Xtensa），并说明若需适配新架构需实现特定头文件中的核心功能。不同编译器（GCC/IAR等）需提供对应的汇编实现。",
+        "breadcrumb": "1 移植内核 > 1.1 移植芯片架构"
+      }
+    ]
+  },
+  "tables": {
+    "ids": [
+      "table-44e24013e6b937bc87af6a99248022c0",
+      "table-97e82fa81973fcc540b0283266c1ab93",
+      "table-894f4846c76bb6834ae567247f0adad7"
+    ],
+    "contents": [
+      "# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>",
+      "# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |",
+      "## 1 概述  \n目前OpenHarmony已经成立了SIG组[sig_devboard](https://gitee.com/openharmony/community/blob/master/sig/sig_devboard/sig_devboard_cn.md)。该SIG组以支持更多第三方开发板为目标，提供开发板移植的支撑。  \n在了解开发板移植前，需要先了解一下OpenHarmony对设备的分类。不同设备类型的移植方法会有较大差异。  \n| 设备类型    | 硬件要求        | 支持的内核          |\n|---------|-------------|----------------|\n| 轻量系统类设备 | 内存>128KB    | LiteOS-M       |\n| 小型系统类设备 | 内存>1MB、有MMU | LiteOS-A、Linux |\n| 标准系统类设备 | 内存>128MB    |  Linux       |"
+    ],
+    "metadata": [
+      {
+        "id": "table-44e24013e6b937bc87af6a99248022c0",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md",
+        "summary": "OpenHarmony根据系统级别使用不同内核：轻量系统和小型系统可选LiteOS，小型系统和标准系统可选Linux。具体为LiteOS适用于轻量和小型系统，Linux适用于小型和标准系统。",
+        "breadcrumb": "1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>"
+      },
+      {
+        "id": "table-97e82fa81973fcc540b0283266c1ab93",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md",
+        "summary": "OpenHarmony系统根据设备资源分为轻量系统（MCU/128KiB内存）、小型系统（Cortex-A/1MiB内存）和标准系统（Cortex-A/128MiB内存），分别适配智能家居、影音设备和高端显示屏。内核支持方面：LiteOS-M仅支持轻量系统，LiteOS-A仅支持小型系统，Linux同时支持小型和标准系统。",
+        "breadcrumb": "1 内核概述 > 1.4 不同内核适配的系统及设备类型"
+      },
+      {
+        "id": "table-894f4846c76bb6834ae567247f0adad7",
+        "file_path": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/porting/Readme-CN.md",
+        "summary": "OpenHarmony针对不同设备类型设定硬件与内核要求：轻量系统（内存>128KB，LiteOS-M）、小型系统（内存>1MB，LiteOS-A/Linux）和标准系统（内存>128MB，Linux）。SIG_devboard致力于支持第三方开发板移植。",
+        "breadcrumb": "1 概述"
+      }
+    ]
+  },
+  "images": {
+    "ids": [
+      "image-df70d6e22188fbd728da99590c45affd",
+      "image-b2fa9b90a42ad99915de911d17a26680",
+      "image-594031e8a89e27ac91489151e537d86a"
+    ],
+    "contents": [
+      "这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。",
+      "这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。",
+      "这张图片展示了OpenHarmony LiteOS-M内核的架构，分为硬件相关层和硬件无关层。硬件相关层包括时间管理、中断管理、异常处理等，提供统一的HAL接口以适应不同硬件和编译工具链。硬件无关层涵盖基础内核模块如任务管理、通信机制、内存管理等，以及可选组件如文件系统、网络、调试工具等，支持多种硬件架构和功能扩展，确保系统的灵活性和可移植性。"
+    ],
+    "metadata": [
+      {
+        "id": "image-df70d6e22188fbd728da99590c45affd",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png",
+        "local_path": "/root/code/docs/zh-cn/figures/1.png",
+        "caption": "这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。",
+        "md_file_path": "/root/code/docs/zh-cn/OpenHarmony-Overview_zh.md",
+        "parent_chunk_id": "chunk-8ffe6094de58792a11212edd9effd696",
+        "breadcrumb": "1 OpenHarmony开源项目 > 1.2 技术架构",
+        "width": 1783,
+        "height": 866,
+        "format": "PNG",
+        "file_size_kb": 245.09
+      },
+      {
+        "id": "image-b2fa9b90a42ad99915de911d17a26680",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001160018656.png",
+        "local_path": "/root/code/docs/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001160018656.png",
+        "caption": "这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。",
+        "md_file_path": "/root/code/docs/zh-cn/device-dev/kernel/kernel-small-overview.md",
+        "parent_chunk_id": "chunk-67448b9eafd45835c2d88bbb9f6bca50",
+        "breadcrumb": "1 内核概述 > 1.2 内核架构",
+        "width": 2778,
+        "height": 2073,
+        "format": "PNG",
+        "file_size_kb": 155.05
+      },
+      {
+        "id": "image-594031e8a89e27ac91489151e537d86a",
+        "gitee_url": "https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001199351155.png",
+        "local_path": "/root/code/docs/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001199351155.png",
+        "caption": "这张图片展示了OpenHarmony LiteOS-M内核的架构，分为硬件相关层和硬件无关层。硬件相关层包括时间管理、中断管理、异常处理等，提供统一的HAL接口以适应不同硬件和编译工具链。硬件无关层涵盖基础内核模块如任务管理、通信机制、内存管理等，以及可选组件如文件系统、网络、调试工具等，支持多种硬件架构和功能扩展，确保系统的灵活性和可移植性。",
+        "md_file_path": "/root/code/docs/zh-cn/device-dev/kernel/kernel-mini-overview.md",
+        "parent_chunk_id": "chunk-78aa9d973762433397349cec0eb0a917",
+        "breadcrumb": "1 内核概述 > 1.1 内核简介",
+        "width": 2361,
+        "height": 1604,
+        "format": "PNG",
+        "file_size_kb": 101.32
+      }
+    ]
+  },
+  "timing": {
+    "stage1_embedding": 0.09692168235778809,
+    "stage2_rerank": 9.125266075134277,
+    "stage3_spread": 2.5589911937713623,
+    "stage4_final_rerank": 5.0157787799835205,
+    "total": 29.049453735351562,
+    "stage5_report": 12.252496004104614
+  },
+  "rag_context": "# 用户问题\n讲讲OpenHarmony 的多内核设计\n\n# 相关段落（原文）\n\n## 段落 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 段落 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表\n\n## 段落 3\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-small-overview.md`\n**定位：** 1 内核概述 > 1.1 简介\n\n# 1 内核概述  \n## 1.1 简介  \nOpenHarmony 轻量级内核是基于IoT领域轻量级物联网操作系统Huawei LiteOS内核演进发展的新一代内核，包含LiteOS-M和LiteOS-A两类内核。LiteOS-M内核主要应用于轻量系统，面向的MCU（Microprocessor Unit）一般是百K级内存，可支持MPU（Memory Protection Unit）隔离，业界类似的内核有FreeRTOS或ThreadX等；LiteOS-A内核主要应用于小型系统，面向设备一般是M级内存，可支持MMU（Memory Management Unit）隔离，业界类似的内核有Zircon或Darwin等。  \n>  **说明：**\n> OpenHarmony针对不同量级的系统，分别使用了不同形态的内核，小型系统支持LiteOS和Linux，本开发指南适用于LiteOS-A内核，linux内核的相关操作请参考[Linux内核概述](../kernel/kernel-standard-overview.md)。  \n为适应IoT产业的高速发展，OpenHarmony 轻量级内核不断优化和扩展，能够带给应用开发者友好的开发体验和统一开放的生态系统能力。轻量级内核LiteOS-A重要的新特性如下：  \n- 新增了丰富的内核机制\n新增虚拟内存、系统调用、多核、轻量级IPC（Inter-Process Communication，进程间通信）、DAC（Discretionary Access Control，自主访问控制）等机制，丰富了内核能力；为了更好的兼容软件和开发者体验，新增支持多进程，使得应用之间内存隔离、相互不影响，提升系统的健壮性。  \n- 引入统一驱动框架HDF（Hardware Driver Foundation）\n引入统一驱动框架HDF，统一驱动标准，为设备厂商提供了更统一的接入方式，使驱动更加容易移植，力求做到一次开发，多系统部署。  \n- 支持1200+标准POSIX接口\n更加全面的支持POSIX标准接口，使得应用软件易于开发和移植，给应用开发者提供了更友好的开发体验。  \n- 内核和硬件高解耦\n轻量级内核与硬件高度解耦，新增单板，内核代码不用修改。\n\n## 段落 4\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.3 多内核架构和基本组成\n\n# 1 内核概述  \n### 1.3 多内核架构和基本组成  \n业界的内核有很多，但无论是什么内核，基本上有几个最重要的组成单元是每个内核均要具备的，分别是：  \n- 负责持久化数据，并让应用程序能够方便的访问持久化数据的“文件系统”。  \n- 负责管理进程地址空间的“内存管理”。  \n- 负责管理多个进程的“进程管理”或者“任务管理“。  \n- 负责本机操作系统和另外一个设备上操作系统通信的“网络”。  \nOpenHarmony采用了多内核结构，支持Linux和LiteOS，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备上述组成单元，只是实现方式有所不同。多个内核通过KAL（Kernel Abstraction Layer）模块，向上提供统一的标准接口。  \n内核子系统位于OpenHarmony下层。需要特别注意的是，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽内核间差异，对上层提供基础的内核能力。  \n**图2** OpenHarmony架构图\n\n## 段落 5\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/driver/driver-overview-foundation.md`\n**定位：** 1 概述 > 1.1 简介\n\n# 1 概述  \n## 1.1 简介  \nOpenHarmony采用多内核（Linux内核或者LiteOS）设计，支持系统在不同资源容量的设备部署。当相同的硬件部署不同内核时，如何能够让设备驱动程序在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担，是OpenHarmony驱动子系统需要解决的重要问题。  \n为了缩减驱动开发者的驱动开发周期，降低三方设备驱动集成难度，OpenHarmony驱动子系统支持以下关键特性和能力。  \n- 弹性化的框架能力  \n在传统的驱动框架能力的基础上，OpenHarmony驱动子系统通过构建弹性化的框架能力，可支持在百K级别到百兆级容量的终端产品形态部署。  \n- 规范化的驱动接口  \n定义了常见驱动接口，为驱动开发者和使用者提供丰富、稳定接口，并和未来开放的面向手机、平板、智慧屏等设备驱动接口保持API兼容性。  \n- 组件化的驱动模型  \n支持组件化的驱动模型，为开发者提供更精细化的驱动管理，开发者可以对驱动进行组件化拆分，使得驱动开发者可以更多关注驱动与硬件交互部分。同时系统也预置了部分模板化的驱动模型组件，如网络设备模型等。  \n- 归一化的配置界面  \n提供统一的配置界面，构建跨平台的配置转换和生成工具，实现跨平台的无缝切换。\n\n## 段落 6\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.3 Linux<a name=\"section143373618411\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.3 Linux<a name=\"section143373618411\"></a>  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y / 6.6.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \nLinux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)；  \nLinux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)；  \nLinux社区LTS 6.6.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-6.6.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。\n\n## 段落 7\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.3 Linux > 1.3.1 linux内核概述\n\n# 1 内核概述  \n## 1.3 Linux  \n### 1.3.1 linux内核概述  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \n- Linux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)。  \n- Linux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。\n\n## 段落 8\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-standard-overview.md`\n**定位：** 1 Linux内核概述\n\n# 1 Linux内核概述  \n标准系统类设备是面向应用处理器的设备，支持的设备最小内存为128MiB。OpenHarmony选择Linux内核作为基础内核，可以对不同资源受限的设备产品配置出适合的OS内核，为上层提供基础的操作系统能力。\n\n# 相关图片\n\n## 图片 1\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png)\n\n**说明：** 这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。\n**定位：** 1 OpenHarmony开源项目 > 1.2 技术架构\n**尺寸：** 1783x866\n\n## 图片 2\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001160018656.png)\n\n**说明：** 这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。\n**定位：** 1 内核概述 > 1.2 内核架构\n**尺寸：** 2778x2073\n\n## 图片 3\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001199351155.png)\n\n**说明：** 这张图片展示了OpenHarmony LiteOS-M内核的架构，分为硬件相关层和硬件无关层。硬件相关层包括时间管理、中断管理、异常处理等，提供统一的HAL接口以适应不同硬件和编译工具链。硬件无关层涵盖基础内核模块如任务管理、通信机制、内存管理等，以及可选组件如文件系统、网络、调试工具等，支持多种硬件架构和功能扩展，确保系统的灵活性和可移植性。\n**定位：** 1 内核概述 > 1.1 内核简介\n**尺寸：** 2361x1604\n\n# 相关表格\n\n## 表格 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 表格 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |\n",
+  "report": {
+    "success": true,
+    "report_data": {
+      "answer": {
+        "summary": "",
+        "key_points": [],
+        "sections": []
+      },
+      "images": [],
+      "tables": [],
+      "codes": [],
+      "related_concepts": [],
+      "further_reading": [],
+      "selection": {
+        "selected_chunks": [
+          {
+            "id": "chunk-44e24013e6b937bc87af6a99248022c0",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-97e82fa81973fcc540b0283266c1ab93",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-841d08653dc8ff3436044dbe36c168ee",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-278efc27bfc589fb792e5b2b1ab7e477",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-8899708fb1f1e40f85496d19a90dc6aa",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-bcf1e551a95b72df6b1258cddb616c1f",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-c94391a9cb2a7122690f61c1a5697980",
+            "paragraph_indices": [
+              0
+            ]
+          },
+          {
+            "id": "chunk-cc9518b0d0d8a33570f1960df8569c5e",
+            "paragraph_indices": [
+              0
+            ]
+          }
+        ],
+        "selected_codes": [],
+        "selected_tables": [
+          "table-44e24013e6b937bc87af6a99248022c0",
+          "table-97e82fa81973fcc540b0283266c1ab93"
+        ],
+        "selected_images": [
+          "image-df70d6e22188fbd728da99590c45affd",
+          "image-b2fa9b90a42ad99915de911d17a26680",
+          "image-594031e8a89e27ac91489151e537d86a"
+        ]
+      }
+    },
+    "error": ""
+  },
+  "frontend_prompt": "# 用户问题\n讲讲OpenHarmony 的多内核设计\n\n# 相关段落（原文）\n\n## 段落 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 段落 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表\n\n## 段落 3\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-small-overview.md`\n**定位：** 1 内核概述 > 1.1 简介\n\n# 1 内核概述  \n## 1.1 简介  \nOpenHarmony 轻量级内核是基于IoT领域轻量级物联网操作系统Huawei LiteOS内核演进发展的新一代内核，包含LiteOS-M和LiteOS-A两类内核。LiteOS-M内核主要应用于轻量系统，面向的MCU（Microprocessor Unit）一般是百K级内存，可支持MPU（Memory Protection Unit）隔离，业界类似的内核有FreeRTOS或ThreadX等；LiteOS-A内核主要应用于小型系统，面向设备一般是M级内存，可支持MMU（Memory Management Unit）隔离，业界类似的内核有Zircon或Darwin等。  \n>  **说明：**\n> OpenHarmony针对不同量级的系统，分别使用了不同形态的内核，小型系统支持LiteOS和Linux，本开发指南适用于LiteOS-A内核，linux内核的相关操作请参考[Linux内核概述](../kernel/kernel-standard-overview.md)。  \n为适应IoT产业的高速发展，OpenHarmony 轻量级内核不断优化和扩展，能够带给应用开发者友好的开发体验和统一开放的生态系统能力。轻量级内核LiteOS-A重要的新特性如下：  \n- 新增了丰富的内核机制\n新增虚拟内存、系统调用、多核、轻量级IPC（Inter-Process Communication，进程间通信）、DAC（Discretionary Access Control，自主访问控制）等机制，丰富了内核能力；为了更好的兼容软件和开发者体验，新增支持多进程，使得应用之间内存隔离、相互不影响，提升系统的健壮性。  \n- 引入统一驱动框架HDF（Hardware Driver Foundation）\n引入统一驱动框架HDF，统一驱动标准，为设备厂商提供了更统一的接入方式，使驱动更加容易移植，力求做到一次开发，多系统部署。  \n- 支持1200+标准POSIX接口\n更加全面的支持POSIX标准接口，使得应用软件易于开发和移植，给应用开发者提供了更友好的开发体验。  \n- 内核和硬件高解耦\n轻量级内核与硬件高度解耦，新增单板，内核代码不用修改。\n\n## 段落 4\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.3 多内核架构和基本组成\n\n# 1 内核概述  \n### 1.3 多内核架构和基本组成  \n业界的内核有很多，但无论是什么内核，基本上有几个最重要的组成单元是每个内核均要具备的，分别是：  \n- 负责持久化数据，并让应用程序能够方便的访问持久化数据的“文件系统”。  \n- 负责管理进程地址空间的“内存管理”。  \n- 负责管理多个进程的“进程管理”或者“任务管理“。  \n- 负责本机操作系统和另外一个设备上操作系统通信的“网络”。  \nOpenHarmony采用了多内核结构，支持Linux和LiteOS，开发者可按不同产品规格进行选择使用。Linux和LiteOS均具备上述组成单元，只是实现方式有所不同。多个内核通过KAL（Kernel Abstraction Layer）模块，向上提供统一的标准接口。  \n内核子系统位于OpenHarmony下层。需要特别注意的是，由于OpenHarmony面向多种设备类型，这些设备有着不同的CPU能力，存储大小等。为了更好的适配这些不同的设备类型，内核子系统支持针对不同资源等级的设备选用适合的OS内核，内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽内核间差异，对上层提供基础的内核能力。  \n**图2** OpenHarmony架构图\n\n## 段落 5\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/driver/driver-overview-foundation.md`\n**定位：** 1 概述 > 1.1 简介\n\n# 1 概述  \n## 1.1 简介  \nOpenHarmony采用多内核（Linux内核或者LiteOS）设计，支持系统在不同资源容量的设备部署。当相同的硬件部署不同内核时，如何能够让设备驱动程序在不同内核间平滑迁移，消除驱动代码移植适配和维护的负担，是OpenHarmony驱动子系统需要解决的重要问题。  \n为了缩减驱动开发者的驱动开发周期，降低三方设备驱动集成难度，OpenHarmony驱动子系统支持以下关键特性和能力。  \n- 弹性化的框架能力  \n在传统的驱动框架能力的基础上，OpenHarmony驱动子系统通过构建弹性化的框架能力，可支持在百K级别到百兆级容量的终端产品形态部署。  \n- 规范化的驱动接口  \n定义了常见驱动接口，为驱动开发者和使用者提供丰富、稳定接口，并和未来开放的面向手机、平板、智慧屏等设备驱动接口保持API兼容性。  \n- 组件化的驱动模型  \n支持组件化的驱动模型，为开发者提供更精细化的驱动管理，开发者可以对驱动进行组件化拆分，使得驱动开发者可以更多关注驱动与硬件交互部分。同时系统也预置了部分模板化的驱动模型组件，如网络设备模型等。  \n- 归一化的配置界面  \n提供统一的配置界面，构建跨平台的配置转换和生成工具，实现跨平台的无缝切换。\n\n## 段落 6\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.3 Linux<a name=\"section143373618411\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.3 Linux<a name=\"section143373618411\"></a>  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y / 6.6.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \nLinux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)；  \nLinux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)；  \nLinux社区LTS 6.6.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-6.6.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。\n\n## 段落 7\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.3 Linux > 1.3.1 linux内核概述\n\n# 1 内核概述  \n## 1.3 Linux  \n### 1.3.1 linux内核概述  \nOpenHarmony的Linux内核基于开源Linux内核LTS **4.19.y / 5.10.y** 分支演进，在此基线基础上，回合CVE补丁及OpenHarmony特性，作为OpenHarmony Common Kernel基线。针对不同的芯片，各厂商合入对应的板级驱动补丁，完成对OpenHarmony的基线适配。  \n- Linux社区LTS 4.19.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-4.19.y)。  \n- Linux社区LTS 5.10.y分支信息请查看[kernel官网](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/log/?h=linux-5.10.y)。  \n内核的Patch组成模块，在编译构建流程中，针对具体芯片平台，合入对应的架构驱动代码，进行编译对应的内核镜像。所有补丁来源均遵守GPL-2.0协议。\n\n## 段落 8\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-standard-overview.md`\n**定位：** 1 Linux内核概述\n\n# 1 Linux内核概述  \n标准系统类设备是面向应用处理器的设备，支持的设备最小内存为128MiB。OpenHarmony选择Linux内核作为基础内核，可以对不同资源受限的设备产品配置出适合的OS内核，为上层提供基础的操作系统能力。\n\n# 相关图片\n\n## 图片 1\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png)\n\n**说明：** 这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。\n**定位：** 1 OpenHarmony开源项目 > 1.2 技术架构\n**尺寸：** 1783x866\n\n## 图片 2\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001160018656.png)\n\n**说明：** 这张图片展示了OpenHarmony LiteOS-A内核架构，包括用户空间和内核空间的详细结构。用户空间包含Shell和用户进程，通过POSIX接口与内核空间进行系统调用。内核空间分为基础内核和扩展内核，基础内核涵盖进程管理、内存管理、调度器等功能，而扩展内核则包括网络、文件系统、安全机制等扩展功能，以及调试工具和硬件驱动框架HDF。整体架构设计旨在提高组件间通信效率和系统性能。\n**定位：** 1 内核概述 > 1.2 内核架构\n**尺寸：** 2778x2073\n\n## 图片 3\n\n![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/figures/zh-cn_image_0000001199351155.png)\n\n**说明：** 这张图片展示了OpenHarmony LiteOS-M内核的架构，分为硬件相关层和硬件无关层。硬件相关层包括时间管理、中断管理、异常处理等，提供统一的HAL接口以适应不同硬件和编译工具链。硬件无关层涵盖基础内核模块如任务管理、通信机制、内存管理等，以及可选组件如文件系统、网络、调试工具等，支持多种硬件架构和功能扩展，确保系统的灵活性和可移植性。\n**定位：** 1 内核概述 > 1.1 内核简介\n**尺寸：** 2361x1604\n\n# 相关表格\n\n## 表格 1\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`\n**定位：** 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a> > 1.1 简介<a name=\"section11660541593\"></a>\n\n# 1 内核子系统<a name=\"ZH-CN_TOPIC_0000001077309884\"></a>  \n## 1.1 简介<a name=\"section11660541593\"></a>  \nOpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  \n<a name=\"table91002058194612\"></a>\n<table><thead align=\"left\"><tr id=\"row010015589464\"><th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.1\"><p id=\"p310015824612\"><a name=\"p310015824612\"></a><a name=\"p310015824612\"></a>系统级别</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.2\"><p id=\"p910013586463\"><a name=\"p910013586463\"></a><a name=\"p910013586463\"></a>轻量系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.3\"><p id=\"p14100858164615\"><a name=\"p14100858164615\"></a><a name=\"p14100858164615\"></a>小型系统</p>\n</th>\n<th class=\"cellrowborder\" valign=\"top\" width=\"25%\" id=\"mcps1.2.5.1.4\"><p id=\"p191001158154610\"><a name=\"p191001158154610\"></a><a name=\"p191001158154610\"></a>标准系统</p>\n</th>\n</tr>\n</thead>\n<tbody><tr id=\"row18100165894619\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p110055824611\"><a name=\"p110055824611\"></a><a name=\"p110055824611\"></a>LiteOS</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p3100175815461\"><a name=\"p3100175815461\"></a><a name=\"p3100175815461\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p647872125416\"><a name=\"p647872125416\"></a><a name=\"p647872125416\"></a>×</p>\n</td>\n</tr>\n<tr id=\"row15104331164711\"><td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.1 \"><p id=\"p15104163120477\"><a name=\"p15104163120477\"></a><a name=\"p15104163120477\"></a>Linux</p>\n</td>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.2 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>×</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.3 \"><p id=\"p15762194124714\"><a name=\"p15762194124714\"></a><a name=\"p15762194124714\"></a>√</p>\n<td class=\"cellrowborder\" valign=\"top\" width=\"25%\" headers=\"mcps1.2.5.1.4 \"><p id=\"p4251543134711\"><a name=\"p4251543134711\"></a><a name=\"p4251543134711\"></a>√</p>\n</td>\n</tr>\n</tbody>\n</table>\n\n## 表格 2\n\n**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`\n**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型\n\n# 1 内核概述  \n### 1.4 不同内核适配的系统及设备类型  \nOpenHarmony按照支持的设备可分为如下几种系统类型：  \n- 轻量系统（mini system）\n面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  \n- 小型系统（small system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  \n- 标准系统（standard system）\n面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  \nOpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  \n**表1** 系统关系对应表  \n| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |\n| -------- | -------- | -------- | -------- |\n| LiteOS-M | √ | × | × |\n| LiteOS-A | × | √ | × |\n| Linux | × | √ | √ |\n"
+}

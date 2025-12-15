@@ -2529,6 +2529,109 @@ class HippoRAG:
         images_data: Dict
     ) -> str:
         """用真实信息拼装 frontend_prompt（不包含任何提示/指令性内容）。"""
+        import re
+        import os
+
+        # ===== 通用长度控制（避免“内容过长导致前端生成器忽略关键资产”）=====
+        # 默认放宽截断阈值（“能不截断就不截断”），同时支持通过环境变量进一步调整：
+        # - HIPPORAG_STAGE5_TRUNCATE=0/false/no  可整体关闭截断
+        # - HIPPORAG_STAGE5_MAX_PARA_CHARS / MAX_CHUNK_CHARS / MAX_TABLE_CHARS / MAX_CODE_CHARS
+        # - HIPPORAG_STAGE5_TRUNC_HEAD / TRUNC_TAIL
+        _truncate_flag = (os.environ.get("HIPPORAG_STAGE5_TRUNCATE", "1") or "1").strip().lower()
+        TRUNCATE_ENABLED = _truncate_flag not in ("0", "false", "no", "off")
+
+        def _env_int(name: str, default: int) -> int:
+            try:
+                v = int(os.environ.get(name, str(default)))
+                return v if v > 0 else default
+            except Exception:
+                return default
+
+        MAX_PARA_CHARS = _env_int("HIPPORAG_STAGE5_MAX_PARA_CHARS", 4000)
+        MAX_CHUNK_CHARS = _env_int("HIPPORAG_STAGE5_MAX_CHUNK_CHARS", 8000)
+        MAX_TABLE_CHARS = _env_int("HIPPORAG_STAGE5_MAX_TABLE_CHARS", 6000)
+        MAX_CODE_CHARS = _env_int("HIPPORAG_STAGE5_MAX_CODE_CHARS", 8000)
+        TRUNC_HEAD = _env_int("HIPPORAG_STAGE5_TRUNC_HEAD", 4000)
+        TRUNC_TAIL = _env_int("HIPPORAG_STAGE5_TRUNC_TAIL", 2000)
+
+        def _derive_summary(text: str, fallback_len: int = 180) -> str:
+            """无摘要时的兜底：取首句或前 N 字，避免额外LLM调用。"""
+            if not text:
+                return ""
+            t = re.sub(r"\s+", " ", text).strip()
+            # 尝试按句号截取
+            for sep in ("。", ".", "！", "!", "？", "?"):
+                if sep in t:
+                    first = t.split(sep, 1)[0].strip()
+                    if 20 <= len(first) <= 240:
+                        return first + sep
+            return t[:fallback_len]
+
+        def _truncate_with_summary(text: str, summary_hint: str, max_chars: int) -> Tuple[str, bool, str]:
+            """返回 (处理后的文本, 是否截断, 采用的摘要)。"""
+            if not text:
+                return "", False, ""
+            if not TRUNCATE_ENABLED:
+                return text, False, ""
+            if len(text) <= max_chars:
+                return text, False, ""
+            chosen_summary = (summary_hint or "").strip()
+            if not chosen_summary:
+                chosen_summary = _derive_summary(text)
+            head = min(TRUNC_HEAD, max(400, max_chars - 800))
+            tail = min(TRUNC_TAIL, max(200, max_chars - head - 80))
+            truncated = (
+                text[:head].rstrip()
+                + "\n\n...（中间内容过长已截断）...\n\n"
+                + text[-tail:].lstrip()
+            )
+            return truncated, True, chosen_summary
+
+        def _sanitize_chunk_text(text: str) -> str:
+            """
+            从 chunk 段落中移除“图片/表格/代码块”等多模态痕迹，避免与 codes/tables/images 重复，
+            也避免相对路径图片（如 figures/xxx.png）干扰前端生成器。
+            """
+            if not text:
+                return ""
+            # 1) 去 fenced code blocks
+            out_lines = []
+            in_code = False
+            for line in text.splitlines():
+                if line.strip().startswith("```"):
+                    in_code = not in_code
+                    continue
+                if in_code:
+                    continue
+                out_lines.append(line)
+            cleaned = "\n".join(out_lines)
+
+            # 2) 去 markdown 图片 / html img
+            cleaned = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", cleaned)
+            cleaned = re.sub(r"<img[^>]*>", "", cleaned, flags=re.IGNORECASE)
+
+            # 3) 去 markdown 表格行（粗粒度：连续 table 行直接删除）
+            def _is_table_line(s: str) -> bool:
+                ss = s.strip()
+                if not ss:
+                    return False
+                if re.match(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$", ss):
+                    return True
+                if ss.startswith("|") and ss.endswith("|") and ss.count("|") >= 2:
+                    return True
+                return False
+
+            final_lines = []
+            for line in cleaned.splitlines():
+                if _is_table_line(line):
+                    continue
+                final_lines.append(line)
+            cleaned = "\n".join(final_lines)
+
+            # 4) 归一化空行
+            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+            return cleaned
+
         lines: List[str] = []
         lines.append("# 用户问题")
         lines.append(query)
@@ -2556,6 +2659,7 @@ class HippoRAG:
                 if not cid:
                     continue
                 meta = chunk_meta_by_id.get(cid, {})
+                chunk_summary_hint = (meta.get("summary") or "").strip()
                 lines.append(f"## 段落 {i}")
                 lines.append("")
                 if meta.get("file_path"):
@@ -2566,14 +2670,26 @@ class HippoRAG:
 
                 if cid in paras_map and paras_map[cid]:
                     paras = paras_map[cid]
+                    added_summary = False
                     for pi in item.get("paragraph_indices", []):
                         if 0 <= pi < len(paras):
-                            lines.append(paras[pi])
+                            p = _sanitize_chunk_text(paras[pi])
+                            p, truncated, chosen_summary = _truncate_with_summary(p, chunk_summary_hint, MAX_PARA_CHARS)
+                            if truncated and chosen_summary and not added_summary:
+                                lines.append(f"**摘要：** {chosen_summary}")
+                                lines.append("")
+                                added_summary = True
+                            lines.append(p)
                             lines.append("")
                 else:
                     content = chunk_content_by_id.get(cid, "")
                     if content:
-                        lines.append(content)
+                        c = _sanitize_chunk_text(content)
+                        c, truncated, chosen_summary = _truncate_with_summary(c, chunk_summary_hint, MAX_CHUNK_CHARS)
+                        if truncated and chosen_summary:
+                            lines.append(f"**摘要：** {chosen_summary}")
+                            lines.append("")
+                        lines.append(c)
                         lines.append("")
 
         # 图片
@@ -2607,6 +2723,7 @@ class HippoRAG:
             for i, tid in enumerate(selected_tables, 1):
                 meta = table_meta_by_id.get(tid, {})
                 content = table_content_by_id.get(tid, "")
+                table_summary_hint = (meta.get("summary") or "").strip()
                 lines.append(f"## 表格 {i}")
                 lines.append("")
                 if meta.get("file_path"):
@@ -2615,7 +2732,11 @@ class HippoRAG:
                     lines.append(f"**定位：** {meta.get('breadcrumb')}")
                 lines.append("")
                 if content:
-                    lines.append(content)
+                    t, truncated, chosen_summary = _truncate_with_summary(content, table_summary_hint, MAX_TABLE_CHARS)
+                    if truncated and chosen_summary:
+                        lines.append(f"**摘要：** {chosen_summary}")
+                        lines.append("")
+                    lines.append(t)
                     lines.append("")
 
         # 代码
@@ -2626,6 +2747,7 @@ class HippoRAG:
             for i, cid in enumerate(selected_codes, 1):
                 meta = code_meta_by_id.get(cid, {})
                 content = code_content_by_id.get(cid, "")
+                code_summary_hint = (meta.get("summary") or "").strip()
                 lines.append(f"## 代码 {i}")
                 lines.append("")
                 if meta.get("file_path"):
@@ -2633,8 +2755,12 @@ class HippoRAG:
                 if meta.get("breadcrumb"):
                     lines.append(f"**定位：** {meta.get('breadcrumb')}")
                 lines.append("")
+                c, truncated, chosen_summary = _truncate_with_summary(content or "", code_summary_hint, MAX_CODE_CHARS)
+                if truncated and chosen_summary:
+                    lines.append(f"**摘要：** {chosen_summary}")
+                    lines.append("")
                 lines.append("```")
-                lines.append(content or "")
+                lines.append(c or "")
                 lines.append("```")
                 lines.append("")
 
@@ -2721,6 +2847,87 @@ class HippoRAG:
         当LLM整合失败时，生成降级版本的前端Prompt
         直接使用原始检索内容，不经过LLM整合
         """
+        import re
+        import os
+
+        # fallback 也需要长度控制与 chunk 清洗，否则会非常长、且容易把相对图片/表格噪声带入下游
+        _truncate_flag = (os.environ.get("HIPPORAG_STAGE5_TRUNCATE", "1") or "1").strip().lower()
+        TRUNCATE_ENABLED = _truncate_flag not in ("0", "false", "no", "off")
+
+        def _env_int(name: str, default: int) -> int:
+            try:
+                v = int(os.environ.get(name, str(default)))
+                return v if v > 0 else default
+            except Exception:
+                return default
+
+        MAX_CHUNK_CHARS = _env_int("HIPPORAG_STAGE5_MAX_CHUNK_CHARS", 8000)
+        MAX_TABLE_CHARS = _env_int("HIPPORAG_STAGE5_MAX_TABLE_CHARS", 6000)
+        MAX_CODE_CHARS = _env_int("HIPPORAG_STAGE5_MAX_CODE_CHARS", 8000)
+        TRUNC_HEAD = _env_int("HIPPORAG_STAGE5_TRUNC_HEAD", 4000)
+        TRUNC_TAIL = _env_int("HIPPORAG_STAGE5_TRUNC_TAIL", 2000)
+
+        def _derive_summary(text: str, fallback_len: int = 180) -> str:
+            if not text:
+                return ""
+            t = re.sub(r"\s+", " ", text).strip()
+            for sep in ("。", ".", "！", "!", "？", "?"):
+                if sep in t:
+                    first = t.split(sep, 1)[0].strip()
+                    if 20 <= len(first) <= 240:
+                        return first + sep
+            return t[:fallback_len]
+
+        def _truncate_with_summary(text: str, summary_hint: str, max_chars: int) -> Tuple[str, bool, str]:
+            if not text:
+                return "", False, ""
+            if not TRUNCATE_ENABLED:
+                return text, False, ""
+            if len(text) <= max_chars:
+                return text, False, ""
+            chosen_summary = (summary_hint or "").strip() or _derive_summary(text)
+            head = min(TRUNC_HEAD, max(400, max_chars - 800))
+            tail = min(TRUNC_TAIL, max(200, max_chars - head - 80))
+            truncated = (
+                text[:head].rstrip()
+                + "\n\n...（中间内容过长已截断）...\n\n"
+                + text[-tail:].lstrip()
+            )
+            return truncated, True, chosen_summary
+
+        def _sanitize_chunk_text(text: str) -> str:
+            if not text:
+                return ""
+            out_lines = []
+            in_code = False
+            for line in text.splitlines():
+                if line.strip().startswith("```"):
+                    in_code = not in_code
+                    continue
+                if in_code:
+                    continue
+                out_lines.append(line)
+            cleaned = "\n".join(out_lines)
+            cleaned = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", cleaned)
+            cleaned = re.sub(r"<img[^>]*>", "", cleaned, flags=re.IGNORECASE)
+            def _is_table_line(s: str) -> bool:
+                ss = s.strip()
+                if not ss:
+                    return False
+                if re.match(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$", ss):
+                    return True
+                if ss.startswith("|") and ss.endswith("|") and ss.count("|") >= 2:
+                    return True
+                return False
+            final_lines = []
+            for line in cleaned.splitlines():
+                if _is_table_line(line):
+                    continue
+                final_lines.append(line)
+            cleaned = "\n".join(final_lines)
+            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+            return cleaned
+
         lines = []
         
         lines.append("# 用户问题")
@@ -2741,7 +2948,13 @@ class HippoRAG:
             ), 1):
                 lines.append(f"### 文档 {i}")
                 lines.append("")
-                lines.append(content)
+                summary_hint = (meta.get("summary") or "").strip()
+                c = _sanitize_chunk_text(content or "")
+                c, truncated, chosen_summary = _truncate_with_summary(c, summary_hint, MAX_CHUNK_CHARS)
+                if truncated and chosen_summary:
+                    lines.append(f"**摘要：** {chosen_summary}")
+                    lines.append("")
+                lines.append(c)
                 lines.append("")
                 lines.append(f"**来源：** `{meta.get('file_path', '')}`")
                 if meta.get('breadcrumb'):
@@ -2795,7 +3008,12 @@ class HippoRAG:
             ), 1):
                 lines.append(f"### 表格 {i}")
                 lines.append("")
-                lines.append(content)
+                summary_hint = (meta.get("summary") or "").strip()
+                t, truncated, chosen_summary = _truncate_with_summary(content or "", summary_hint, MAX_TABLE_CHARS)
+                if truncated and chosen_summary:
+                    lines.append(f"**摘要：** {chosen_summary}")
+                    lines.append("")
+                lines.append(t)
                 lines.append("")
                 lines.append(f"**来源：** `{meta.get('file_path', '')}`")
                 lines.append("")
@@ -2814,8 +3032,13 @@ class HippoRAG:
                 if meta.get('summary'):
                     lines.append(f"**说明：** {meta.get('summary')}")
                     lines.append("")
+                summary_hint = (meta.get("summary") or "").strip()
+                c, truncated, chosen_summary = _truncate_with_summary(content or "", summary_hint, MAX_CODE_CHARS)
+                if truncated and chosen_summary:
+                    lines.append(f"**摘要：** {chosen_summary}")
+                    lines.append("")
                 lines.append("```")
-                lines.append(content)
+                lines.append(c)
                 lines.append("```")
                 lines.append("")
                 lines.append(f"**来源：** `{meta.get('file_path', '')}`")
@@ -7111,6 +7334,16 @@ class HippoRAG:
                 # 处理段落节点
                 chunk_abstract = node_data.get('abstract', '')
                 chunk_content = node_data.get('content', '')
+                # 优先使用过滤后的 chunk 内容（尽量去除 chunk 内的表/代码/图片引用），提升通用性与可视化生成稳定性
+                # filter_chunk 结构示例：
+                # {
+                #   "content": "...cleaned text...",
+                #   "extracted_entities": [...],
+                #   "extracted_triples": [...]
+                # }
+                filter_chunk = node_data.get('filter_chunk', {}) or {}
+                filtered_chunk_content = filter_chunk.get('content', '') if isinstance(filter_chunk, dict) else ''
+                chunk_content_for_store = filtered_chunk_content if filtered_chunk_content else chunk_content
                 
                 # 转换为 Gitee URL
                 gitee_file_path = self._convert_to_gitee_url(current_file_path) if current_file_path else ''
@@ -7127,9 +7360,9 @@ class HippoRAG:
                 
                 # 使用摘要或内容作为嵌入文本
                 # embed_text = chunk_abstract if chunk_abstract else chunk_content
-                if chunk_abstract and chunk_content:
+                if chunk_abstract and chunk_content_for_store:
                     # 存储为4元组: (node_id, content, abstract, file_path)
-                    all_chunks.append((node_id, chunk_content, chunk_abstract, gitee_file_path))
+                    all_chunks.append((node_id, chunk_content_for_store, chunk_abstract, gitee_file_path))
                 
                 # 添加段落到父节点的边
                 if parent_id:
@@ -7202,7 +7435,7 @@ class HippoRAG:
                         }
                 
                 # 处理过滤后的chunk中的实体和关系
-                filter_chunk = node_data.get('filter_chunk', {})
+                # 处理过滤后的chunk中的实体和关系（上方已读取 filter_chunk）
                 if filter_chunk:
                     # 初始化实体到段落的映射（如果为None）
                     if self.ent_node_to_chunk_ids is None:

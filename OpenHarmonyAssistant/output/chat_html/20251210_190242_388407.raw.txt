@@ -1,0 +1,309 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;70
+0&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ed;
+      --oh-cyan: #00c7e0;
+      --oh-violet: #9b59b6;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .layer-card {
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .layer-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 30px rgba(0, 119, 237, 0.3);
+      border-color: var(--oh-blue);
+    }
+
+    .feature-card {
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--oh-cyan);
+    }
+
+    .system-type-card {
+      transition: all 0.3s ease;
+    }
+
+    .system-type-card:hover {
+      background: rgba(155, 89, 182, 0.1);
+      border-color: var(--oh-violet);
+    }
+
+    .glow {
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
+    }
+
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+
+    .flow-line {
+      stroke: var(--oh-cyan);
+      stroke-width: 2;
+      stroke-dasharray: 10;
+      animation: dash 1.5s linear infinite;
+    }
+
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -20;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- Header -->
+  <header class="text-center mb-12">
+    <h1 class="text-4xl md:text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+      OpenHarmony 技术架构
+    </h1>
+    <p class="text-lg text-slate-300 max-w-3xl mx-auto">
+      探索 OpenHarmony 的四层架构、系统类型与核心特性，通过交互式卡片深入了解其分布式能力。
+    </p>
+  </header>
+
+  <!-- 系统类型 -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
+      <i class="ph ph-cpu text-cyan-400"></i> 系统类型
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Mini System -->
+      <div class="glass rounded-xl p-6 border border-white/10 system-type-card">
+        <h3 class="text-xl font-bold text-cyan-300 mb-2">轻量系统 (Mini System)</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li><span class="text-cyan-400">处理器:</span> Arm Cortex-M, RISC-V 32</li>
+          <li><span class="text-cyan-400">最小内存:</span> 128KiB</li>
+          <li><span class="text-cyan-400">能力:</span> 轻量级网络、图形框架、IOT总线</li>
+        </ul>
+      </div>
+      <!-- Small System -->
+      <div class="glass rounded-xl p-6 border border-white/10 system-type-card">
+        <h3 class="text-xl font-bold text-cyan-300 mb-2">小型系统 (Small System)</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li><span class="text-cyan-400">处理器:</span> Arm Cortex-A</li>
+          <li><span class="text-cyan-400">最小内存:</span> 1MiB</li>
+          <li><span class="text-cyan-400">能力:</span> 安全、图形、多媒体</li>
+        </ul>
+      </div>
+      <!-- Standard System -->
+      <div class="glass rounded-xl p-6 border border-white/10 system-type-card">
+        <h3 class="text-xl font-bold text-cyan-300 mb-2">标准系统 (Standard System)</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li><span class="text-cyan-400">处理器:</span> Arm Cortex-A</li>
+          <li><span class="text-cyan-400">最小内存:</span> 128MiB</li>
+          <li><span class="text-cyan-400">能力:</span> 增强交互、3D GPU、完整应用框架</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 四层架构 -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
+      <i class="ph ph-stack text-blue-400"></i> 四层架构
+    </h2>
+    <div class="relative">
+      <!-- SVG Flow Lines -->
+      <svg class="absolute top-0 left-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <line x1="50%" y1="0" x2="50%" y2="100" class="flow-line" />
+      </svg>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 relative z-10">
+        <!-- 内核层 -->
+        <div class="glass layer-card rounded-xl p-6 border border-white/10">
+          <h3 class="text-xl font-bold text-red-400 mb-3 flex items-center gap-2">
+            <i class="ph ph-chip"></i> 内核层
+          </h3>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span><strong>内核子系统:</strong> 多内核设计 (Linux / LiteOS)</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span><strong>驱动子系统:</strong> HDF驱动框架</span>
+            </li>
+          </ul>
+        </div>
+        <!-- 系统服务层 -->
+        <div class="glass layer-card rounded-xl p-6 border border-white/10">
+          <h3 class="text-xl font-bold text-yellow-400 mb-3 flex items-center gap-2">
+            <i class="ph ph-gear"></i> 系统服务层
+          </h3>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>分布式软总线</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>分布式数据管理</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>图形、安全、AI等</span>
+            </li>
+          </ul>
+        </div>
+        <!-- 框架层 -->
+        <div class="glass layer-card rounded-xl p-6 border border-white/10">
+          <h3 class="text-xl font-bold text-green-400 mb-3 flex items-center gap-2">
+            <i class="ph ph-code"></i> 框架层
+          </h3>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>ArkUI框架 (JS)</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>Ability框架</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>多语言API</span>
+            </li>
+          </ul>
+        </div>
+        <!-- 应用层 -->
+        <div class="glass layer-card rounded-xl p-6 border border-white/10">
+          <h3 class="text-xl font-bold text-purple-400 mb-3 flex items-center gap-2">
+            <i class="ph ph-app-window"></i> 应用层
+          </h3>
+          <ul class="space-y-2 text-sm">
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>系统应用</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>第三方应用</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i class="ph ph-dot text-cyan-400 mt-1"></i>
+              <span>FA/PA能力</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 核心特性 -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
+      <i class="ph ph-lightning text-yellow-400"></i> 核心特性
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- 硬件互助 -->
+      <div class="glass feature-card rounded-xl p-5 border border-white/10">
+        <h3 class="font-semibold text-cyan-300 mb-2">硬件互助</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li class="flex items-center gap-2"><i class="ph ph-plug text-cyan-400"></i> 分布式软总线</li>
+          <li class="flex items-center gap-2"><i class="ph ph-database text-cyan-400"></i> 分布式数据管理</li>
+          <li class="flex items-center gap-2"><i class="ph ph-timer text-cyan-400"></i> 分布式任务调度</li>
+          <li class="flex items-center gap-2"><i class="ph ph-devices text-cyan-400"></i> 设备虚拟化</li>
+        </ul>
+      </div>
+      <!-- 一次开发 -->
+      <div class="glass feature-card rounded-xl p-5 border border-white/10">
+        <h3 class="font-semibold text-cyan-300 mb-2">一次开发</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li class="flex items-center gap-2"><i class="ph ph-code-simple text-cyan-400"></i> 用户程序框架</li>
+          <li class="flex items-center gap-2"><i class="ph ph-compass-tool text-cyan-400"></i> Ability框架</li>
+          <li class="flex items-center gap-2"><i class="ph ph-layout text-cyan-400"></i> UI框架</li>
+          <li class="flex items-center gap-2"><i class="ph ph-check-circle text-cyan-400"></i> 多端部署</li>
+        </ul>
+      </div>
+      <!-- 统一OS -->
+      <div class="glass feature-card rounded-xl p-5 border border-white/10">
+        <h3 class="font-semibold text-cyan-300 mb-2">统一OS</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li class="flex items-center gap-2"><i class="ph ph-puzzle-piece text-cyan-400"></i> 组件化设计</li>
+          <li class="flex items-center gap-2"><i class="ph ph-arrows-out-cardinal text-cyan-400"></i> 弹性部署</li>
+          <li class="flex items-center gap-2"><i class="ph ph-cpu text-cyan-400"></i> ARM/RISC-V/x86</li>
+          <li class="flex items-center gap-2"><i class="ph ph-memory text-cyan-400"></i> 百KiB到GiB RAM</li>
+        </ul>
+      </div>
+      <!-- 子系统 -->
+      <div class="glass feature-card rounded-xl p-5 border border-white/10">
+        <h3 class="font-semibold text-cyan-300 mb-2">核心子系统</h3>
+        <ul class="text-sm text-slate-300 space-y-1">
+          <li class="flex items-center gap-2"><i class="ph ph-hammer text-cyan-400"></i> 驱动 (HDF)</li>
+          <li class="flex items-center gap-2"><i class="ph ph-monitor text-cyan-400"></i> 图形 (ArkUI)</li>
+          <li class="flex items-center gap-2"><i class="ph ph-shield-check text-cyan-400"></i> 安全</li>
+          <li class="flex items-center gap-2"><i class="ph ph-brain text-cyan-400"></i> AI</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 代码示例 -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
+      <i class="ph ph-code-block text-green-400"></i> 代码示例 (SysCap)
+    </h2>
+    <div class="glass rounded-xl p-6 border border-white/10 overflow-x-auto">
+      <pre class="text-sm"><code class="text-cyan-300">// 查询设备是否支持定位能力
+import geolocation from '@ohos.geolocation'
+
+const isLocationAvailable = canIUse('SystemCapability.Location.Location');
+if (isLocationAvailable) {
+  geolocation.getCurrentLocation((location) => {
+    console.log(location.latitude, location.longitue);
+  });
+} else {
+  console.log('Location not supported by this device.')
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center text-slate-500 text-sm py-6 border-t border-white/10">
+    <p>OpenHarmony 技术架构可视化交互页面 | 基于官方文档构建</p>
+  </footer>
+
+</body>
+</html>
+```

@@ -1,0 +1,258 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00E5FF;
+      --oh-violet: #A162F7;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #e2e8f0;
+      overflow-x: hidden;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .layer-card {
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .layer-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+      border-color: var(--oh-blue);
+    }
+    .glow {
+      box-shadow: 0 0 15px rgba(0, 229, 255, 0.5);
+    }
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0px); }
+    }
+    .floating {
+      animation: float 4s ease-in-out infinite;
+    }
+    .flow-particle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--oh-cyan);
+      box-shadow: 0 0 8px var(--oh-cyan);
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <header class="text-center mb-12 mt-6">
+      <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+        OpenHarmony 技术架构
+      </h1>
+      <p class="mt-3 text-slate-400 max-w-2xl mx-auto">
+        探索开源鸿蒙的分层架构，从内核到应用的完整技术体系。
+      </p>
+    </header>
+
+    <!-- Interactive Architecture Diagram -->
+    <div class="relative glass rounded-2xl p-6 mb-12 overflow-hidden">
+      <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(2,132,199,0.1)_0%,rgba(0,0,0,0)_70%)]"></div>
+      
+      <!-- Layer Stack -->
+      <div class="relative z-10 space-y-6">
+        <!-- Application Framework -->
+        <div class="layer-card glass rounded-xl p-5 border-l-4 border-cyan-500" data-layer="app">
+          <div class="flex items-center">
+            <i class="ph-lightbulb text-cyan-400 text-2xl mr-3"></i>
+            <h3 class="text-xl font-semibold">应用框架层</h3>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">提供ArkUI、分布式能力等，支持多设备应用开发。</p>
+        </div>
+
+        <!-- System Services -->
+        <div class="layer-card glass rounded-xl p-5 border-l-4 border-blue-500" data-layer="service">
+          <div class="flex items-center">
+            <i class="ph-gear text-blue-400 text-2xl mr-3"></i>
+            <h3 class="text-xl font-semibold">系统服务层</h3>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">分布式软总线、任务调度、公共事件等核心服务。</p>
+        </div>
+
+        <!-- Kernel -->
+        <div class="layer-card glass rounded-xl p-5 border-l-4 border-violet-500" data-layer="kernel">
+          <div class="flex items-center">
+            <i class="ph-cpu text-violet-400 text-2xl mr-3"></i>
+            <h3 class="text-xl font-semibold">内核层</h3>
+          </div>
+          <p class="mt-2 text-slate-300 text-sm">支持Linux、LiteOS等多内核，提供底层驱动和硬件抽象。</p>
+        </div>
+      </div>
+
+      <!-- Flow Animation -->
+      <div id="flow-container" class="absolute inset-0 pointer-events-none"></div>
+    </div>
+
+    <!-- Details Panel -->
+    <div id="detail-panel" class="glass rounded-2xl p-6 mb-12 transition-all duration-500 opacity-0 h-0 overflow-hidden">
+      <h3 id="detail-title" class="text-2xl font-bold mb-3 text-cyan-300"></h3>
+      <p id="detail-desc" class="text-slate-300"></p>
+      <div id="detail-content" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Will be populated by JS -->
+      </div>
+    </div>
+
+    <!-- Key Features Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="glass rounded-xl p-5 text-center floating">
+        <i class="ph-plug ph-fill text-3xl text-cyan-400 mx-auto mb-3"></i>
+        <h4 class="font-bold text-lg">一次开发，多端部署</h4>
+        <p class="text-slate-400 text-sm mt-2">一套代码适配手机、平板、车机等多种设备。</p>
+      </div>
+      <div class="glass rounded-xl p-5 text-center floating" style="animation-delay: 0.5s">
+        <i class="ph-shuffle-angular ph-fill text-3xl text-blue-400 mx-auto mb-3"></i>
+        <h4 class="font-bold text-lg">分布式能力</h4>
+        <p class="text-slate-400 text-sm mt-2">设备虚拟化，实现跨设备无缝协同。</p>
+      </div>
+      <div class="glass rounded-xl p-5 text-center floating" style="animation-delay: 1s">
+        <i class="ph-shield-check ph-fill text-3xl text-violet-400 mx-auto mb-3"></i>
+        <h4 class="font-bold text-lg">安全可信</h4>
+        <p class="text-slate-400 text-sm mt-2">基于形式化验证的微内核架构，提供端到端安全。</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Layer details data
+    const layerDetails = {
+      app: {
+        title: "应用框架层",
+        desc: "为开发者提供统一的应用开发框架，支持ArkTS/JS等多语言，实现一次开发多端部署。",
+        content: [
+          { icon: "ph-code", title: "ArkUI", desc: "声明式UI框架，支持组件化开发" },
+          { icon: "ph-device-mobile", title: "多设备适配", desc: "自适应布局引擎，适配不同屏幕" },
+          { icon: "ph-arrows-left-right", title: "分布式UI", desc: "跨设备UI无缝迁移" }
+        ]
+      },
+      service: {
+        title: "系统服务层",
+        desc: "提供OpenHarmony核心系统服务，支撑上层应用运行和设备间协同。",
+        content: [
+          { icon: "ph-network", title: "分布式软总线", desc: "设备间高速通信与发现" },
+          { icon: "ph-clock", title: "任务调度", desc: "统一任务管理与分发" },
+          { icon: "ph-bell", title: "公共事件", desc: "系统级事件订阅与通知" }
+        ]
+      },
+      kernel: {
+        title: "内核层",
+        desc: "提供统一的内核抽象层，支持多种微内核和宏内核，实现硬件解耦。",
+        content: [
+          { icon: "ph-cpu", title: "多内核支持", desc: "兼容LiteOS、Linux等内核" },
+          { icon: "ph-plug", title: "驱动框架", desc: "HDF驱动模型，统一驱动接口" },
+          { icon: "ph-chip", title: "硬件抽象", desc: "统一硬件访问接口HAL" }
+        ]
+      }
+    };
+
+    // DOM elements
+    const detailPanel = document.getElementById('detail-panel');
+    const detailTitle = document.getElementById('detail-title');
+    const detailDesc = document.getElementById('detail-desc');
+    const detailContent = document.getElementById('detail-content');
+    const flowContainer = document.getElementById('flow-container');
+
+    // Layer interaction
+    document.querySelectorAll('.layer-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const layer = card.dataset.layer;
+        const data = layerDetails[layer];
+        
+        detailTitle.textContent = data.title;
+        detailDesc.textContent = data.desc;
+        
+        // Populate content
+        detailContent.innerHTML = '';
+        data.content.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'glass rounded-lg p-3 flex items-start';
+          div.innerHTML = `
+            <i class="ph-${item.icon} text-cyan-400 text-xl mr-3 mt-1"></i>
+            <div>
+              <h5 class="font-semibold">${item.title}</h5>
+              <p class="text-slate-400 text-sm">${item.desc}</p>
+            </div>
+          `;
+          detailContent.appendChild(div);
+        });
+        
+        // Animate panel
+        detailPanel.classList.remove('opacity-0', 'h-0');
+        detailPanel.classList.add('opacity-100', 'h-auto', 'p-6');
+        
+        // Glow effect
+        document.querySelectorAll('.layer-card').forEach(c => c.classList.remove('glow'));
+        card.classList.add('glow');
+      });
+    });
+
+    // Create flow animation
+    function createFlow() {
+      flowContainer.innerHTML = '';
+      const layers = document.querySelectorAll('.layer-card');
+      
+      layers.forEach((layer, index) => {
+        if (index < layers.length - 1) {
+          const fromRect = layer.getBoundingClientRect();
+          const toRect = layers[index + 1].getBoundingClientRect();
+          
+          const startX = fromRect.left + fromRect.width / 2;
+          const startY = fromRect.top + fromRect.height;
+          const endX = toRect.left + toRect.width / 2;
+          const endY = toRect.top;
+          
+          // Create particles
+          for (let i = 0; i < 5; i++) {
+            setTimeout(() => {
+              const particle = document.createElement('div');
+              particle.className = 'flow-particle';
+              particle.style.left = `${startX}px`;
+              particle.style.top = `${startY}px`;
+              flowContainer.appendChild(particle);
+              
+              // Animate particle
+              particle.animate([
+                { transform: `translate(0, 0)`, opacity: 1 },
+                { transform: `translate(${endX - startX}px, ${endY - startY}px)`, opacity: 0 }
+              ], {
+                duration: 1500,
+                easing: 'ease-in-out'
+              });
+              
+              // Remove after animation
+              setTimeout(() => {
+                particle.remove();
+              }, 1500);
+            }, i * 300);
+          }
+        }
+      });
+    }
+
+    // Initialize and repeat flow
+    setInterval(createFlow, 3000);
+    setTimeout(createFlow, 500);
+  </script>
+</body>
+</html>
+```

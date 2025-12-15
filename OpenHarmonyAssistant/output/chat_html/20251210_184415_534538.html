@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 技术架构</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #007AFF;
+      --oh-cyan: #5AC8FA;
+      --oh-violet: #AF52DE;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .layer-card {
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .layer-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 10px 25px rgba(0, 122, 255, 0.3);
+    }
+
+    .flow-line {
+      stroke: var(--oh-blue);
+      stroke-width: 2;
+      stroke-dasharray: 8;
+      animation: dash 1.5s linear infinite;
+    }
+
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -20;
+      }
+    }
+
+    .glow {
+      box-shadow: 0 0 15px rgba(0, 122, 255, 0.6);
+    }
+
+    .highlight {
+      background: linear-gradient(90deg, var(--oh-blue), var(--oh-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <!-- Header -->
+  <header class="text-center mb-12 mt-6">
+    <h1 class="text-4xl md:text-5xl font-bold">OpenHarmony <span class="highlight">技术架构</span></h1>
+    <p class="mt-3 text-slate-300 max-w-2xl mx-auto">模块化、分层设计，支持多设备协同与分布式能力</p>
+  </header>
+
+  <!-- Architecture Visualization -->
+  <section class="max-w-6xl mx-auto mb-16">
+    <div class="relative h-[500px] w-full">
+      <!-- SVG Flow Diagram -->
+      <svg class="absolute top-0 left-0 w-full h-full" viewBox="0 0 800 500">
+        <!-- Lines -->
+        <line x1="400" y1="60" x2="400" y2="130" class="flow-line"></line>
+        <line x1="400" y1="170" x2="400" y2="240" class="flow-line"></line>
+        <line x1="400" y1="280" x2="400" y2="350" class="flow-line"></line>
+        <line x1="400" y1="390" x2="400" y2="460" class="flow-line"></line>
+
+        <!-- Layer Circles -->
+        <circle cx="400" cy="60" r="20" fill="var(--oh-blue)" class="glow"></circle>
+        <circle cx="400" cy="150" r="20" fill="var(--oh-cyan)" class="glow"></circle>
+        <circle cx="400" cy="260" r="20" fill="var(--oh-violet)" class="glow"></circle>
+        <circle cx="400" cy="370" r="20" fill="#10B981" class="glow"></circle>
+        <circle cx="400" cy="460" r="20" fill="#F59E0B" class="glow"></circle>
+      </svg>
+
+      <!-- Layer Cards -->
+      <div class="absolute top-[20px] left-1/2 transform -translate-x-1/2 w-64 glass rounded-xl p-4 layer-card text-center">
+        <h3 class="font-bold text-lg">应用层 (FA/PA)</h3>
+        <p class="text-sm text-slate-300 mt-1">Ability & Particle Ability</p>
+      </div>
+
+      <div class="absolute top-[130px] left-1/2 transform -translate-x-1/2 w-64 glass rounded-xl p-4 layer-card text-center">
+        <h3 class="font-bold text-lg">前端框架层</h3>
+        <p class="text-sm text-slate-300 mt-1">ArkUI, 声明式 UI</p>
+      </div>
+
+      <div class="absolute top-[240px] left-1/2 transform -translate-x-1/2 w-64 glass rounded-xl p-4 layer-card text-center">
+        <h3 class="font-bold text-lg">系统服务层</h3>
+        <p class="text-sm text-slate-300 mt-1">分布式软总线、DFX等</p>
+      </div>
+
+      <div class="absolute top-[350px] left-1/2 transform -translate-x-1/2 w-64 glass rounded-xl p-4 layer-card text-center">
+        <h3 class="font-bold text-lg">内核层</h3>
+        <p class="text-sm text-slate-300 mt-1">LiteOS, Linux, 安全启动</p>
+      </div>
+
+      <div class="absolute top-[440px] left-1/2 transform -translate-x-1/2 w-64 glass rounded-xl p-4 layer-card text-center">
+        <h3 class="font-bold text-lg">硬件层</h3>
+        <p class="text-sm text-slate-300 mt-1">芯片、传感器、外设</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Details Panel -->
+  <section class="max-w-4xl mx-auto mb-16">
+    <div class="glass rounded-2xl p-6">
+      <h2 class="text-2xl font-bold mb-4 flex items-center">
+        <i class="ph ph-info mr-2 text-cyan-400"></i> 架构详解
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+          <h3 class="font-semibold text-cyan-400">分布式能力</h3>
+          <p class="text-sm mt-2">通过分布式软总线实现设备间无缝协同，支持一次开发多端部署。</p>
+        </div>
+        <div class="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+          <h3 class="font-semibold text-violet-400">模块化解耦</h3>
+          <p class="text-sm mt-2">各层之间高度解耦，支持按需裁剪，适配从轻量到标准设备。</p>
+        </div>
+        <div class="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+          <h3 class="font-semibold text-green-400">统一内核</h3>
+          <p class="text-sm mt-2">支持多种内核，为不同资源受限设备提供统一调度和管理。</p>
+        </div>
+        <div class="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+          <h3 class="font-semibold text-yellow-400">安全可信</h3>
+          <p class="text-sm mt-2">从硬件到应用的全链路安全设计，保障系统与数据安全。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center text-slate-500 text-sm py-6">
+    <p>OpenHarmony 技术架构交互可视化 | 基于模块化分层设计</p>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.layer-card').forEach(card => {
+      card.addEventListener('click', function() {
+        document.querySelectorAll('.layer-card').forEach(c => c.classList.remove('ring-2', 'ring-blue-500'));
+        this.classList.add('ring-2', 'ring-blue-500');
+      });
+    });
+  </script>
+</body>
+</html>
