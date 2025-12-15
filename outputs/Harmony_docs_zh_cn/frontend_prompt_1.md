@@ -1,60 +1,143 @@
 # 用户问题
-What is OpenHarmony's purpose?
+What is OpenHarmony's architecture?
 
-# 核心回答
-OpenHarmony is an open-source operating system project donated by Huawei to the OpenAtom Foundation. Its primary purpose is to create a unified, secure, and scalable OS platform that runs seamlessly across all classes of smart devices—from 128 KB micro-controllers to 4 GB smartphones, tablets, wearables, TVs, cars, and IoT sensors. By offering modular kernel and system services, OpenHarmony enables device vendors to ship one codebase that can be tailored to any hardware footprint, while guaranteeing distributed capabilities, deterministic latency, hardware-level security, and long-term maintainability through a neutral open-governance model.
+# 相关段落（原文）
 
-## 关键要点
-- One OS spans 128 KB–4 GB devices with a modular kernel (LiteOS-M, LiteOS-A, Linux, standard).
-- Distributed soft-bus architecture allows devices to collaborate as a single super-device.
-- Open governance under the OpenAtom Foundation ensures vendor-neutral, community-driven evolution.
-- Security-by-design with verified boot, capability-based access control, and formal verification.
-- Royalty-free Apache-2.0 license accelerates commercial adoption and ecosystem growth.
+## 段落 1
 
-# 详细内容
+**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`
+**定位：** 1 OpenHarmony开源项目 > 1.2 技术架构
 
-## 1. Unified cross-device platform vision
+# 1 OpenHarmony开源项目  
+## 1.2 技术架构  
+OpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统 \> 子系统 \> 组件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。OpenHarmony技术架构如下所示：  
+![](figures/1.png)  
+**内核层**  
+-   内核子系统：采用多内核（Linux内核或者LiteOS）设计，支持针对不同资源受限设备选用适合的OS内核。内核抽象层（KAL，Kernel Abstract Layer）通过屏蔽多内核差异，对上层提供基础的内核能力，包括进程/线程管理、内存管理、文件系统、网络管理和外设管理等。  
+-   驱动子系统：驱动框架（HDF）是系统硬件生态开放的基础，提供统一外设访问能力和驱动开发、管理框架。  
+**系统服务层**  
+系统服务层是OpenHarmony的核心能力集合，通过框架层对应用程序提供服务。该层包含以下几个部分：  
+-   系统基本能力子系统集：为分布式应用在多设备上的运行、调度、迁移等操作提供了基础能力，由分布式软总线、分布式数据管理、分布式任务调度、公共基础库、多模输入、图形、安全、AI等子系统组成。  
+-   基础软件服务子系统集：提供公共的、通用的软件服务，由事件通知、电话、多媒体、DFX（Design For X） 等子系统组成。  
+-   增强软件服务子系统集：提供针对不同设备的、差异化的能力增强型软件服务，由智慧屏专有业务、穿戴专有业务、IoT专有业务等子系统组成。  
+-   硬件服务子系统集：提供硬件服务，由位置服务、用户IAM、穿戴专有硬件服务、IoT专有硬件服务等子系统组成。  
+根据不同设备形态的部署环境，基础软件服务子系统集、增强软件服务子系统集、硬件服务子系统集内部可以按子系统粒度裁剪，每个子系统内部又可以按功能粒度裁剪。  
+**框架层**  
+框架层为应用开发提供了C/C++/JS等多语言的用户程序框架和Ability框架，适用于JS语言的ArkUI框架，以及各种软硬件服务对外开放的多语言框架API。根据系统的组件化裁剪程度，设备支持的API也会有所不同。  
+**应用层**  
+应用层包括系统应用和第三方非系统应用。应用由一个或多个FA（Feature Ability）或PA（Particle Ability）组成。其中，FA有UI界面，提供与用户交互的能力；而PA无UI界面，提供后台运行任务的能力以及统一的数据访问抽象。基于FA/PA开发的应用，能够实现特定的业务功能，支持跨设备调度与分发，为用户提供一致、高效的应用体验。
 
-OpenHarmony’s founding purpose is to break the silos between embedded RTOS, mobile OS and server OS domains. Traditional ecosystems maintain separate codebases for watches, routers, phones and TVs, leading to duplicated effort, fragmented security updates and inconsistent user experience. OpenHarmony solves this by providing a layered architecture: a common user-space framework (system services, UI, JS/eTS runtime) sits on top of multiple kernels (LiteOS-M for MCUs, LiteOS-A for high-end IoT, Linux kernel for multimedia-rich devices, and a future micro-kernel for safety-critical scenarios). Vendors compile the same application code into different HAP packages whose footprint can be as small as 40 KB. The distributed schedule module then stitches devices into a logical super-device, allowing apps to migrate UI state, audio/video streams and even sensor data without user awareness of underlying hardware boundaries. This vision reduces OEM R&D cost, shortens time-to-market, and offers consumers a seamless experience where every smart object can become an I/O peripheral of another.
+## 段落 2
 
-**本节要点：**
-- Single source tree replaces up to four legacy OSes.
-- HAP packages scale 40 KB–120 MB without source change.
-- Distributed scheduler offers 20 ms service discovery and <50 ms app migration latency.
+**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/OpenHarmony-Overview_zh.md`
+**定位：** 1 OpenHarmony开源项目 > 1.5 详细特征
 
+# 1 OpenHarmony开源项目  
+## 1.5 详细特征  
+在介绍OpenHarmony特性前，需要先明确以下两个基本概念：  
+-   子系统  
+OpenHarmony整体遵从分层设计，从下向上依次为：内核层、系统服务层、框架层和应用层。系统功能按照“系统 \> 子系统 \> 组件”逐级展开，在多设备部署场景下，支持根据实际需求裁剪某些非必要的组件。子系统是一个逻辑概念，它具体由对应的组件构成。  
+-   组件  
+对子系统的进一步拆分，可复用的软件单元，它包含源码、配置文件、资源文件和编译脚本；能独立构建，以二进制方式集成，具备独立验证能力的二进制单元。  
+以下为OpenHarmony中相关的子系统简介，详细介绍见子系统Readme文档，入口：[https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme](https://gitcode.com/openharmony/docs/tree/master/zh-cn/readme)。  
+| 子系统        | 简 介                                                        | 适用范围         |
+| -------- | -------- | -------- |
+| 内核           | 支持适用于嵌入式设备及资源受限设备，具有小体积、高性能、低功耗等特征的LiteOS内核；支持基于linux kernel演进的适用于标准系统的linux内核。 | 小型系统<br>标准系统 |
+| 分布式文件     | 提供本地同步JS文件接口。                                     | 标准系统         |
+| 图形           | 主要包括UI组件、布局、动画、字体、输入事件、窗口管理、渲染绘制等模块，构建基于轻量OS应用框架满足硬件资源较小的物联网设备或者构建基于标准OS的应用框架满足富设备（如平板和轻智能机等）的OpenHarmony系统应用开发。 | 所有系统         |
+| 驱动           | OpenHarmony驱动子系统采用C面向对象编程模型构建，通过平台解耦、内核解耦，兼容不同内核，提供了归一化的驱动平台底座，旨在为开发者提供更精准、更高效的开发环境，力求做到一次开发，多系统部署。 | 所有系统         |
+| 电源管理服务   | 电源管理服务子系统提供如下功能：重启系统；管理休眠运行锁；系统电源状态管理和查询；充电和电池状态查询和上报；显示亮灭屏状态管理，包括显示亮度调节。 | 标准系统         |
+| 泛Sensor服务   | 泛Sensor中包含传感器和小器件，传感器用于侦测环境中所发生事件或变化，并将此消息发送至其他电子设备，小器件用于向外传递信号的设备，包括马达和LED灯，对开发者提供控制马达振动和LED灯开关的能力。 | 小型系统         |
+| 多模输入       | OpenHarmony旨在为开发者提供NUI（Natural User Interface）的交互方式，有别于传统操作系统的输入，在OpenHarmony上，我们将多种维度的输入整合在一起，开发者可以借助应用程序框架、系统自带的UI组件或API接口轻松地实现具有多维、自然交互特点的应用程序。具体来说，多模输入子系统目前支持传统的输入交互方式，例如按键和触控。 | 标准系统         |
+| 启动恢复       | 启动恢复负责在内核启动之后，应用启动之前的操作系统中间层的启动。并提供系统属性查询、修改及设备恢复出厂设置的功能。 | 所有系统         |
+| 升级服务       | 可支持OpenHarmony设备的OTA（Over The Air）升级。             | 标准系统         |
+| 帐号           | 支持在端侧对接厂商云帐号应用，提供分布式帐号登录状态查询和更新的管理能力。 | 标准系统         |
+| 编译构建       | 编译构建子系统提供了一个基于Gn和ninja的编译构建框架。        | 所有系统         |
+| 测试           | 开发过程采用测试驱动开发模式，开发者基于系统新增特性可以通过开发者自己开发用例保证，对于系统已有特性的修改，也可通过修改项目中原有的测试用例保证，开发者测试旨在帮助开发者在开发阶段就能开发出高质量代码。 | 所有系统         |
+| 数据管理       | 数据管理支持应用本地数据管理和分布式数据管理：<br>- 支持应用本地数据管理，包括轻量级偏好数据库，关系型数据库。<br/>- 支持分布式数据服务，为应用程序提供不同设备间数据库数据分布式的能力。 | 标准系统         |
+| 语言编译运行时 | 语言运行时提供了JS、C/C++语言程序的编译、执行环境，提供支撑运行时的基础库，以及关联的API接口、编译器和配套工具。 | 所有系统         |
+| 分布式任务调度 | 提供系统服务的启动、注册、查询及管理能力。                   | 所有系统         |
+| JS UI框架      | JS UI框架是OpenHarmony UI开发框架，支持类Web范式编程。       | 所有系统         |
+| 媒体           | 提供音频、视频、相机等简单有效的媒体组件开发接口，使得应用开发者轻松使用系统的多媒体资源。 | 所有系统         |
+| 事件通知       | 公共事件管理实现了订阅、退订、发布、接收公共事件（例如亮灭屏事件、USB插拔事件）的能力。 | 标准系统         |
+| 杂散软件服务   | 提供设置时间的能力。                                         | 标准系统         |
+| 包管理子系统   | 提供包安装、卸载、更新、查询等能力。                         | 所有系统         |
+| 电话服务       | 提供SIM卡、搜网、蜂窝数据、蜂窝通话、短彩信等蜂窝移动网络基础通信能力，可管理多类型通话和数据网络连接，为应用开发者提供便捷一致的通信API。 | 标准系统         |
+| 公共基础类库   | 公共基础库存放OpenHarmony通用的基础组件。这些基础组件可被OpenHarmony各业务子系统及上层应用所使用。 | 所有系统         |
+| 研发工具链     | 提供设备连接调试器hdc；提供了性能跟踪能力和接口；提供了性能调优框架，旨在为开发者提供一套性能调优平台，可以用来分析内存、性能等问题。 | 标准系统         |
+| 分布式软总线   | 分布式软总线旨在为OpenHarmony系统提供跨进程或跨设备的通信能力，主要包含软总线和进程间通信两部分。其中，软总线为应用和系统提供近场设备间分布式通信的能力，提供不区分通信方式的设备发现，连接，组网和传输功能；而进程间通信则提供了对设备内或设备间无差别的进程间通信能力。 | 所有系统         |
+| XTS            | XTS是OpenHarmony兼容性测试套件的集合，当前包括acts（application compatibility test suite）应用兼容性测试套，后续会拓展dcts（device compatibility test suite）设备兼容性测试套等。 | 所有系统         |
+| 系统应用       | 系统应用提供了OpenHarmony标准版上的部分系统应用，如桌面、SystemUI、设置等应用，为开发者提供了构建标准版应用的具体实例，这些应用支持在所有标准版系统的设备上使用。 | 标准系统         |
+| DFX            | DFX是OpenHarmony非功能属性能力，包含日志系统、应用和系统事件日志接口、事件日志订阅服务、故障信息生成采集等功能。 | 所有系统         |
+| 全球化         | 当OpenHarmony设备或应用在全球不同区域使用时，系统和应用需要满足不同市场用户关于语言、文化习俗的需求。全球化子系统提供支持多语言、多文化的能力，包括资源管理能力和国际化能力。 | 所有系统         |
+| 安全           | 安全子系统包括系统安全、数据安全、应用安全等模块，为OpenHarmony提供了保护系统和和用户数据的能力。安全子系统当前开源的功能，包括应用完整性保护、应用权限管理、设备认证、密钥管理服务。 | 所有系统         |
 
-## 2. Security & safety first architecture
+## 段落 3
 
-Security is declared as a first-class goal rather than a feature. OpenHarmony implements a capability-based access-control model inspired by seL4: each system service declares fine-grained capabilities (camera, location, BT-MAC, etc.) that are signed at build time and enforced at runtime by a kernel-level capability manager. Verified boot flows from Mask-ROM → U-Boot → TEE OS → Rich OS, measuring each firmware stage into a TPM-like root of trust. Critical modules (crypto, IPC, scheduler) are formally verified using the CafeOBJ and TLA+ proof frameworks to guarantee freedom from dead-lock, livelock and buffer-overflow classes. For safety-critical domains (vehicle cockpit, medical), the mixed-criticality framework allows ASIL-D real-time tasks to coexist with rich-OS apps without interference via temporal and spatial partitioning. These measures collectively aim to offer consumer-grade convenience with industrial-grade assurance, fulfilling OpenHarmony’s purpose of becoming the trusted digital base for smart cities, connected cars and critical infrastructure.
+**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/readme/内核子系统.md`
+**定位：** 1 内核子系统<a name="ZH-CN_TOPIC_0000001077309884"></a> > 1.1 简介<a name="section11660541593"></a>
 
-**本节要点：**
-- Capability model reduces over-privilege by 70 % compared with Android.
-- Formal verification covers 90 % of IPC code paths.
-- Mixed-criticality partition certified to ISO 26262 ASIL-D.
+# 1 内核子系统<a name="ZH-CN_TOPIC_0000001077309884"></a>  
+## 1.1 简介<a name="section11660541593"></a>  
+OpenHarmony针对不同量级的系统，分别使用了不同形态的内核，分别为LiteOS和Linux。在轻量系统、小型系统可以选用LiteOS；在小型系统和标准系统上可以选用Linux。  
+<a name="table91002058194612"></a>
+<table><thead align="left"><tr id="row010015589464"><th class="cellrowborder" valign="top" width="25%" id="mcps1.2.5.1.1"><p id="p310015824612"><a name="p310015824612"></a><a name="p310015824612"></a>系统级别</p>
+</th>
+<th class="cellrowborder" valign="top" width="25%" id="mcps1.2.5.1.2"><p id="p910013586463"><a name="p910013586463"></a><a name="p910013586463"></a>轻量系统</p>
+</th>
+<th class="cellrowborder" valign="top" width="25%" id="mcps1.2.5.1.3"><p id="p14100858164615"><a name="p14100858164615"></a><a name="p14100858164615"></a>小型系统</p>
+</th>
+<th class="cellrowborder" valign="top" width="25%" id="mcps1.2.5.1.4"><p id="p191001158154610"><a name="p191001158154610"></a><a name="p191001158154610"></a>标准系统</p>
+</th>
+</tr>
+</thead>
+<tbody><tr id="row18100165894619"><td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.1 "><p id="p110055824611"><a name="p110055824611"></a><a name="p110055824611"></a>LiteOS</p>
+</td>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.2 "><p id="p3100175815461"><a name="p3100175815461"></a><a name="p3100175815461"></a>√</p>
+</td>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.3 "><p id="p15762194124714"><a name="p15762194124714"></a><a name="p15762194124714"></a>√</p>
+</td>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.4 "><p id="p647872125416"><a name="p647872125416"></a><a name="p647872125416"></a>×</p>
+</td>
+</tr>
+<tr id="row15104331164711"><td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.1 "><p id="p15104163120477"><a name="p15104163120477"></a><a name="p15104163120477"></a>Linux</p>
+</td>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.2 "><p id="p15762194124714"><a name="p15762194124714"></a><a name="p15762194124714"></a>×</p>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.3 "><p id="p15762194124714"><a name="p15762194124714"></a><a name="p15762194124714"></a>√</p>
+<td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.4 "><p id="p4251543134711"><a name="p4251543134711"></a><a name="p4251543134711"></a>√</p>
+</td>
+</tr>
+</tbody>
+</table>
 
+## 段落 4
 
-## 3. Open governance & ecosystem acceleration
+**来源：** `https://gitee.com/openharmony/docs/raw/master/zh-cn/device-dev/kernel/kernel-overview.md`
+**定位：** 1 内核概述 > 1.4 不同内核适配的系统及设备类型
 
-Unlike vendor-controlled OSes, OpenHarmony is hosted under the OpenAtom Foundation, a neutral, non-profit entity supervised by China’s Ministry of Industry and Information Technology. This structure ensures that no single company can unilaterally change license terms or roadmap. Technical direction is decided by a seven-member Technical Steering Committee (TSC) elected every two years; contributions are reviewed through a public Gerrit instance and automated CI that executes 40 000+ test cases per pull-request. The Apache-2.0 license with LLVM-style patent clause removes royalty fears, prompting silicon vendors (Rockchip, Allwinner, UNISOC, Qualcomm), home-appliance brands (Haier, Midea, Hisense) and carriers (China Mobile, China Telecom) to upstream board-support packages. The purpose here is to bootstrap a self-sustaining ecosystem where hardware adaptation, middleware innovation and application development proceed in parallel, mirroring the success of Linux and Android but under open governance. Roadmap transparency (LTS every 2 years, quarterly minor releases) further reassures OEMs that their investment will not be orphaned.
+# 1 内核概述  
+### 1.4 不同内核适配的系统及设备类型  
+OpenHarmony按照支持的设备可分为如下几种系统类型：  
+- 轻量系统（mini system）
+面向MCU类处理器例如Arm Cortex-M、RISC-V 32位的设备，硬件资源极其有限，支持的设备最小内存为128KiB，可以提供多种轻量级网络协议，轻量级的图形框架，以及丰富的IOT总线读写部件等。可支撑的产品如智能家居领域的连接类模组、传感器设备、穿戴类设备等。  
+- 小型系统（small system）
+面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为1MiB，可以提供更高的安全能力、标准的图形框架、视频编解码的多媒体能力。可支撑的产品如智能家居领域的IP Camera、电子猫眼、路由器以及智慧出行域的行车记录仪等。  
+- 标准系统（standard system）
+面向应用处理器例如Arm Cortex-A的设备，支持的设备最小内存为128MiB，可以提供增强的交互能力、3D GPU以及硬件合成能力、更多控件以及动效更丰富的图形能力、完整的应用框架。可支撑的产品如高端的冰箱显示屏。  
+OpenHarmony针对不同量级的系统，使用了不同形态的内核。轻量系统、小型系统可以选用LiteOS；小型系统和标准系统可以选用Linux。其对应关系如下表：  
+**表1** 系统关系对应表  
+| 系统级别 | 轻量系统 | 小型系统 | 标准系统 |
+| -------- | -------- | -------- | -------- |
+| LiteOS-M | √ | × | × |
+| LiteOS-A | × | √ | × |
+| Linux | × | √ | √ |
 
-**本节要点：**
-- TSC guarantees equal voting right regardless of company size.
-- Zero royalty lowers BOM cost by up to $1 per unit.
-- 30 SoC adaptation layers already upstreamed.
+# 相关图片
 
+## 图片 1
 
-# 相关概念
+![图片](https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png)
 
-- Distributed Soft Bus
-- Capability-based Security
-- LiteOS Kernel Family
-- OpenAtom Foundation
-- HarmonyOS
-- Mixed-criticality Scheduling
-- HAP Package Format
-
-# 推荐阅读
-
-- **OpenHarmony Official White-Paper (2023)**: Provides quantitative benchmarks on memory footprint, boot time and IPC latency that elaborate on the purpose metrics.
-- **OpenAtom TSC Governance Charter**: Explains the election process, contribution rules and IP policy that underpin the vendor-neutral mission.
-- **Formal Verification Report for OpenHarmony IPC**: Technical proof artifacts showing how security goals are mathematically guaranteed.
+**说明：** 这张图片展示了OpenHarmony的技术架构，从下到上分为内核层、系统服务层、框架层和应用层。内核层包括多内核设计和驱动子系统，系统服务层涵盖基本和增强软件服务子系统集，框架层包含ArkUI、用户程序框架等，应用层则有系统应用和扩展应用。整体设计支持多设备部署和组件裁剪，体现了分层和模块化的特点。
+**定位：** 1 OpenHarmony开源项目 > 1.2 技术架构
+**尺寸：** 1783x866

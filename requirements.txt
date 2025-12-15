@@ -16,3 +16,4 @@ einops
 langchain
 beautifulsoup4
 lxml
+Pillow

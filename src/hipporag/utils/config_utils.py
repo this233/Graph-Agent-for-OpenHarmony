@@ -103,6 +103,68 @@ class BaseConfig:
         metadata={"help": "Max number of tokens each chunk can contain. If set to None, the whole doc will treated as a single chunk."}
     )
     preprocess_chunk_func: Literal["by_token", "by_word"] = field(default='by_token')
+
+    # Image preprocessing / indexing specific attributes
+    enable_image_content_dedup: bool = field(
+        default=True,
+        metadata={"help": "Whether to deduplicate near-duplicate images by content (perceptual hash) during indexing."}
+    )
+    image_dedup_hash_method: Literal["dhash", "phash"] = field(
+        default="dhash",
+        metadata={"help": "Perceptual hash method for image dedup. 'phash' is usually more robust to small layout changes."}
+    )
+    image_dedup_hamming_threshold: int = field(
+        default=6,
+        metadata={"help": "Hamming distance threshold for dHash64 when grouping near-duplicate images. Smaller is stricter."}
+    )
+    enable_image_dedup_ssim: bool = field(
+        default=False,
+        metadata={"help": "Whether to use SSIM as a second-stage confirmation for near-duplicate images (slower but more robust)."}
+    )
+    image_dedup_require_ssim: bool = field(
+        default=True,
+        metadata={"help": "When enable_image_dedup_ssim=True, require SSIM>=threshold even if hamming distance <= image_dedup_hamming_threshold (safer, less false merges)."}
+    )
+    image_dedup_direct_merge_hamming: int = field(
+        default=3,
+        metadata={"help": "Allow direct merge without SSIM when hamming distance <= this value. Default 2 skips SSIM only for near-identical images (lower risk, faster)."}
+    )
+    image_dedup_ssim_threshold: float = field(
+        default=0.88,
+        metadata={"help": "SSIM threshold (0~1) for considering two images as duplicates. Higher is stricter."}
+    )
+    image_dedup_ssim_hamming_max: int = field(
+        default=16,
+        metadata={"help": "Only compute SSIM when hamming distance <= this value (performance guardrail)."}
+    )
+    image_dedup_ssim_resize: int = field(
+        default=256,
+        metadata={"help": "Resize (square) used for SSIM computation. Smaller is faster and focuses on structure."}
+    )
+    image_dedup_ssim_blur_radius: float = field(
+        default=0.6,
+        metadata={"help": "Gaussian blur radius before SSIM to reduce sensitivity to small text/anti-alias differences."}
+    )
+    enable_image_dedup_logging: bool = field(
+        default=True,
+        metadata={"help": "Whether to write a detailed image dedup log during indexing."}
+    )
+    image_dedup_log_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to write detailed image dedup log (jsonl). If None, defaults to <working_dir>/image_dedup_log.jsonl."}
+    )
+    image_dedup_log_max_examples: int = field(
+        default=30,
+        metadata={"help": "Max number of merge examples to print to console (full details are still written to log file)."}
+    )
+    enable_image_dedup_report: bool = field(
+        default=True,
+        metadata={"help": "Whether to write a detailed image dedup report to disk during indexing."}
+    )
+    image_dedup_max_merge_captions: int = field(
+        default=5,
+        metadata={"help": "Max number of captions/contexts to merge into the kept image summary during dedup."}
+    )
     
     
     # Information extraction specific attributes

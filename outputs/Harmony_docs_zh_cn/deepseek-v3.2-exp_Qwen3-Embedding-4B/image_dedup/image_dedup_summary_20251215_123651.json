@@ -1,0 +1,23 @@
+{
+  "config": {
+    "hash_method": "phash",
+    "hamming_threshold": 10,
+    "enable_ssim": true,
+    "require_ssim": true,
+    "direct_merge_hamming": 0,
+    "ssim_threshold": 0.86,
+    "ssim_hamming_max": 16,
+    "ssim_resize": 256,
+    "ssim_blur_radius": 0.6
+  },
+  "counts": {
+    "before": 6970,
+    "after": 5336,
+    "removed": 1618,
+    "groups": 5336
+  },
+  "paths": {
+    "jsonl": "outputs/Harmony_docs_zh_cn/deepseek-v3.2-exp_Qwen3-Embedding-4B/image_dedup/image_dedup_report_20251215_123651.jsonl",
+    "summary": "outputs/Harmony_docs_zh_cn/deepseek-v3.2-exp_Qwen3-Embedding-4B/image_dedup/image_dedup_summary_20251215_123651.json"
+  }
+}

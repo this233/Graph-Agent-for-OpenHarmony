@@ -1350,10 +1350,14 @@ class HippoRAG:
         
         # 1.1 Fact检索
         query_fact_scores = self.get_fact_scores(query)
+        # 确保是1D数组
+        query_fact_scores = np.atleast_1d(np.squeeze(query_fact_scores))
         if len(query_fact_scores) > 0:
             fact_top_indices = np.argsort(query_fact_scores)[-fact_candidate_k:][::-1]
+            # 确保索引是整数列表
+            fact_top_indices = [int(i) for i in fact_top_indices]
             fact_candidate_ids = [self.fact_node_keys[i] for i in fact_top_indices]
-            fact_candidate_scores = query_fact_scores[fact_top_indices]
+            fact_candidate_scores = np.array([query_fact_scores[i] for i in fact_top_indices])
         else:
             fact_candidate_ids = []
             fact_candidate_scores = np.array([])
@@ -1361,10 +1365,12 @@ class HippoRAG:
         # 1.2 File检索
         if hasattr(self, 'file_node_keys') and len(self.file_node_keys) > 0:
             query_file_scores, file_keys = self.get_file_scores(query)
+            query_file_scores = np.atleast_1d(np.squeeze(query_file_scores))
             if len(query_file_scores) > 0:
                 file_top_indices = np.argsort(query_file_scores)[-file_candidate_k:][::-1]
+                file_top_indices = [int(i) for i in file_top_indices]
                 file_candidate_ids = [file_keys[i] for i in file_top_indices]
-                file_candidate_scores = query_file_scores[file_top_indices]
+                file_candidate_scores = np.array([query_file_scores[i] for i in file_top_indices])
             else:
                 file_candidate_ids = []
                 file_candidate_scores = np.array([])
@@ -1374,10 +1380,12 @@ class HippoRAG:
         
         # 1.3 Chunk检索
         query_chunk_scores = self.get_passage_scores(query)
+        query_chunk_scores = np.atleast_1d(np.squeeze(query_chunk_scores))
         if len(query_chunk_scores) > 0:
             chunk_top_indices = np.argsort(query_chunk_scores)[-chunk_candidate_k:][::-1]
+            chunk_top_indices = [int(i) for i in chunk_top_indices]
             chunk_candidate_ids = [self.passage_node_keys[i] for i in chunk_top_indices]
-            chunk_candidate_scores = query_chunk_scores[chunk_top_indices]
+            chunk_candidate_scores = np.array([query_chunk_scores[i] for i in chunk_top_indices])
         else:
             chunk_candidate_ids = []
             chunk_candidate_scores = np.array([])
@@ -2204,7 +2212,7 @@ class HippoRAG:
         }
         
         data = {
-            "model": "Kimi-K2",  # 使用 DeepSeek-R1 模型生成报告
+            "model": "deepseek-v3.2-exp",  # 使用 DeepSeek-R1 模型生成报告
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -2212,7 +2220,7 @@ class HippoRAG:
         }
         
         if verbose:
-            print(f"  🤖 使用报告专用模型: Kimi-K2")
+            print(f"  🤖 使用报告专用模型: deepseek-v3.2-exp")
         
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data), verify=False, timeout=600)
@@ -2225,7 +2233,7 @@ class HippoRAG:
             metadata = {
                 'prompt_tokens': result.get('usage', {}).get('prompt_tokens', 0),
                 'completion_tokens': result.get('usage', {}).get('completion_tokens', 0),
-                'model': 'Kimi-K2'
+                'model': 'deepseek-v3.2-exp'
             }
             
             return response_content, metadata
@@ -2244,257 +2252,393 @@ class HippoRAG:
         verbose: bool = True
     ) -> Dict:
         """
-        阶段5: 调用LLM整合所有检索信息，生成用于前端页面生成的prompt
-        
-        输出格式：直接可用于前端生成器的Markdown格式prompt，包含：
-        1. 用户问题和核心回答
-        2. 详细内容章节（带来源引用）
-        3. 相关图片（URL + 描述 + 来源）
-        4. 相关表格（完整内容 + 来源）
-        5. 相关代码（完整内容 + 来源）
-        
-        所有内容围绕用户问题筛选，无关内容会被LLM丢弃。
-        使用专门的 qwen3-235b-a22b 模型来生成高质量报告。
+        阶段5: 为“下一步的前端生成器”提供回答用户问题所需的必要信息（尽量只使用真实信息）
+
+        约束（重要）：
+        - 先做“选取”：哪些段落（chunk内段落级）要用，再选取哪些图/代码/表格要用
+        - frontend_prompt 只包含真实内容（原文段落/原始代码/原始表格/图片链接与元信息）
+        - 不向前端生成器输出任何提示/指令/写作要求
+
+        实现说明：
+        - 候选集合来自阶段4最终 rerank（数量已很小）
+        - 本阶段只做一次轻量 LLM 选择（输出选择JSON），然后用真实内容拼装 frontend_prompt
+        - 不再调用“报告专用模型”做二次写作，避免耗时和幻觉
         """
-        from .utils.llm_utils import TextChatMessage
         import json
         import re
-        
+        from .utils.llm_utils import TextChatMessage
+
         stage5_start = time.time()
         
         if verbose:
             print(f"\n{'='*60}")
-            print(f"📝 阶段5: LLM报告生成（前端Prompt格式）")
+            print(f"📝 阶段5: 素材选取与前端Prompt拼装（仅真实信息）")
             print(f"{'='*60}")
-        
-        # ========== 第一步：调用LLM筛选和整合内容 ==========
-        # 构建检索上下文
-        context_parts = []
-        
-        # Chunk内容
-        if chunks_data['ids']:
-            context_parts.append("=== 文档内容 ===")
-            for i, (cid, content, meta) in enumerate(zip(
-                chunks_data['ids'], chunks_data['contents'], chunks_data['metadata']
-            )):
-                context_parts.append(f"\n[DOC-{i+1}]")
-                context_parts.append(f"ID: {cid}")
-                context_parts.append(f"文件: {meta.get('file_path', '')}")
-                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
-                context_parts.append(f"内容:\n{content[:3000]}")
-        
-        # Code内容
-        if codes_data['ids']:
-            context_parts.append("\n\n=== 代码 ===")
-            for i, (cid, content, meta) in enumerate(zip(
-                codes_data['ids'], codes_data['contents'], codes_data['metadata']
-            )):
-                context_parts.append(f"\n[CODE-{i+1}]")
-                context_parts.append(f"ID: {cid}")
-                context_parts.append(f"文件: {meta.get('file_path', '')}")
-                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
-                context_parts.append(f"摘要: {meta.get('summary', '')}")
-                context_parts.append(f"代码:\n```\n{content}\n```")
-        
-        # Table内容  
-        if tables_data['ids']:
-            context_parts.append("\n\n=== 表格 ===")
-            for i, (tid, content, meta) in enumerate(zip(
-                tables_data['ids'], tables_data['contents'], tables_data['metadata']
-            )):
-                context_parts.append(f"\n[TABLE-{i+1}]")
-                context_parts.append(f"ID: {tid}")
-                context_parts.append(f"文件: {meta.get('file_path', '')}")
-                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
-                context_parts.append(f"摘要: {meta.get('summary', '')}")
-                context_parts.append(f"表格:\n{content}")
-        
-        # Image信息（含图片元信息）
-        if images_data['ids']:
-            context_parts.append("\n\n=== 图片 ===")
-            for i, (iid, content, meta) in enumerate(zip(
-                images_data['ids'], images_data['contents'], images_data['metadata']
-            )):
-                context_parts.append(f"\n[IMG-{i+1}]")
-                context_parts.append(f"ID: {iid}")
-                context_parts.append(f"URL: {meta.get('gitee_url', '')}")
-                context_parts.append(f"来源文件: {meta.get('md_file_path', '')}")
-                context_parts.append(f"定位: {meta.get('breadcrumb', '')}")
-                context_parts.append(f"描述: {meta.get('caption', content)}")
-                # 添加图片元信息
-                width = meta.get('width')
-                height = meta.get('height')
-                if width and height:
-                    context_parts.append(f"尺寸: {width}x{height}像素")
-                img_format = meta.get('format', '')
-                if img_format:
-                    context_parts.append(f"格式: {img_format}")
-                file_size_kb = meta.get('file_size_kb')
-                if file_size_kb:
-                    context_parts.append(f"文件大小: {file_size_kb}KB")
-        
-        context_text = "\n".join(context_parts)
-        
-        # 构建LLM Prompt - 要求输出用于前端生成的结构化内容
-        # 前端生成器的唯一信息来源，所以要尽量丰富
-        system_prompt = """你是技术文档分析助手。任务：筛选相关内容，生成详细丰富的JSON报告，这将作为前端页面生成器的**唯一信息来源**。
 
-输出JSON格式：
-{
-    "answer": {
-        "summary": "核心回答摘要（200-300字，全面概括问题的答案）",
-        "key_points": ["关键要点1", "关键要点2", "..."],
-        "sections": [
-            {
-                "title": "章节标题",
-                "content": "详细内容（500-800字，尽量详尽）",
-                "highlights": ["本章节要点1", "本章节要点2"],
-                "sources": [{"file": "文件路径", "location": "定位", "relevance": "说明该来源如何相关"}]
-            }
-        ]
-    },
-    "images": [
-        {
-            "url": "图片URL",
-            "caption": "图片说明（100字内，说明图片展示了什么）",
-            "context": "图片在文档中的上下文说明",
-            "relevance": "图片与问题的相关性说明",
-            "source_file": "来源文件",
-            "location": "定位路径",
-            "dimensions": "尺寸信息（如有）",
-            "suggested_display": "建议显示方式：full-width/inline/thumbnail"
-        }
-    ],
-    "tables": [
-        {
-            "title": "表格标题",
-            "description": "表格说明（描述表格包含什么数据）",
-            "content": "完整的Markdown表格",
-            "key_data": ["表格中的关键数据点1", "关键数据点2"],
-            "source_file": "来源文件",
-            "location": "定位路径"
-        }
-    ],
-    "codes": [
-        {
-            "title": "代码标题",
-            "language": "编程语言",
-            "content": "完整代码",
-            "explanation": "代码功能详细说明（100-200字）",
-            "usage_notes": "使用注意事项",
-            "related_apis": ["涉及的API1", "API2"],
-            "source_file": "来源文件",
-            "location": "定位路径"
-        }
-    ],
-    "related_concepts": ["相关概念1", "相关概念2"],
-    "further_reading": [{"title": "推荐阅读标题", "reason": "推荐理由"}]
-}
-
-规则：
-- 只输出JSON，无其他内容
-- 只保留与问题**相关**的内容，无关的设为空数组[]
-- 内容要**详尽丰富**，这是前端生成器的唯一信息来源
-- sections最多5个，每个content尽量详细（500-800字）
-- 代码content保持完整，不要截断
-- 表格保持原格式，并提取关键数据点
-- 为图片提供充分的上下文说明和显示建议
-- 提取相关概念和进一步阅读建议，帮助用户深入理解"""
-
-        user_prompt = f"""用户问题：{query}
-
-以下是检索到的内容，请筛选并整合与问题相关的信息：
-
-{context_text}
-
-请输出JSON格式的报告。注意：只保留与问题相关的内容。"""
-
-        if verbose:
-            print(f"  📤 上下文长度: {len(context_text)} 字符")
-            print(f"  📤 包含: {len(chunks_data['ids'])}个Chunk, {len(codes_data['ids'])}个Code, {len(tables_data['ids'])}个Table, {len(images_data['ids'])}个Image")
-        
         try:
-            # 调用专门的报告生成模型 qwen3-235b-a22b
-            response, metadata = self._call_report_llm(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
+            selection = self._select_frontend_materials(
+                query=query,
+                chunks_data=chunks_data,
+                codes_data=codes_data,
+                tables_data=tables_data,
+                images_data=images_data,
                 verbose=verbose
             )
-            
-            if verbose:
-                print(f"  📥 LLM响应长度: {len(response)} 字符")
-                print(f"  📊 Token: prompt={metadata.get('prompt_tokens', 0)}, completion={metadata.get('completion_tokens', 0)}")
-            
-            # 解析JSON
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_str = response.strip()
-            
-            # 尝试解析JSON，如果失败则尝试修复
-            try:
-                report_data = json.loads(json_str)
-            except json.JSONDecodeError as parse_error:
-                if verbose:
-                    print(f"  ⚠️ JSON解析失败，尝试修复: {parse_error}")
-                # 尝试修复截断的JSON
-                report_data = self._try_fix_truncated_json(json_str, verbose)
-                if report_data is None:
-                    raise parse_error
-            
-            # ========== 第二步：生成前端Prompt ==========
-            frontend_prompt = self._build_frontend_prompt(query, report_data)
-            
+
+            frontend_prompt = self._build_frontend_prompt_from_selection(
+                query=query,
+                selection=selection,
+                chunks_data=chunks_data,
+                codes_data=codes_data,
+                tables_data=tables_data,
+                images_data=images_data
+            )
+
             stage5_time = time.time() - stage5_start
-            
             if verbose:
-                print(f"\n  ✅ 报告生成成功!")
-                print(f"  📋 摘要: {report_data.get('answer', {}).get('summary', '')[:150]}...")
-                print(f"  📄 内容章节: {len(report_data.get('answer', {}).get('sections', []))}个")
-                print(f"  🖼️ 相关图片: {len(report_data.get('images', []))}个")
-                print(f"  📊 相关表格: {len(report_data.get('tables', []))}个")
-                print(f"  💻 相关代码: {len(report_data.get('codes', []))}个")
+                print(f"\n  ✅ 素材选取成功!")
+                print(f"  📄 选中Chunk: {len(selection.get('selected_chunks', []))}个（段落级）")
+                print(f"  💻 选中Code: {len(selection.get('selected_codes', []))}个")
+                print(f"  📊 选中Table: {len(selection.get('selected_tables', []))}个")
+                print(f"  🖼️ 选中Image: {len(selection.get('selected_images', []))}个")
                 print(f"  📝 前端Prompt长度: {len(frontend_prompt)} 字符")
                 print(f"  ⏱️ 阶段5耗时: {stage5_time:.3f}s")
-            
+
+            # 兼容旧结构：report 字段仍返回 dict，但不再包含“二次写作”的正文
+            report_data = {
+                "answer": {"summary": "", "key_points": [], "sections": []},
+                "images": [],
+                "tables": [],
+                "codes": [],
+                "related_concepts": [],
+                "further_reading": [],
+                "selection": {k: v for k, v in selection.items() if not str(k).startswith("_")}
+            }
+
             return {
                 'success': True,
                 'report': report_data,
                 'frontend_prompt': frontend_prompt,
                 'timing': stage5_time
             }
-            
-        except json.JSONDecodeError as e:
-            if verbose:
-                print(f"  ❌ JSON解析失败: {e}")
-                print(f"  📄 原始响应: {response[:500]}...")
-            
-            # 即使JSON解析失败，也尝试生成一个基础的前端prompt
-            stage5_time = time.time() - stage5_start
-            fallback_prompt = self._build_fallback_frontend_prompt(query, chunks_data, codes_data, tables_data, images_data)
-            
-            return {
-                'success': False,
-                'error': f'JSON解析失败: {str(e)}',
-                'raw_response': response,
-                'frontend_prompt': fallback_prompt,  # 提供降级的prompt
-                'timing': stage5_time
-            }
-            
+
         except Exception as e:
             if verbose:
-                print(f"  ❌ 报告生成失败: {e}")
-            
+                print(f"  ❌ 素材选取/拼装失败: {e}")
+
             stage5_time = time.time() - stage5_start
             fallback_prompt = self._build_fallback_frontend_prompt(query, chunks_data, codes_data, tables_data, images_data)
-            
+
             return {
                 'success': False,
                 'error': str(e),
                 'frontend_prompt': fallback_prompt,
                 'timing': stage5_time
             }
+
+    def _split_paragraphs_for_selection(self, text: str) -> List[str]:
+        """将chunk内容分割成段落（用于段落级选取），尽量保持原文不变。"""
+        if not text:
+            return []
+        normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+        paras = [p.strip('\n') for p in re.split(r'\n\s*\n', normalized) if p.strip()]
+        return paras
+
+    def _select_frontend_materials(
+        self,
+        query: str,
+        chunks_data: Dict,
+        codes_data: Dict,
+        tables_data: Dict,
+        images_data: Dict,
+        verbose: bool = True
+    ) -> Dict:
+        """
+        轻量“素材选取器”：只输出选择JSON（段落/资源），不输出任何正文。
+        """
+        import json
+        import re
+        from .utils.llm_utils import TextChatMessage
+
+        chunk_candidates = []
+        chunk_paragraphs_map: Dict[str, List[str]] = {}
+        for cid, content, meta in zip(chunks_data.get('ids', []), chunks_data.get('contents', []), chunks_data.get('metadata', [])):
+            paras = self._split_paragraphs_for_selection(content)
+            chunk_paragraphs_map[cid] = paras
+            preview_paras = []
+            for pi, p in enumerate(paras[:30]):  # 限制段落数，避免过长
+                preview_paras.append({"i": pi, "preview": p[:240].replace('\n', ' ')})
+            chunk_candidates.append({
+                "id": cid,
+                "file_path": meta.get("file_path", ""),
+                "breadcrumb": meta.get("breadcrumb", ""),
+                "paragraphs": preview_paras
+            })
+
+        code_candidates = []
+        for cid, content, meta in zip(codes_data.get('ids', []), codes_data.get('contents', []), codes_data.get('metadata', [])):
+            code_candidates.append({
+                "id": cid,
+                "file_path": meta.get("file_path", ""),
+                "breadcrumb": meta.get("breadcrumb", ""),
+                "preview": (content[:240].replace('\n', ' ') if content else "")
+            })
+
+        table_candidates = []
+        for tid, content, meta in zip(tables_data.get('ids', []), tables_data.get('contents', []), tables_data.get('metadata', [])):
+            table_candidates.append({
+                "id": tid,
+                "file_path": meta.get("file_path", ""),
+                "breadcrumb": meta.get("breadcrumb", ""),
+                "preview": (content[:240].replace('\n', ' ') if content else "")
+            })
+
+        image_candidates = []
+        for iid, content, meta in zip(images_data.get('ids', []), images_data.get('contents', []), images_data.get('metadata', [])):
+            image_candidates.append({
+                "id": iid,
+                "gitee_url": meta.get("gitee_url", ""),
+                "local_path": meta.get("local_path", ""),
+                "caption": meta.get("caption", content),
+                "md_file_path": meta.get("md_file_path", ""),
+                "breadcrumb": meta.get("breadcrumb", "")
+            })
+
+        # 目标：为下一步前端生成器提供“回答问题所需的全部必要信息”，宁可偏多一点，也不要过少
+        target_chunk_k = min(6, len(chunk_candidates))
+        target_code_k = min(2, len(code_candidates))
+        target_table_k = min(2, len(table_candidates))
+        target_image_k = min(2, len(image_candidates))
+
+        # 注意：此处不要使用 f-string（prompt 内含 JSON 示例的大量 { }），否则会触发 format specifier 解析错误
+        system_prompt = """你是一个“技术文档素材选取器”。任务：根据用户问题，从候选素材中选出“回答问题所需的全部必要信息”（不要过少）。
+
+你只需要做选择（选哪些段落/哪些资源），不要生成答案正文、不要改写、不要补充、不要推测。
+
+只输出JSON（不要Markdown代码块、不要解释），格式：
+{
+  "selected_chunks": [{"id": "chunk-id", "paragraph_indices": [0, 2, 3]}],
+  "selected_codes": ["code-id-1"],
+  "selected_tables": ["table-id-1"],
+  "selected_images": ["image-id-1"]
+}
+
+规则：
+- selected_chunks 按最终阅读顺序给出（要求逻辑通顺）
+- paragraph_indices 必须是整数索引，且必须存在于该chunk的候选段落列表中
+- 不需要某类资源时输出 []
+
+选取策略（重要）：
+- 优先覆盖：回答“是什么/如何构成/层次关系/关键组件/子系统/与图示对应”的信息
+- 保留必要的支撑素材（例如：架构图、系统类型/内核对应表、关键定义段落等）
+- 建议输出规模：chunk/code/table/image 的数量由你根据问题复杂度与候选质量自行决定（不要过少；宁可多一点也不要漏关键点）
+"""
+
+        payload = {
+            "question": query,
+            "candidates": {
+                "chunks": chunk_candidates,
+                "codes": code_candidates,
+                "tables": table_candidates,
+                "images": image_candidates
+            }
+        }
+        user_prompt = f"用户问题与候选素材如下（JSON）：\n{json.dumps(payload, ensure_ascii=False)}\n\n请输出选取结果JSON："
+
+        if verbose:
+            print(f"  📤 选取器上下文长度: {len(user_prompt)} 字符")
+            print(f"  📤 候选: chunk={len(chunk_candidates)}, code={len(code_candidates)}, table={len(table_candidates)}, image={len(image_candidates)}")
+
+        messages: List[TextChatMessage] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        # 复用 rerank 阶段所用的同一个 llm_model，避免额外的“报告专用模型”慢调用
+        infer_result = self.llm_model.infer(
+            messages=messages,
+            model=self.global_config.llm_name,
+            max_completion_tokens=800,
+            temperature=0.0
+        )
+
+        # 兼容缓存包装器：CacheOpenAI.infer 可能返回 (message, metadata, cache_hit)
+        cache_hit = None
+        if isinstance(infer_result, tuple) and len(infer_result) == 3:
+            response, metadata, cache_hit = infer_result
+        elif isinstance(infer_result, tuple) and len(infer_result) == 2:
+            response, metadata = infer_result
+        else:
+            # 最后兜底：尽量转成字符串
+            response, metadata = str(infer_result), {}
+
+        if verbose:
+            print(f"  📥 选取器响应长度: {len(response)} 字符")
+            print(f"  📊 Token: prompt={metadata.get('prompt_tokens', 0)}, completion={metadata.get('completion_tokens', 0)}")
+            if cache_hit is not None:
+                print(f"  🗃️ 选取器缓存命中: {'是' if cache_hit else '否'}")
+
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
+        json_str = json_match.group(1).strip() if json_match else response.strip()
+        try:
+            selection = json.loads(json_str)
+        except json.JSONDecodeError:
+            selection = self._try_fix_truncated_json(json_str, verbose=verbose)
+            if selection is None:
+                raise
+
+        selection.setdefault("selected_chunks", [])
+        selection.setdefault("selected_codes", [])
+        selection.setdefault("selected_tables", [])
+        selection.setdefault("selected_images", [])
+
+        # 校验并修正 paragraph_indices
+        fixed_selected_chunks = []
+        for item in selection.get("selected_chunks", []):
+            cid = item.get("id")
+            if not cid or cid not in chunk_paragraphs_map:
+                continue
+            paras = chunk_paragraphs_map.get(cid, [])
+            inds = item.get("paragraph_indices", [])
+            if not isinstance(inds, list):
+                inds = []
+            valid_inds = []
+            for x in inds:
+                try:
+                    xi = int(x)
+                except Exception:
+                    continue
+                if 0 <= xi < len(paras) and xi not in valid_inds:
+                    valid_inds.append(xi)
+            if not valid_inds and paras:
+                valid_inds = list(range(len(paras)))
+            fixed_selected_chunks.append({"id": cid, "paragraph_indices": valid_inds})
+        selection["selected_chunks"] = fixed_selected_chunks
+
+        # 内部使用：用于拼装原文段落，不写入对外 report/前端prompt
+        selection["_chunk_paragraphs_map"] = chunk_paragraphs_map
+        return selection
+
+    def _build_frontend_prompt_from_selection(
+        self,
+        query: str,
+        selection: Dict,
+        chunks_data: Dict,
+        codes_data: Dict,
+        tables_data: Dict,
+        images_data: Dict
+    ) -> str:
+        """用真实信息拼装 frontend_prompt（不包含任何提示/指令性内容）。"""
+        lines: List[str] = []
+        lines.append("# 用户问题")
+        lines.append(query)
+        lines.append("")
+
+        chunk_meta_by_id = {m.get("id"): m for m in chunks_data.get("metadata", [])}
+        code_meta_by_id = {m.get("id"): m for m in codes_data.get("metadata", [])}
+        table_meta_by_id = {m.get("id"): m for m in tables_data.get("metadata", [])}
+        image_meta_by_id = {m.get("id"): m for m in images_data.get("metadata", [])}
+
+        chunk_content_by_id = dict(zip(chunks_data.get("ids", []), chunks_data.get("contents", [])))
+        code_content_by_id = dict(zip(codes_data.get("ids", []), codes_data.get("contents", [])))
+        table_content_by_id = dict(zip(tables_data.get("ids", []), tables_data.get("contents", [])))
+        image_content_by_id = dict(zip(images_data.get("ids", []), images_data.get("contents", [])))
+
+        paras_map = selection.get("_chunk_paragraphs_map", {})
+
+        # 段落（原文）
+        selected_chunks = selection.get("selected_chunks", [])
+        if selected_chunks:
+            lines.append("# 相关段落（原文）")
+            lines.append("")
+            for i, item in enumerate(selected_chunks, 1):
+                cid = item.get("id")
+                if not cid:
+                    continue
+                meta = chunk_meta_by_id.get(cid, {})
+                lines.append(f"## 段落 {i}")
+                lines.append("")
+                if meta.get("file_path"):
+                    lines.append(f"**来源：** `{meta.get('file_path')}`")
+                if meta.get("breadcrumb"):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                lines.append("")
+
+                if cid in paras_map and paras_map[cid]:
+                    paras = paras_map[cid]
+                    for pi in item.get("paragraph_indices", []):
+                        if 0 <= pi < len(paras):
+                            lines.append(paras[pi])
+                            lines.append("")
+                else:
+                    content = chunk_content_by_id.get(cid, "")
+                    if content:
+                        lines.append(content)
+                        lines.append("")
+
+        # 图片
+        selected_images = selection.get("selected_images", [])
+        if selected_images:
+            lines.append("# 相关图片")
+            lines.append("")
+            for i, iid in enumerate(selected_images, 1):
+                meta = image_meta_by_id.get(iid, {})
+                caption = meta.get("caption") or image_content_by_id.get(iid, "") or "图片"
+                gitee_url = meta.get("gitee_url", "")
+                lines.append(f"## 图片 {i}")
+                lines.append("")
+                if gitee_url:
+                    # 避免与下方“说明”重复：这里使用通用 alt 文本
+                    lines.append(f"![图片]({gitee_url})")
+                    lines.append("")
+                if caption:
+                    lines.append(f"**说明：** {caption}")
+                if meta.get("breadcrumb"):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                if meta.get("width") and meta.get("height"):
+                    lines.append(f"**尺寸：** {meta.get('width')}x{meta.get('height')}")
+                lines.append("")
+
+        # 表格
+        selected_tables = selection.get("selected_tables", [])
+        if selected_tables:
+            lines.append("# 相关表格")
+            lines.append("")
+            for i, tid in enumerate(selected_tables, 1):
+                meta = table_meta_by_id.get(tid, {})
+                content = table_content_by_id.get(tid, "")
+                lines.append(f"## 表格 {i}")
+                lines.append("")
+                if meta.get("file_path"):
+                    lines.append(f"**来源：** `{meta.get('file_path')}`")
+                if meta.get("breadcrumb"):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                lines.append("")
+                if content:
+                    lines.append(content)
+                    lines.append("")
+
+        # 代码
+        selected_codes = selection.get("selected_codes", [])
+        if selected_codes:
+            lines.append("# 相关代码")
+            lines.append("")
+            for i, cid in enumerate(selected_codes, 1):
+                meta = code_meta_by_id.get(cid, {})
+                content = code_content_by_id.get(cid, "")
+                lines.append(f"## 代码 {i}")
+                lines.append("")
+                if meta.get("file_path"):
+                    lines.append(f"**来源：** `{meta.get('file_path')}`")
+                if meta.get("breadcrumb"):
+                    lines.append(f"**定位：** {meta.get('breadcrumb')}")
+                lines.append("")
+                lines.append("```")
+                lines.append(content or "")
+                lines.append("```")
+                lines.append("")
+
+        return "\n".join(lines)
     
     def _try_fix_truncated_json(self, json_str: str, verbose: bool = False) -> Optional[Dict]:
         """
@@ -2583,9 +2727,7 @@ class HippoRAG:
         lines.append(query)
         lines.append("")
         
-        lines.append("# 检索到的相关内容")
-        lines.append("")
-        lines.append("> 注：以下内容为原始检索结果，未经LLM整合筛选")
+        lines.append("# 检索到的相关内容（原始）")
         lines.append("")
         
         # 添加Chunk内容
@@ -2593,13 +2735,13 @@ class HippoRAG:
             lines.append("## 相关文档")
             lines.append("")
             for i, (cid, content, meta) in enumerate(zip(
-                chunks_data['ids'][:5],  # 限制数量
-                chunks_data['contents'][:5],
-                chunks_data['metadata'][:5]
+                chunks_data['ids'],
+                chunks_data['contents'],
+                chunks_data['metadata']
             ), 1):
                 lines.append(f"### 文档 {i}")
                 lines.append("")
-                lines.append(content[:1500] + ('...' if len(content) > 1500 else ''))
+                lines.append(content)
                 lines.append("")
                 lines.append(f"**来源：** `{meta.get('file_path', '')}`")
                 if meta.get('breadcrumb'):
@@ -2618,7 +2760,8 @@ class HippoRAG:
                 url = meta.get('gitee_url', '')
                 caption = meta.get('caption', content)
                 lines.append(f"### 图片 {i}")
-                lines.append(f"![{caption}]({url})")
+                # 避免与下方“描述”重复：这里使用通用 alt 文本
+                lines.append(f"![图片]({url})")
                 lines.append("")
                 lines.append(f"**描述：** {caption}")
                 # 添加图片元信息
@@ -2637,7 +2780,8 @@ class HippoRAG:
                     lines.append(f"**文件信息：** {', '.join(meta_parts)}")
                 if meta.get('breadcrumb'):
                     lines.append(f"**定位：** {meta.get('breadcrumb')}")
-                lines.append(f"**来源：** `{meta.get('md_file_path', '')}`")
+                # 不输出本地路径（md_file_path 是本地绝对路径），仅输出可公开访问的 URL
+                # 注：当前 image metadata 不含 md 的 gitee url，这里不输出来源文件，避免泄露本地路径
                 lines.append("")
         
         # 添加表格
@@ -4425,20 +4569,28 @@ class HippoRAG:
         if len(all_query_strings) > 0:
             # get all query embeddings
             logger.info(f"Encoding {len(all_query_strings)} queries for query_to_fact.")
-            # debug;flush
-            print(f"all_query_strings: {all_query_strings}", flush=True)
             query_embeddings_for_triple = self._batch_encode_texts(all_query_strings,
                                                                    instruction=get_query_instruction('query_to_fact'),
                                                                    norm=True)
-            for query, embedding in zip(all_query_strings, query_embeddings_for_triple):
-                self.query_to_embedding['triple'][query] = embedding
+            # 确保是 2D tensor/array，即使只有一个查询
+            if hasattr(query_embeddings_for_triple, 'ndim'):
+                if query_embeddings_for_triple.ndim == 1:
+                    query_embeddings_for_triple = query_embeddings_for_triple.unsqueeze(0) if hasattr(query_embeddings_for_triple, 'unsqueeze') else np.expand_dims(query_embeddings_for_triple, 0)
+            
+            for i, query in enumerate(all_query_strings):
+                self.query_to_embedding['triple'][query] = query_embeddings_for_triple[i]
 
             logger.info(f"Encoding {len(all_query_strings)} queries for query_to_passage.")
             query_embeddings_for_passage = self._batch_encode_texts(all_query_strings,
                                                                     instruction=get_query_instruction('query_to_passage'),
                                                                     norm=True)
-            for query, embedding in zip(all_query_strings, query_embeddings_for_passage):
-                self.query_to_embedding['passage'][query] = embedding
+            # 确保是 2D tensor/array，即使只有一个查询
+            if hasattr(query_embeddings_for_passage, 'ndim'):
+                if query_embeddings_for_passage.ndim == 1:
+                    query_embeddings_for_passage = query_embeddings_for_passage.unsqueeze(0) if hasattr(query_embeddings_for_passage, 'unsqueeze') else np.expand_dims(query_embeddings_for_passage, 0)
+            
+            for i, query in enumerate(all_query_strings):
+                self.query_to_embedding['passage'][query] = query_embeddings_for_passage[i]
 
     def get_fact_scores(self, query: str) -> np.ndarray:
         """
@@ -4478,12 +4630,30 @@ class HippoRAG:
             return np.array([])
             
         try:
-            query_fact_scores = np.dot(self.fact_embeddings, query_embedding.T) # shape: (#facts, )
-            query_fact_scores = np.squeeze(query_fact_scores) if query_fact_scores.ndim == 2 else query_fact_scores
+            # 确保 query_embedding 是正确的 numpy 数组形状
+            query_embedding = np.asarray(query_embedding)
+            if query_embedding.ndim == 0:
+                # 0-D 数组，不可能是有效的 embedding
+                logger.error("Query embedding is 0-D scalar, invalid.")
+                return np.array([])
+            elif query_embedding.ndim == 1:
+                # 形状 (dim,) - 直接使用
+                query_vec = query_embedding
+            else:
+                # 形状 (batch, dim) - 取第一个
+                query_vec = query_embedding[0] if query_embedding.shape[0] > 0 else query_embedding.flatten()
+            
+            # 计算点积
+            query_fact_scores = np.dot(self.fact_embeddings, query_vec)  # shape: (#facts,)
+            
+            # 确保结果是 1-D
+            query_fact_scores = np.atleast_1d(query_fact_scores.flatten())
             query_fact_scores = min_max_normalize(query_fact_scores)
             return query_fact_scores
         except Exception as e:
             logger.error(f"Error computing fact scores: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return np.array([])
 
     def get_file_scores(self, query: str) -> Tuple[np.ndarray, List[str]]:
@@ -4516,9 +4686,16 @@ class HippoRAG:
             if not hasattr(self, 'file_embeddings') or self.file_embeddings is None or len(self.file_embeddings) == 0:
                 self.file_embeddings = np.array(self.file_embedding_store.get_embeddings(self.file_node_keys))
             
+            # 确保 query_embedding 是正确的形状
+            query_embedding = np.asarray(query_embedding)
+            if query_embedding.ndim == 1:
+                query_vec = query_embedding
+            else:
+                query_vec = query_embedding[0] if query_embedding.shape[0] > 0 else query_embedding.flatten()
+            
             # 计算相似度
-            query_file_scores = np.dot(self.file_embeddings, query_embedding.T)
-            query_file_scores = np.squeeze(query_file_scores) if query_file_scores.ndim == 2 else query_file_scores
+            query_file_scores = np.dot(self.file_embeddings, query_vec)
+            query_file_scores = np.atleast_1d(query_file_scores.flatten())
             query_file_scores = min_max_normalize(query_file_scores)
             
             return query_file_scores, self.file_node_keys
@@ -4554,9 +4731,16 @@ class HippoRAG:
             if not hasattr(self, 'passage_embeddings') or self.passage_embeddings is None or len(self.passage_embeddings) == 0:
                 self.passage_embeddings = np.array(self.chunk_embedding_store.get_embeddings(self.passage_node_keys))
             
+            # 确保 query_embedding 是正确的形状
+            query_embedding = np.asarray(query_embedding)
+            if query_embedding.ndim == 1:
+                query_vec = query_embedding
+            else:
+                query_vec = query_embedding[0] if query_embedding.shape[0] > 0 else query_embedding.flatten()
+            
             # 计算相似度
-            query_passage_scores = np.dot(self.passage_embeddings, np.array(query_embedding).T)
-            query_passage_scores = np.squeeze(query_passage_scores) if query_passage_scores.ndim == 2 else query_passage_scores
+            query_passage_scores = np.dot(self.passage_embeddings, query_vec)
+            query_passage_scores = np.atleast_1d(query_passage_scores.flatten())
             query_passage_scores = min_max_normalize(query_passage_scores)
             
             return query_passage_scores
@@ -6299,6 +6483,20 @@ class HippoRAG:
         self._extract_nodes_from_json(json_structure, all_files, all_chunks, all_codes, 
                                      all_tables, all_images, all_entities, all_facts,
                                      structure_edges, semantic_edges)
+
+        # 图片去重：基于图片内容（感知哈希）过滤相似度过高的图片，并保留分辨率最高的
+        if all_images and getattr(self.global_config, "enable_image_content_dedup", True):
+            try:
+                all_images, structure_edges = self._dedup_images_by_content(
+                    all_images=all_images,
+                    structure_edges=structure_edges,
+                    node_id_to_metadata=self.node_id_to_metadata,
+                    hamming_threshold=getattr(self.global_config, "image_dedup_hamming_threshold", 6),
+                    max_merge_captions=getattr(self.global_config, "image_dedup_max_merge_captions", 5),
+                )
+            except Exception as e:
+                # 去重失败不应阻塞建图
+                logger.warning(f"Image dedup skipped due to error: {e}")
         
         logger.info(f"Extracted {len(all_files)} files, {len(all_chunks)} chunks, "
                    f"{len(all_codes)} codes, {len(all_tables)} tables, {len(all_images)} images, "
@@ -6392,6 +6590,478 @@ class HippoRAG:
         
         logger.info(f"Hierarchical indexing completed!")
         print(self.get_graph_info())
+
+    def _dedup_images_by_content(
+        self,
+        all_images: List[Tuple[str, str, str, str]],
+        structure_edges: List[Tuple[str, str, str, float]],
+        node_id_to_metadata: Dict[str, Any],
+        hamming_threshold: int = 6,
+        max_merge_captions: int = 5,
+    ) -> Tuple[List[Tuple[str, str, str, str]], List[Tuple[str, str, str, float]]]:
+        """
+        基于图片内容做近重复去重（不同分辨率/轻微压缩差异），并保留分辨率最高的一张。
+
+        - 使用 dHash(64-bit) 计算感知哈希，使用汉明距离判断相似
+        - 对于被合并的图片：把结构边中对其的引用重定向到保留图片ID，并清理其 metadata
+        - 对于保留图片：可合并少量 caption 以保留语义覆盖面
+
+        all_images: [(image_id, absolute_path, embed_text(caption/context), gitee_url), ...]
+        """
+        # Pillow 是可选依赖：没有安装时直接跳过去重
+        try:
+            from PIL import Image  # type: ignore
+            from PIL import ImageOps, ImageFilter  # type: ignore
+        except Exception as e:
+            logger.warning(f"Pillow not available, skip image content dedup: {e}")
+            return all_images, structure_edges
+
+        import os
+
+        def _safe_open_image(path: str):
+            if not path or not os.path.exists(path):
+                return None
+            try:
+                img = Image.open(path)
+                img.load()
+                return img
+            except Exception:
+                return None
+
+        def _to_white_bg_rgb(img):
+            """
+            统一透明背景到白底，减少 RGBA/透明棋盘格等背景差异带来的 hash 偏移。
+            """
+            try:
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                    rgba = img.convert("RGBA")
+                    bg = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+                    comp = Image.alpha_composite(bg, rgba)
+                    return comp.convert("RGB")
+                return img.convert("RGB")
+            except Exception:
+                return img.convert("RGB")
+
+        def _dhash64_from_img(img) -> int:
+            # dHash: resize to 9x8 grayscale, compare adjacent pixels horizontally
+            g = img.convert("L").resize((9, 8))
+            pixels = list(g.getdata())
+            bits = 0
+            bit_idx = 0
+            for row in range(8):
+                row_start = row * 9
+                for col in range(8):
+                    left = pixels[row_start + col]
+                    right = pixels[row_start + col + 1]
+                    if left > right:
+                        bits |= (1 << bit_idx)
+                    bit_idx += 1
+            return bits
+
+        def _phash64_from_img(img) -> int:
+            """
+            经典 pHash：灰度 -> resize 32x32 -> DCT -> 取左上 8x8 与中位数比较。
+            更能容忍轻微排版/抗锯齿差异，但仍保持结构敏感。
+            """
+            try:
+                import numpy as _np
+                from scipy.fftpack import dct as _dct  # scipy 已在依赖中
+            except Exception:
+                # 没有 scipy 时回退到 dhash
+                return _dhash64_from_img(img)
+
+            img_l = img.convert("L").resize((32, 32), Image.Resampling.LANCZOS)
+            pixels = _np.asarray(img_l, dtype=_np.float32)
+            dct1 = _dct(_dct(pixels, axis=0, norm="ortho"), axis=1, norm="ortho")
+            dctlow = dct1[:8, :8]
+            med = float(_np.median(dctlow[1:, :].flatten()))
+            bits_arr = dctlow > med
+            out = 0
+            bit_idx = 0
+            for r in range(8):
+                for c in range(8):
+                    if bool(bits_arr[r, c]):
+                        out |= (1 << bit_idx)
+                    bit_idx += 1
+            return out
+
+        def _hash64(path: str, method: str) -> Optional[int]:
+            img = _safe_open_image(path)
+            if img is None:
+                return None
+            try:
+                rgb = _to_white_bg_rgb(img)
+                if method == "phash":
+                    return _phash64_from_img(rgb)
+                return _dhash64_from_img(rgb)
+            finally:
+                try:
+                    img.close()
+                except Exception:
+                    pass
+
+        def _hamming(a: int, b: int) -> int:
+            return (a ^ b).bit_count()
+
+        def _image_area(path: str) -> int:
+            size = self._get_image_size(path)
+            w = int(size.get("width") or 0)
+            h = int(size.get("height") or 0)
+            return w * h
+
+        def _ssim_score(path_a: str, path_b: str, resize: int, blur_radius: float) -> Optional[float]:
+            """
+            简化版 SSIM（全局），用于结构相似确认。
+            """
+            try:
+                import numpy as _np
+            except Exception:
+                return None
+            ia = _safe_open_image(path_a)
+            ib = _safe_open_image(path_b)
+            if ia is None or ib is None:
+                try:
+                    if ia: ia.close()
+                except Exception:
+                    pass
+                try:
+                    if ib: ib.close()
+                except Exception:
+                    pass
+                return None
+            try:
+                a = _to_white_bg_rgb(ia).convert("L")
+                b = _to_white_bg_rgb(ib).convert("L")
+                a = ImageOps.autocontrast(a)
+                b = ImageOps.autocontrast(b)
+                if blur_radius and blur_radius > 0:
+                    a = a.filter(ImageFilter.GaussianBlur(radius=float(blur_radius)))
+                    b = b.filter(ImageFilter.GaussianBlur(radius=float(blur_radius)))
+                a = a.resize((resize, resize), Image.Resampling.LANCZOS)
+                b = b.resize((resize, resize), Image.Resampling.LANCZOS)
+                xa = _np.asarray(a, dtype=_np.float64)
+                xb = _np.asarray(b, dtype=_np.float64)
+                mu_a = xa.mean()
+                mu_b = xb.mean()
+                var_a = ((xa - mu_a) ** 2).mean()
+                var_b = ((xb - mu_b) ** 2).mean()
+                cov = ((xa - mu_a) * (xb - mu_b)).mean()
+                L = 255.0
+                C1 = (0.01 * L) ** 2
+                C2 = (0.03 * L) ** 2
+                num = (2 * mu_a * mu_b + C1) * (2 * cov + C2)
+                den = (mu_a ** 2 + mu_b ** 2 + C1) * (var_a + var_b + C2)
+                if den == 0:
+                    return None
+                return float(num / den)
+            finally:
+                try:
+                    ia.close()
+                except Exception:
+                    pass
+                try:
+                    ib.close()
+                except Exception:
+                    pass
+
+        # 逐个图片分组：每组保留“面积最大”的代表
+        kept: List[Dict[str, Any]] = []
+        # 注意：代表图可能在遍历过程中被更高分辨率图片替换，最终映射在遍历结束后统一重建
+        id_to_kept_id: Dict[str, str] = {}
+
+        # 为了性能做轻量 LSH：把 64-bit hash 切成 4 段(每段16-bit)做桶；候选取四个桶的并集
+        buckets: Dict[Tuple[int, int], List[int]] = {}
+        bucket_mask = (1 << 16) - 1  # 16-bit segment mask
+
+        hash_method = getattr(self.global_config, "image_dedup_hash_method", "dhash")
+        enable_ssim = bool(getattr(self.global_config, "enable_image_dedup_ssim", False))
+        require_ssim = bool(getattr(self.global_config, "image_dedup_require_ssim", True)) if enable_ssim else False
+        direct_merge_hamming = int(getattr(self.global_config, "image_dedup_direct_merge_hamming", 0)) if enable_ssim else hamming_threshold
+        ssim_threshold = float(getattr(self.global_config, "image_dedup_ssim_threshold", 0.88))
+        ssim_hamming_max = int(getattr(self.global_config, "image_dedup_ssim_hamming_max", 16))
+        ssim_resize = int(getattr(self.global_config, "image_dedup_ssim_resize", 256))
+        ssim_blur_radius = float(getattr(self.global_config, "image_dedup_ssim_blur_radius", 0.6))
+        enable_report = bool(getattr(self.global_config, "enable_image_dedup_report", True))
+        log_max_examples = int(getattr(self.global_config, "image_dedup_log_max_examples", 30))
+
+        # 用于生成报告（落盘），便于排查误合并
+        image_records: Dict[str, Dict[str, Any]] = {}
+        for image_id, absolute_path, embed_text, gitee_url in all_images:
+            image_records[image_id] = {
+                "image_id": image_id,
+                "absolute_path": absolute_path,
+                "gitee_url": gitee_url,
+                "caption_or_context": (embed_text or "").strip(),
+            }
+
+        for image_id, absolute_path, embed_text, gitee_url in all_images:
+            h = _hash64(absolute_path, method=hash_method)
+            # 记录 hash / 尺寸信息（报告用）
+            try:
+                image_records[image_id]["hash"] = h
+                image_records[image_id]["size"] = self._get_image_size(absolute_path)
+                image_records[image_id]["area"] = _image_area(absolute_path)
+            except Exception:
+                pass
+            if h is None:
+                # 无法读取图片时不参与去重
+                kept_idx = len(kept)
+                kept.append({
+                    "image_id": image_id,
+                    "absolute_path": absolute_path,
+                    # 只保留代表图自身的 summary（caption/context），不合并其它图片的 caption
+                    "rep_embed_text": (embed_text or "").strip(),
+                    "gitee_url": gitee_url,
+                    "hash": None,
+                    "area": _image_area(absolute_path),
+                    "merged_ids": [image_id],
+                })
+                continue
+
+            candidate_indices_set: Set[int] = set()
+            for seg_idx in range(4):
+                seg = (h >> (seg_idx * 16)) & bucket_mask
+                candidate_indices_set.update(buckets.get((seg_idx, seg), []))
+            candidate_indices = list(candidate_indices_set)
+
+            matched_idx: Optional[int] = None
+            for idx in candidate_indices:
+                kh = kept[idx].get("hash")
+                if kh is None:
+                    continue
+                dist = _hamming(h, kh)
+                # 1) 允许“极小距离”直接合并（默认仅 dist==0），否则走 SSIM 确认
+                if dist <= direct_merge_hamming:
+                    matched_idx = idx
+                    break
+                # 2) 典型：距离已经很小（<=hamming_threshold）
+                if dist <= hamming_threshold:
+                    if enable_ssim and require_ssim:
+                        rep_path = kept[idx].get("absolute_path", "")
+                        s = _ssim_score(rep_path, absolute_path, resize=ssim_resize, blur_radius=ssim_blur_radius)
+                        if s is not None and s >= ssim_threshold:
+                            matched_idx = idx
+                            break
+                    else:
+                        matched_idx = idx
+                        break
+                # 二阶段：当 hash 距离接近但未达到阈值时，用 SSIM 做结构相似确认
+                if enable_ssim and dist <= ssim_hamming_max:
+                    rep_path = kept[idx].get("absolute_path", "")
+                    s = _ssim_score(rep_path, absolute_path, resize=ssim_resize, blur_radius=ssim_blur_radius)
+                    if s is not None and s >= ssim_threshold:
+                        matched_idx = idx
+                        break
+
+            if matched_idx is None:
+                kept_idx = len(kept)
+                kept.append({
+                    "image_id": image_id,
+                    "absolute_path": absolute_path,
+                    # 只保留代表图自身的 summary（caption/context），不合并其它图片的 caption
+                    "rep_embed_text": (embed_text or "").strip(),
+                    "gitee_url": gitee_url,
+                    "hash": h,
+                    "area": _image_area(absolute_path),
+                    "merged_ids": [image_id],
+                })
+                for seg_idx in range(4):
+                    seg = (h >> (seg_idx * 16)) & bucket_mask
+                    buckets.setdefault((seg_idx, seg), []).append(kept_idx)
+            else:
+                group = kept[matched_idx]
+                group["merged_ids"].append(image_id)
+
+                # 如果当前图分辨率更高，替换代表图（但仍保留组内caption）
+                cur_area = _image_area(absolute_path)
+                if cur_area > int(group.get("area") or 0):
+                    group["image_id"] = image_id
+                    group["absolute_path"] = absolute_path
+                    group["gitee_url"] = gitee_url
+                    group["area"] = cur_area
+                    group["rep_embed_text"] = (embed_text or "").strip()
+
+        # 统一重建：保证所有成员都指向最终代表图（避免遍历过程中代表图多次替换导致的链式映射）
+        id_to_kept_id = {}
+        for group in kept:
+            rep = group["image_id"]
+            for mid in group.get("merged_ids", []):
+                id_to_kept_id[mid] = rep
+
+        # 生成新的 all_images（只保留最高分辨率代表图的 caption/context，不合并其它 caption）
+        new_all_images: List[Tuple[str, str, str, str]] = []
+        removed_ids: set = set()
+        report_groups: List[Dict[str, Any]] = []
+        for group in kept:
+            kept_id = group["image_id"]
+            for mid in group.get("merged_ids", []):
+                if mid != kept_id:
+                    removed_ids.add(mid)
+
+            merged_summary = (group.get("rep_embed_text") or "").strip()
+
+            new_all_images.append((kept_id, group["absolute_path"], merged_summary, group["gitee_url"]))
+
+            # 在 metadata 里记录合并来源（便于排查/可视化）
+            if kept_id in node_id_to_metadata:
+                node_id_to_metadata[kept_id].setdefault("dedup", {})
+                node_id_to_metadata[kept_id]["dedup"].update({
+                    "strategy": f"{hash_method}64",
+                    "hamming_threshold": hamming_threshold,
+                    "merged_from_ids": sorted([i for i in group.get("merged_ids", []) if i != kept_id]),
+                })
+
+            # 报告：记录该组的代表与成员信息（最终代表）
+            try:
+                rep_rec = image_records.get(kept_id, {"image_id": kept_id, "absolute_path": group.get("absolute_path", "")})
+                members = list(group.get("merged_ids", []))
+                removed = [mid for mid in members if mid != kept_id]
+                # 计算成员到代表的 dist/ssim（只用于报告）
+                removed_details = []
+                rep_hash = rep_rec.get("hash")
+                rep_path = rep_rec.get("absolute_path", group.get("absolute_path", ""))
+                for rid in removed:
+                    rec = image_records.get(rid, {"image_id": rid})
+                    dist = None
+                    if rep_hash is not None and rec.get("hash") is not None:
+                        dist = _hamming(int(rep_hash), int(rec.get("hash")))
+                    s = None
+                    if enable_ssim and rep_path and rec.get("absolute_path"):
+                        s = _ssim_score(rep_path, rec.get("absolute_path"), resize=ssim_resize, blur_radius=ssim_blur_radius)
+                    removed_details.append({
+                        "image_id": rid,
+                        "absolute_path": rec.get("absolute_path", ""),
+                        "size": rec.get("size"),
+                        "area": rec.get("area"),
+                        "hamming_to_rep": dist,
+                        "ssim_to_rep": s,
+                    })
+                report_groups.append({
+                    "kept": {
+                        "image_id": kept_id,
+                        "absolute_path": rep_path,
+                        "size": rep_rec.get("size"),
+                        "area": rep_rec.get("area"),
+                        "hash_method": hash_method,
+                        "hash": rep_rec.get("hash"),
+                        "caption_or_context": rep_rec.get("caption_or_context"),
+                    },
+                    "removed": removed_details,
+                })
+            except Exception:
+                pass
+
+        # 重写结构边：把指向被移除图片的边重定向到保留图片
+        new_edges: List[Tuple[str, str, str, float]] = []
+        for src, tgt, etype, w in structure_edges:
+            if tgt in id_to_kept_id:
+                new_tgt = id_to_kept_id[tgt]
+            else:
+                new_tgt = tgt
+
+            if src in id_to_kept_id:
+                new_src = id_to_kept_id[src]
+            else:
+                new_src = src
+
+            new_edges.append((new_src, new_tgt, etype, w))
+
+        # 如果历史索引里已经存在重复 image_id，需要从 embedding store 中删除，否则它们仍可能在检索阶段被召回
+        # （EmbeddingStoreV2.insert_strings 只会“跳过已存在”，不会自动清理旧记录）
+        try:
+            if removed_ids and hasattr(self, "image_embedding_store") and self.image_embedding_store is not None:
+                existing_ids = set(self.image_embedding_store.get_all_ids())
+                to_delete = [rid for rid in removed_ids if rid in existing_ids]
+                if to_delete:
+                    self.image_embedding_store.delete(to_delete)
+        except Exception as e:
+            logger.warning(f"Failed to delete deduped images from image_embedding_store: {e}")
+
+        # 落盘完整报告（JSONL + summary json）
+        if enable_report:
+            try:
+                import json as _json
+                from datetime import datetime as _dt
+                report_dir = os.path.join(self.working_dir, "image_dedup")
+                os.makedirs(report_dir, exist_ok=True)
+                ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+                jsonl_path = os.path.join(report_dir, f"image_dedup_report_{ts}.jsonl")
+                summary_path = os.path.join(report_dir, f"image_dedup_summary_{ts}.json")
+                with open(jsonl_path, "w", encoding="utf-8") as f:
+                    for g in report_groups:
+                        f.write(_json.dumps(g, ensure_ascii=False) + "\n")
+                summary = {
+                    "config": {
+                        "hash_method": hash_method,
+                        "hamming_threshold": hamming_threshold,
+                        "enable_ssim": enable_ssim,
+                        "require_ssim": require_ssim,
+                        "direct_merge_hamming": direct_merge_hamming,
+                        "ssim_threshold": ssim_threshold,
+                        "ssim_hamming_max": ssim_hamming_max,
+                        "ssim_resize": ssim_resize,
+                        "ssim_blur_radius": ssim_blur_radius,
+                    },
+                    "counts": {
+                        "before": len(all_images),
+                        "after": len(new_all_images),
+                        "removed": len(removed_ids),
+                        "groups": len(report_groups),
+                    },
+                    "paths": {
+                        "jsonl": jsonl_path,
+                        "summary": summary_path,
+                    }
+                }
+                with open(summary_path, "w", encoding="utf-8") as f:
+                    _json.dump(summary, f, ensure_ascii=False, indent=2)
+                logger.info(f"Image dedup report written: {jsonl_path}")
+                # 控制台给出少量样例，方便你快速确认“哪些图片被滤掉了”（完整明细在 jsonl）
+                if log_max_examples > 0:
+                    shown = 0
+                    for g in report_groups:
+                        kept_info = g.get("kept", {}) if isinstance(g, dict) else {}
+                        removed_list = g.get("removed", []) if isinstance(g, dict) else []
+                        if not removed_list:
+                            continue
+                        kept_id = kept_info.get("image_id")
+                        logger.info(f"DEDUP_GROUP keep={kept_id} removed={len(removed_list)}")
+                        for r in removed_list:
+                            if shown >= log_max_examples:
+                                break
+                            logger.info(
+                                f"  - removed={r.get('image_id')} ham={r.get('hamming_to_rep')} ssim={r.get('ssim_to_rep')}"
+                            )
+                            shown += 1
+                        if shown >= log_max_examples:
+                            break
+            except Exception as e:
+                logger.warning(f"Failed to write image dedup report: {e}")
+
+        # 清理被移除图片的 metadata，避免后续取 metadata 时出现“幽灵节点”
+        for rid in removed_ids:
+            if rid in node_id_to_metadata:
+                try:
+                    del node_id_to_metadata[rid]
+                except Exception:
+                    pass
+
+        # 结构边可能出现重复，做一次轻度去重
+        dedup_edge_seen = set()
+        dedup_edges: List[Tuple[str, str, str, float]] = []
+        for e in new_edges:
+            key = (e[0], e[1], e[2])
+            if key in dedup_edge_seen:
+                continue
+            dedup_edge_seen.add(key)
+            dedup_edges.append(e)
+
+        logger.info(
+            f"Image content dedup done: {len(all_images)} -> {len(new_all_images)} "
+            f"(removed {len(removed_ids)} near-duplicates, method={hash_method}, "
+            f"hamming_threshold={hamming_threshold}, ssim={'on' if enable_ssim else 'off'})"
+        )
+        return new_all_images, dedup_edges
 
     def _extract_nodes_from_json(self, json_structure: Dict[str, Any], 
                                 all_files: List[Tuple[str, str, str, str]], all_chunks: List[Tuple[str, str, str, str]],

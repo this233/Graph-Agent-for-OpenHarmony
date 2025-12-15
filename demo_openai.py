@@ -5,6 +5,7 @@ import argparse
 import logging
 
 from src.hipporag import HippoRAG
+from src.hipporag.utils.config_utils import BaseConfig
 
 # 清除代理设置
 os.environ.pop('http_proxy', None)
@@ -46,8 +47,22 @@ def main():
     # embedding_model_name = 'text-embedding-3-small'  # Embedding model name (NV-Embed, GritLM or Contriever for now)
     embedding_model_name = 'Qwen3-Embedding-4B'
 
+    # 配置：图片内容去重（感知哈希）
+    # 注意：你只有在 RUN_INDEXING=True 跑过一次 index_from_json 后，去重才会对持久化索引生效
+    cfg = BaseConfig(
+        enable_image_content_dedup=True,
+        image_dedup_hash_method="phash",
+        image_dedup_hamming_threshold=10,  # 更大更“宽松”（更容易合并）；更小更“严格”
+        enable_image_dedup_ssim=True,
+        image_dedup_require_ssim=True,     # 更安全：即便hash很近也要求SSIM确认（默认True）
+        image_dedup_direct_merge_hamming=0,# 仅hash完全一致时允许跳过SSIM
+        image_dedup_ssim_threshold=0.86,   # 针对“结构很像但排版略不同”的架构图，0.85~0.90通常比较合适
+    )
+
     # Startup a HippoRAG instance
-    hipporag = HippoRAG(save_dir=save_dir,
+    hipporag = HippoRAG(
+                        global_config=cfg,
+                        save_dir=save_dir,
                         llm_model_name=llm_model_name,
                         llm_base_url='https://api.modelarts-maas.com/openai/v1',  # OpenAI 兼容接口
                         # embedding_base_url='https://api.vveai.com/v1',
@@ -58,15 +73,15 @@ def main():
 
     # ====== 查询列表 ======
     queries = [
-        "What is OpenHarmony's purpose?",
+        # "What is OpenHarmony's purpose?",
         "What is OpenHarmony's architecture?",
-        "What is OpenHarmony's core features?",
-        "What is OpenHarmony's development model?",
-        "What is OpenHarmony's development process?",
-        "What is OpenHarmony's development tools?",
-        "What is OpenHarmony's development environment?",
-        "What is OpenHarmony's development language?",
-        "What is OpenHarmony's development framework?",
+        # "What is OpenHarmony's core features?",
+        # "What is OpenHarmony's development model?",
+        # "What is OpenHarmony's development process?",
+        # "What is OpenHarmony's development tools?",
+        # "What is OpenHarmony's development environment?",
+        # "What is OpenHarmony's development language?",
+        # "What is OpenHarmony's development framework?",
     ]
 
     # ====== 选择运行模式 ======
@@ -79,7 +94,7 @@ def main():
         print("🔧 开始建图...")
         hipporag.index_from_json(my_json_data)
         print("✅ 建图完成！")
-        return
+        # return
     
     # ====== 使用新的 retrieve_v2 检索流程 ======
     # 流程:
@@ -93,7 +108,7 @@ def main():
     print(f"   阶段2: Fact保留10个, File保留5个, Chunk保留5个")
     print(f"   阶段3: 图扩散(Chunk15, Code10, Table10, Image10)")
     print(f"   阶段4: 最终Chunk10个, Code/Table/Image各3个")
-    print(f"   阶段5: LLM报告生成（整合信息供前端页面生成器使用）")
+    print(f"   阶段5: 素材选取与前端Prompt拼装（仅真实信息）")
     
     results = hipporag.retrieve_v2(
         queries=queries,  # 先只测试前2个查询
@@ -116,7 +131,7 @@ def main():
         final_table_k=3,
         final_image_k=3,
         # 阶段5参数
-        generate_report=True,  # 开启LLM报告生成
+        generate_report=True,  # 开启阶段5：素材选取与前端Prompt拼装
         verbose=True
     )
     
@@ -145,23 +160,28 @@ def main():
         for j, image_id in enumerate(r['images']['ids'][:2]):
             print(f"      [{j+1}] {image_id}")
         
-        # 显示报告信息
+        # 显示阶段5信息
         if 'report' in r:
-            print(f"\n  📝 LLM生成报告:")
+            print(f"\n  📝 阶段5产物:")
             report = r['report']
             if report.get('success'):
                 report_data = report.get('report', {})
                 print(f"      ✅ 生成成功")
-                print(f"      📋 摘要: {report_data.get('summary', '无')[:200]}...")
-                print(f"      📌 关键点: {len(report_data.get('key_points', []))}个")
-                for kp in report_data.get('key_points', [])[:3]:
+                answer = report_data.get('answer', {}) if isinstance(report_data, dict) else {}
+                summary = answer.get('summary', '') if isinstance(answer, dict) else ''
+                print(f"      📋 核心摘要: {(summary or '无')[:200]}...")
+                key_points = answer.get('key_points', []) if isinstance(answer, dict) else []
+                print(f"      📌 关键要点: {len(key_points)}个")
+                for kp in key_points[:3]:
                     print(f"          - {kp}")
-                print(f"      📄 内容章节: {len(report_data.get('content_sections', []))}个")
-                for section in report_data.get('content_sections', [])[:2]:
-                    print(f"          - {section.get('title', '未命名')}")
-                print(f"      💻 代码说明: {len(report_data.get('code_explanations', []))}个")
-                print(f"      📊 表格解读: {len(report_data.get('table_insights', []))}个")
-                print(f"      🖼️ 图片描述: {len(report_data.get('image_descriptions', []))}个")
+                sections = answer.get('sections', []) if isinstance(answer, dict) else []
+                print(f"      📄 内容章节: {len(sections)}个")
+                for section in sections[:2]:
+                    if isinstance(section, dict):
+                        print(f"          - {section.get('title', '未命名')}")
+                selection = report_data.get('selection', {}) if isinstance(report_data, dict) else {}
+                if isinstance(selection, dict):
+                    print(f"      📎 选取结果: chunk={len(selection.get('selected_chunks', []))}, code={len(selection.get('selected_codes', []))}, table={len(selection.get('selected_tables', []))}, image={len(selection.get('selected_images', []))}")
             else:
                 print(f"      ❌ 生成失败: {report.get('error', '未知错误')}")
         
@@ -171,7 +191,7 @@ def main():
         print(f"      阶段3 (扩散): {r['timing']['stage3_spread']:.2f}s")
         print(f"      阶段4 (最终Rerank): {r['timing']['stage4_final_rerank']:.2f}s")
         if 'stage5_report' in r['timing']:
-            print(f"      阶段5 (报告生成): {r['timing']['stage5_report']:.2f}s")
+            print(f"      阶段5 (素材选取+拼装): {r['timing']['stage5_report']:.2f}s")
         print(f"      总计: {r['timing']['total']:.2f}s")
     
     # 保存报告和前端Prompt到文件
