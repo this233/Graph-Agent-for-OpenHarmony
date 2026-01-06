@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="referrer" content="no-referrer">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenHarmony 全面介绍</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --oh-blue: #0077ED;
+      --oh-cyan: #00C1DE;
+      --oh-violet: #7B61FF;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #f1f5f9;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .tech-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 119, 237, 0.3);
+    }
+    .arch-layer {
+      transition: all 0.4s ease;
+    }
+    .arch-layer:hover {
+      background-color: rgba(0, 119, 237, 0.2);
+      border-left: 4px solid var(--oh-blue);
+    }
+    .pulse-dot {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+  <!-- Header -->
+  <header class="text-center mb-12">
+    <h1 class="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+      OpenHarmony
+    </h1>
+    <p class="mt-4 text-lg text-slate-300 max-w-3xl mx-auto">
+      面向全场景、全连接、全智能时代的开源分布式操作系统，由开放原子开源基金会孵化及运营。
+    </p>
+  </header>
+
+  <!-- Hero Section with Architecture Diagram -->
+  <section class="mb-16">
+    <div class="glass rounded-2xl p-6 shadow-2xl">
+      <h2 class="text-2xl font-semibold mb-4 flex items-center">
+        <i class="ph ph-stack text-cyan-400 mr-2"></i> 技术架构
+      </h2>
+      <div class="flex flex-col md:flex-row items-center">
+        <div class="md:w-1/2 mb-6 md:mb-0">
+          <img src="https://gitee.com/openharmony/docs/raw/master/zh-cn/figures/1.png" alt="OpenHarmony 技术架构图" class="rounded-xl shadow-lg mx-auto" / referrerpolicy="no-referrer">
+        </div>
+        <div class="md:w-1/2 md:pl-8">
+          <p class="mb-4">OpenHarmony采用分层设计，支持弹性部署，适用于从128KiB到GiB级别的RAM设备。</p>
+          <!-- Interactive Architecture Layers -->
+          <div id="layers-container" class="space-y-3">
+            <!-- Layers will be injected by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Features -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center">
+      <i class="ph ph-lightning text-violet-400 mr-2"></i> 核心特性
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div class="tech-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer">
+        <i class="ph ph-plug text-cyan-400 text-3xl mb-3"></i>
+        <h3 class="text-xl font-semibold">硬件互助</h3>
+        <p class="text-sm text-slate-300 mt-2">分布式软总线、数据管理与任务调度，实现设备间无缝协同。</p>
+      </div>
+      <div class="tech-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer">
+        <i class="ph ph-code-simple text-blue-400 text-3xl mb-3"></i>
+        <h3 class="text-xl font-semibold">一次开发</h3>
+        <p class="text-sm text-slate-300 mt-2">多语言框架与统一API，一次开发即可部署到多种终端。</p>
+      </div>
+      <div class="tech-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer">
+        <i class="ph ph-cpu text-violet-400 text-3xl mb-3"></i>
+        <h3 class="text-xl font-semibold">弹性部署</h3>
+        <p class="text-sm text-slate-300 mt-2">组件化设计，支持从MCU到高端设备的灵活适配。</p>
+      </div>
+      <div class="tech-card glass rounded-xl p-5 transition-all duration-300 cursor-pointer">
+        <i class="ph ph-shield-check text-green-400 text-3xl mb-3"></i>
+        <h3 class="text-xl font-semibold">开源开放</h3>
+        <p class="text-sm text-slate-300 mt-2">社区驱动，支持多内核，构建万物互联生态。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- System Types -->
+  <section class="mb-16">
+    <h2 class="text-2xl font-semibold mb-6 flex items-center">
+      <i class="ph ph-gear text-yellow-400 mr-2"></i> 系统类型
+    </h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full bg-slate-800 rounded-xl overflow-hidden">
+        <thead class="bg-slate-700">
+          <tr>
+            <th class="py-3 px-4 text-left">类型</th>
+            <th class="py-3 px-4 text-left">处理器</th>
+            <th class="py-3 px-4 text-left">最小内存</th>
+            <th class="py-3 px-4 text-left">能力</th>
+          </tr>
+        </thead>
+        <tbody id="system-types-body">
+          <!-- Rows will be injected by JS -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center text-slate-400 text-sm pt-8 border-t border-slate-700">
+    <p>OpenHarmony 是由开放原子开源基金会孵化及运营的开源项目。</p>
+    <p class="mt-2">社区地址: <a href="https://gitee.com/openharmony" class="text-cyan-400 hover:underline" target="_blank">https://gitee.com/openharmony</a></p>
+  </footer>
+
+  <script>
+    // 架构层数据
+    const layers = [
+      { name: "应用层", desc: "系统应用和第三方非系统应用，基于FA/PA开发。" },
+      { name: "框架层", desc: "提供C/C++/JS等多语言框架、ArkUI、Ability框架等。" },
+      { name: "系统服务层", desc: "核心能力集合，包括分布式软总线、AI、安全、多媒体等子系统。" },
+      { name: "内核层", desc: "多内核设计（Linux/LiteOS），驱动框架（HDF）支持统一外设访问。" }
+    ];
+
+    const layerContainer = document.getElementById('layers-container');
+    layers.forEach((layer, index) => {
+      const div = document.createElement('div');
+      div.className = "arch-layer glass rounded-lg p-4 cursor-pointer";
+      div.innerHTML = `
+        <div class="flex justify-between items-center">
+          <h3 class="font-semibold">${layer.name}</h3>
+          <i class="ph ph-caret-down text-slate-400"></i>
+        </div>
+        <p class="text-sm text-slate-300 mt-2 hidden">${layer.desc}</p>
+      `;
+      div.addEventListener('click', () => {
+        const p = div.querySelector('p');
+        p.classList.toggle('hidden');
+        const icon = div.querySelector('i');
+        icon.classList.toggle('ph-caret-down');
+        icon.classList.toggle('ph-caret-up');
+      });
+      layerContainer.appendChild(div);
+    });
+
+    // 系统类型表格数据
+    const systemTypes = [
+      {
+        type: "轻量系统（mini system）",
+        cpu: "MCU类处理器（如Arm Cortex-M、RISC-V 32位）",
+        ram: "128KiB",
+        features: "轻量级网络协议、图形框架、IOT总线读写部件。适用于连接类模组、传感器、穿戴设备。"
+      },
+      {
+        type: "小型系统（small system）",
+        cpu: "应用处理器（如Arm Cortex-A）",
+        ram: "1MiB",
+        features: "更高安全能力、标准图形框架、视频编解码。适用于IP Camera、路由器、行车记录仪。"
+      },
+      {
+        type: "标准系统（standard system）",
+        cpu: "应用处理器（如Arm Cortex-A）",
+        ram: "128MiB",
+        features: "增强交互、3D GPU、完整应用框架。适用于高端冰箱显示屏等。"
+      }
+    ];
+
+    const tbody = document.getElementById('system-types-body');
+    systemTypes.forEach(type => {
+      const tr = document.createElement('tr');
+      tr.className = "border-b border-slate-700 hover:bg-slate-750";
+      tr.innerHTML = `
+        <td class="py-3 px-4 font-medium">${type.type}</td>
+        <td class="py-3 px-4">${type.cpu}</td>
+        <td class="py-3 px-4">${type.ram}</td>
+        <td class="py-3 px-4 text-slate-300">${type.features}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  </script>
+</body>
+</html>

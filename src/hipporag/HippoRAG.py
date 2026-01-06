@@ -161,6 +161,7 @@ from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
 from .prompts.prompt_template_manager import PromptTemplateManager
 from .rerank import DSPyFilter
+from .rerankers import TransformersCrossEncoderReranker
 from .utils.misc_utils import *
 from .utils.misc_utils import NerRawOutput, TripleRawOutput
 from .utils.embed_utils import retrieve_knn
@@ -337,8 +338,11 @@ class HippoRAG:
         # OpenIE结果保存路径
         self.openie_results_path = os.path.join(self.global_config.save_dir,f'openie_results_ner_{self.global_config.llm_name.replace("/", "_")}.json')
 
-        # 初始化重排序过滤器
-        self.rerank_filter = DSPyFilter(self)
+        # 初始化重排序器
+        # - llm_rerank_filter: 旧版DSPy/LLM rerank（保留兼容）
+        # - transformers_reranker: 本地Cross-Encoder rerank（按需懒加载）
+        self.llm_rerank_filter = DSPyFilter(self)
+        self.transformers_reranker: Optional[TransformersCrossEncoderReranker] = None
 
         # 系统状态标志
         self.ready_to_retrieve = False
@@ -1214,6 +1218,12 @@ class HippoRAG:
         spread_code_k: int = 10,
         spread_table_k: int = 10,
         spread_image_k: int = 10,
+        # ====== 图扩散性能/近似控制（默认开启，确保阶段3不会跑到不可接受的时长）======
+        spread_time_budget_s: float = 2.0,
+        spread_max_expansions: int = 12000,
+        spread_per_node_neighbor_limit: int = 96,
+        spread_max_frontier_size: int = 20000,
+        spread_min_enqueue_score: float = 0.01,
         final_chunk_k: int = 10,
         final_code_k: int = 3,
         final_table_k: int = 3,
@@ -1226,10 +1236,10 @@ class HippoRAG:
         
         流程:
         1. Embedding候选获取: Fact(100), File(50), Chunk(50)
-        2. LLM Rerank: Fact(10), File(5), Chunk(5)
+        2. Rerank（可选：transformers/llm/none）: Fact/File/Chunk
         3. 图扩散: 必选Chunk + 扩散候选
-        4. 最终LLM Rerank: Chunk(10), Code(3), Table(3), Image(3)
-        5. (可选) LLM报告生成: 整合所有信息生成结构化报告
+        4. 最终Rerank（可选：transformers/llm/none）: Chunk/Code/Table/Image
+           + (可选) 合并输出（原“阶段5报告”合并入阶段4，不再额外开一个阶段）
         
         Args:
             queries: 查询列表
@@ -1243,6 +1253,11 @@ class HippoRAG:
             spread_code_k: 扩散Code上限
             spread_table_k: 扩散Table上限
             spread_image_k: 扩散Image上限
+            spread_time_budget_s: 图扩散时间预算（秒），到点就早停
+            spread_max_expansions: 图扩散最大扩展节点数，上限早停
+            spread_per_node_neighbor_limit: 每个节点最多扩展的邻居数（按低代价优先）
+            spread_max_frontier_size: 优先队列(frontier)最大长度，防止爆炸
+            spread_min_enqueue_score: 入队最小分数阈值（越大越快但召回更少）
             final_chunk_k: 最终Chunk数量
             final_code_k: 最终Code数量
             final_table_k: 最终Table数量
@@ -1251,7 +1266,7 @@ class HippoRAG:
             verbose: 是否输出详细信息
             
         Returns:
-            List[Dict]: 每个查询的检索结果，如果generate_report=True则包含report字段
+            List[Dict]: 每个查询的检索结果，如果generate_report=True则包含report字段（已并入阶段4构建）
         """
         retrieve_start = time.time()
         
@@ -1283,26 +1298,18 @@ class HippoRAG:
                 spread_code_k=spread_code_k,
                 spread_table_k=spread_table_k,
                 spread_image_k=spread_image_k,
+                spread_time_budget_s=spread_time_budget_s,
+                spread_max_expansions=spread_max_expansions,
+                spread_per_node_neighbor_limit=spread_per_node_neighbor_limit,
+                spread_max_frontier_size=spread_max_frontier_size,
+                spread_min_enqueue_score=spread_min_enqueue_score,
                 final_chunk_k=final_chunk_k,
                 final_code_k=final_code_k,
                 final_table_k=final_table_k,
                 final_image_k=final_image_k,
+                generate_report=generate_report,
                 verbose=verbose
             )
-            
-            # ========== 阶段5: LLM报告生成 (可选) ==========
-            if generate_report:
-                report_result = self._generate_report(
-                    query=query,
-                    chunks_data=query_result['chunks'],
-                    codes_data=query_result['codes'],
-                    tables_data=query_result['tables'],
-                    images_data=query_result['images'],
-                    verbose=verbose
-                )
-                query_result['report'] = report_result
-                query_result['timing']['stage5_report'] = report_result.get('timing', 0)
-                query_result['timing']['total'] += report_result.get('timing', 0)
             
             results.append(query_result)
         
@@ -1315,7 +1322,7 @@ class HippoRAG:
             print(f"  总耗时: {total_time:.2f}s")
             print(f"  平均每查询: {total_time/len(queries):.2f}s")
             if generate_report:
-                print(f"  包含LLM报告生成: 是")
+                print(f"  包含合并输出(report已并入阶段4): 是")
         
         return results
     
@@ -1332,11 +1339,17 @@ class HippoRAG:
         spread_code_k: int,
         spread_table_k: int,
         spread_image_k: int,
+        spread_time_budget_s: float,
+        spread_max_expansions: int,
+        spread_per_node_neighbor_limit: int,
+        spread_max_frontier_size: int,
+        spread_min_enqueue_score: float,
         final_chunk_k: int,
         final_code_k: int,
         final_table_k: int,
         final_image_k: int,
-        verbose: bool
+        generate_report: bool = False,
+        verbose: bool = False
     ) -> Dict:
         """单个查询的v2检索实现"""
         
@@ -1444,21 +1457,27 @@ class HippoRAG:
             if len(chunk_candidate_ids) > 5:
                 print(f"    ... 还有 {len(chunk_candidate_ids) - 5} 个")
         
-        # ========== 阶段2: LLM Rerank ==========
+        # ========== 阶段2: Rerank ==========
         if verbose:
             print(f"\n{'='*60}")
-            print(f"🔍 阶段2: LLM Rerank")
+            print(f"🔍 阶段2: Rerank")
             print(f"{'='*60}")
         
         stage2_start = time.time()
         
         # 2.1 Fact重排序
-        top_k_fact_indices, top_k_facts, _ = self.rerank_facts(query, query_fact_scores)
+        # v2：显式使用本次请求的参数，避免被 global_config 的默认 top_k=5 覆盖
+        top_k_fact_indices, top_k_facts, _ = self.rerank_facts(
+            query,
+            query_fact_scores,
+            keep_top_k=fact_top_k,
+            candidate_k=fact_candidate_k
+        )
         top_k_facts = top_k_facts[:fact_top_k]
         top_k_fact_ids = [self.fact_node_keys[i] for i in top_k_fact_indices[:fact_top_k]]
         
         if verbose:
-            print(f"\n  📋 LLM重排序后的Fact ({len(top_k_facts)}个，目标保留{fact_top_k}个):")
+            print(f"\n  📋 重排序后的Fact ({len(top_k_facts)}个，目标保留{fact_top_k}个):")
             print(f"  {'-'*60}")
             for i, (fact, fact_id) in enumerate(zip(top_k_facts, top_k_fact_ids)):
                 print(f"    [{i+1}] ID: {fact_id}")
@@ -1471,13 +1490,20 @@ class HippoRAG:
         
         # 2.2 File重排序
         if len(file_candidate_ids) > 0:
-            _, top_files, _ = self.rerank_files(query, np.array(file_candidate_scores), file_candidate_ids)
+            # v2：显式使用本次请求的参数，避免被 global_config 的默认 top_k=5 覆盖
+            _, top_files, _ = self.rerank_files(
+                query,
+                np.array(file_candidate_scores),
+                file_candidate_ids,
+                keep_top_k=file_top_k,
+                candidate_k=file_candidate_k
+            )
             top_files = top_files[:file_top_k]
         else:
             top_files = []
         
         if verbose:
-            print(f"\n  📂 LLM重排序后的File ({len(top_files)}个，目标保留{file_top_k}个):")
+            print(f"\n  📂 重排序后的File ({len(top_files)}个，目标保留{file_top_k}个):")
             print(f"  {'-'*60}")
             for i, f in enumerate(top_files):
                 print(f"    [{i+1}] Key: {f.get('key', '')}")
@@ -1500,7 +1526,7 @@ class HippoRAG:
                 except:
                     chunk_contents.append('')
             
-            # LLM重排序
+            # 重排序（backend可选）
             top_chunk_indices, top_chunk_contents, _ = self._rerank_contents(
                 query, chunk_contents, chunk_candidate_ids[:chunk_candidate_k],
                 content_type='chunk', len_after_rerank=chunk_top_k
@@ -1511,7 +1537,7 @@ class HippoRAG:
             top_chunk_contents = []
         
         if verbose:
-            print(f"\n  📄 LLM重排序后的Chunk ({len(top_chunk_ids)}个，目标保留{chunk_top_k}个):")
+            print(f"\n  📄 重排序后的Chunk ({len(top_chunk_ids)}个，目标保留{chunk_top_k}个):")
             print(f"  {'-'*60}")
             for i, (chunk_id, content) in enumerate(zip(top_chunk_ids, top_chunk_contents)):
                 print(f"    [{i+1}] ID: {chunk_id}")
@@ -1623,7 +1649,12 @@ class HippoRAG:
             max_code_candidates=spread_code_k,
             max_table_candidates=spread_table_k,
             max_image_candidates=spread_image_k,
-            verbose=verbose
+            verbose=verbose,
+            time_budget_s=spread_time_budget_s,
+            max_expansions=spread_max_expansions,
+            per_node_neighbor_limit=spread_per_node_neighbor_limit,
+            max_frontier_size=spread_max_frontier_size,
+            min_enqueue_score=spread_min_enqueue_score
         )
         
         stage3_time = time.time() - stage3_start
@@ -1718,10 +1749,13 @@ class HippoRAG:
                 except:
                     print(f"        [{i+1}] 分数={score:.4f} | ID: {iid} | (获取详情失败)")
         
-        # ========== 阶段4: 最终LLM Rerank ==========
+        # ========== 阶段4: 最终Rerank ==========
+        # 获取阶段4专用的rerank后端配置（支持单独使用LLM）
+        final_rerank_backend = getattr(self.global_config, "final_rerank_backend", None)
+        
         if verbose:
             print(f"\n{'='*60}")
-            print(f"🔍 阶段4: 最终LLM Rerank")
+            print(f"🔍 阶段4: 最终Rerank (后端: {final_rerank_backend or '默认'})")
             print(f"{'='*60}")
         
         stage4_start = time.time()
@@ -1753,7 +1787,8 @@ class HippoRAG:
             
             final_chunk_indices, final_chunk_contents, _ = self._rerank_contents(
                 query, chunk_contents, all_chunk_ids,
-                content_type='chunk', len_after_rerank=final_chunk_k
+                content_type='chunk', len_after_rerank=final_chunk_k,
+                backend_override=final_rerank_backend
             )
             final_chunk_ids = [all_chunk_ids[i] for i in final_chunk_indices]
         else:
@@ -1774,7 +1809,8 @@ class HippoRAG:
             
             final_code_indices, final_code_contents, _ = self._rerank_contents(
                 query, code_contents, all_code_ids,
-                content_type='code', len_after_rerank=final_code_k
+                content_type='code', len_after_rerank=final_code_k,
+                backend_override=final_rerank_backend
             )
             final_code_ids = [all_code_ids[i] for i in final_code_indices]
         else:
@@ -1795,7 +1831,8 @@ class HippoRAG:
             
             final_table_indices, final_table_contents, _ = self._rerank_contents(
                 query, table_contents, all_table_ids,
-                content_type='table', len_after_rerank=final_table_k
+                content_type='table', len_after_rerank=final_table_k,
+                backend_override=final_rerank_backend
             )
             final_table_ids = [all_table_ids[i] for i in final_table_indices]
         else:
@@ -1816,7 +1853,8 @@ class HippoRAG:
             
             final_image_indices, final_image_contents, _ = self._rerank_contents(
                 query, image_contents, all_image_ids,
-                content_type='image', len_after_rerank=final_image_k
+                content_type='image', len_after_rerank=final_image_k,
+                backend_override=final_rerank_backend
             )
             final_image_ids = [all_image_ids[i] for i in final_image_indices]
         else:
@@ -1955,42 +1993,85 @@ class HippoRAG:
             print(f"\n  {'='*60}")
             print(f"  ⏱️ 本查询耗时汇总:")
             print(f"      阶段1 (Embedding候选): {stage1_time:.3f}s")
-            print(f"      阶段2 (LLM Rerank): {stage2_time:.3f}s")
+            print(f"      阶段2 (Rerank): {stage2_time:.3f}s")
             print(f"      阶段3 (图扩散): {stage3_time:.3f}s")
             print(f"      阶段4 (最终Rerank): {stage4_time:.3f}s")
             print(f"      总计: {total_time:.3f}s")
         
-        # 构建返回结果（不含报告，报告在retrieve_v2中统一生成）
-        return {
+        # 组装结构化结果
+        chunks_data = {
+            'ids': final_chunk_ids,
+            'contents': final_chunk_contents,
+            'metadata': self._get_chunks_metadata(final_chunk_ids)
+        }
+        codes_data = {
+            'ids': final_code_ids,
+            'contents': final_code_contents,
+            'metadata': self._get_codes_metadata(final_code_ids)
+        }
+        tables_data = {
+            'ids': final_table_ids,
+            'contents': final_table_contents,
+            'metadata': self._get_tables_metadata(final_table_ids)
+        }
+        images_data = {
+            'ids': final_image_ids,
+            'contents': final_image_contents,
+            'metadata': self._get_images_metadata(final_image_ids)
+        }
+
+        # 原阶段5（报告/合并输出）并入阶段4：这里不再额外调用LLM，只做拼装
+        report_result = None
+        stage4_merge_time = 0.0
+        if generate_report:
+            merge_start = time.time()
+            try:
+                frontend_prompt = self._build_fallback_frontend_prompt(
+                    query=query,
+                    chunks_data=chunks_data,
+                    codes_data=codes_data,
+                    tables_data=tables_data,
+                    images_data=images_data
+                )
+                stage4_merge_time = time.time() - merge_start
+                report_result = {
+                    'success': True,
+                    'frontend_prompt': frontend_prompt,
+                    'timing': stage4_merge_time,
+                    'merged_in_stage4': True
+                }
+            except Exception as e:
+                stage4_merge_time = time.time() - merge_start
+                report_result = {
+                    'success': False,
+                    'error': str(e),
+                    'frontend_prompt': "",
+                    'timing': stage4_merge_time,
+                    'merged_in_stage4': True
+                }
+
+        total_time = stage1_time + stage2_time + stage3_time + stage4_time + stage4_merge_time
+
+        result = {
             'query': query,
-            'chunks': {
-                'ids': final_chunk_ids,
-                'contents': final_chunk_contents,
-                'metadata': self._get_chunks_metadata(final_chunk_ids)
-            },
-            'codes': {
-                'ids': final_code_ids,
-                'contents': final_code_contents,
-                'metadata': self._get_codes_metadata(final_code_ids)
-            },
-            'tables': {
-                'ids': final_table_ids,
-                'contents': final_table_contents,
-                'metadata': self._get_tables_metadata(final_table_ids)
-            },
-            'images': {
-                'ids': final_image_ids,
-                'contents': final_image_contents,
-                'metadata': self._get_images_metadata(final_image_ids)
-            },
+            'chunks': chunks_data,
+            'codes': codes_data,
+            'tables': tables_data,
+            'images': images_data,
             'timing': {
                 'stage1_embedding': stage1_time,
                 'stage2_rerank': stage2_time,
                 'stage3_spread': stage3_time,
                 'stage4_final_rerank': stage4_time,
-                'total': stage1_time + stage2_time + stage3_time + stage4_time
+                'stage4_merge_output': stage4_merge_time,
+                'total': total_time
             }
         }
+
+        if report_result is not None:
+            result['report'] = report_result
+
+        return result
     
     def _get_chunks_metadata(self, chunk_ids: List[str]) -> List[Dict]:
         """获取chunks的元数据"""
@@ -4972,7 +5053,40 @@ class HippoRAG:
             logger.error(f"Error computing passage scores: {str(e)}")
             return np.array([])
 
-    def rerank_files(self, query: str, query_file_scores: np.ndarray, file_keys: List[str]) -> Tuple[List[int], List[Dict], dict]:
+    def _get_transformers_reranker(self) -> TransformersCrossEncoderReranker:
+        """
+        懒加载本地Cross-Encoder reranker（Transformers）。
+        注意：如果模型不存在/下载失败，会抛异常，上层需要捕获并回退。
+        """
+        if self.transformers_reranker is not None:
+            return self.transformers_reranker
+
+        model_name = getattr(self.global_config, "rerank_model_name", None)
+        if not model_name:
+            raise RuntimeError("rerank_backend=transformers 但未配置 rerank_model_name")
+
+        device = getattr(self.global_config, "rerank_device", "auto")
+        batch_size = getattr(self.global_config, "rerank_batch_size", 32)
+        max_length = getattr(self.global_config, "rerank_max_length", 512)
+        use_fp16 = getattr(self.global_config, "rerank_use_fp16", True)
+
+        self.transformers_reranker = TransformersCrossEncoderReranker(
+            model_name=model_name,
+            device=device,
+            batch_size=batch_size,
+            max_length=max_length,
+            use_fp16=use_fp16,
+        )
+        return self.transformers_reranker
+
+    def rerank_files(
+        self,
+        query: str,
+        query_file_scores: np.ndarray,
+        file_keys: List[str],
+        keep_top_k: Optional[int] = None,
+        candidate_k: Optional[int] = None
+    ) -> Tuple[List[int], List[Dict], dict]:
         """
         文件摘要重排序：使用LLM对候选文件进行智能筛选
         
@@ -4990,11 +5104,11 @@ class HippoRAG:
                 - top_files: 重排序后的文件信息列表
                 - rerank_log: 重排序过程的日志信息
         """
-        # 使用文件专用配置参数
-        file_candidate_k: int = getattr(self.global_config, 'file_rerank_candidate_k', 50)
-        file_top_k: int = getattr(self.global_config, 'file_linking_top_k', 5)
+        # 使用文件专用配置参数（允许调用侧覆盖，确保 retrieve_v2 的 payload 参数真正生效）
+        file_candidate_k: int = int(candidate_k) if candidate_k is not None else int(getattr(self.global_config, 'file_rerank_candidate_k', 50))
+        file_top_k: int = int(keep_top_k) if keep_top_k is not None else int(getattr(self.global_config, 'file_linking_top_k', 5))
         
-        logger.info(f"File reranking: selecting top {file_candidate_k} candidates, will keep top {file_top_k} after reranking")
+        logger.info(f"Reranking(files): selecting top {file_candidate_k} candidates, will keep top {file_top_k} after reranking")
         
         if len(query_file_scores) == 0 or len(file_keys) == 0:
             logger.warning("No files available for reranking.")
@@ -5024,29 +5138,26 @@ class HippoRAG:
                 except Exception as e:
                     logger.warning(f"Failed to get file info for {file_key}: {e}")
             
-            # 构建重排序prompt，发送所有候选文件给LLM
-            files_for_rerank = []
-            for i, f in enumerate(candidate_files):  # 发送所有候选文件
-                files_for_rerank.append({
-                    'id': i,
-                    'summary': f['summary'],
-                    'file_path': f['file_path']
-                })
-            
-            # 使用LLM进行文件重排序
-            try:
-                rerank_prompt = f"""你是一个专业的技术文档检索助手。请根据用户的查询问题，从候选文件中选择最相关的文件。
-
-## 选择标准（按优先级排序）：
-1. **直接相关**：文件摘要直接回答或涉及查询问题的核心内容
-2. **定义/概述**：包含查询主题的定义、概述或基本介绍
-3. **技术细节**：包含查询主题的具体实现、配置或使用方法
-4. **相关概念**：涉及与查询相关的上下游概念或依赖关系
-
-## 注意事项：
-- 优先选择内容具体的文件，而非泛泛的概述
-- 如果查询涉及特定版本/API，优先选择对应版本的文档
-- 避免选择仅在摘要中顺带提及查询关键词的文件
+            backend = getattr(self.global_config, "rerank_backend", "llm")
+            if backend == "transformers" and len(candidate_files) > file_top_k:
+                try:
+                    reranker = self._get_transformers_reranker()
+                    candidate_texts = [f"{f.get('file_path','')}\n{f.get('summary','')}" for f in candidate_files]
+                    rr = reranker.rerank(query=query, docs=candidate_texts, top_k=file_top_k)
+                    selected_ids = rr.sorted_indices
+                    top_file_indices = [candidate_file_indices[i] for i in selected_ids if i < len(candidate_file_indices)]
+                    top_files = [candidate_files[i] for i in selected_ids if i < len(candidate_files)]
+                except Exception as e:
+                    logger.warning(f"Transformers file rerank failed: {e}, falling back to embedding scores")
+                    top_file_indices = candidate_file_indices[:file_top_k]
+                    top_files = candidate_files[:file_top_k]
+            elif backend == "llm" and len(candidate_files) > file_top_k:
+                # 保留旧路径（LLM rerank），便于兼容
+                files_for_rerank = []
+                for i, f in enumerate(candidate_files):
+                    files_for_rerank.append({'id': i, 'summary': f['summary'], 'file_path': f['file_path']})
+                try:
+                    rerank_prompt = f"""你是一个专业的技术文档检索助手。请根据用户的查询问题，从候选文件中选择最相关的文件。
 
 ## 查询问题
 {query}
@@ -5057,27 +5168,24 @@ class HippoRAG:
 ## 输出要求
 请返回最相关文件的id列表，格式为JSON数组，如 [0, 3, 5]。最多选择{file_top_k}个文件。
 只输出JSON数组，不要其他内容："""
-
-                messages = [{"role": "user", "content": rerank_prompt}]
-                response, _, _ = self.llm_model.infer(messages)
-                
-                # 解析LLM返回的文件id列表
-                import re
-                match = re.search(r'\[[\d,\s]*\]', response)
-                if match:
-                    selected_ids = json.loads(match.group())
-                    # 限制最多保留file_top_k个
-                    selected_ids = selected_ids[:file_top_k]
-                    top_file_indices = [candidate_file_indices[i] for i in selected_ids if i < len(candidate_file_indices)]
-                    top_files = [candidate_files[i] for i in selected_ids if i < len(candidate_files)]
-                else:
-                    # 如果解析失败，使用embedding分数最高的
-                    logger.warning("Failed to parse LLM response, using embedding scores")
+                    messages = [{"role": "user", "content": rerank_prompt}]
+                    response, _, _ = self.llm_model.infer(messages)
+                    import re
+                    match = re.search(r'\[[\d,\s]*\]', response)
+                    if match:
+                        selected_ids = json.loads(match.group())[:file_top_k]
+                        top_file_indices = [candidate_file_indices[i] for i in selected_ids if i < len(candidate_file_indices)]
+                        top_files = [candidate_files[i] for i in selected_ids if i < len(candidate_files)]
+                    else:
+                        logger.warning("Failed to parse LLM response, using embedding scores")
+                        top_file_indices = candidate_file_indices[:file_top_k]
+                        top_files = candidate_files[:file_top_k]
+                except Exception as e:
+                    logger.warning(f"LLM file reranking failed: {e}, using embedding scores")
                     top_file_indices = candidate_file_indices[:file_top_k]
                     top_files = candidate_files[:file_top_k]
-                    
-            except Exception as e:
-                logger.warning(f"LLM file reranking failed: {e}, using embedding scores")
+            else:
+                # backend == 'none' 或者候选数本就不大：直接用embedding分数顺序
                 top_file_indices = candidate_file_indices[:file_top_k]
                 top_files = candidate_files[:file_top_k]
             
@@ -5432,7 +5540,13 @@ class HippoRAG:
 
         return ppr_sorted_doc_ids, ppr_sorted_doc_scores
 
-    def rerank_facts(self, query: str, query_fact_scores: np.ndarray) -> Tuple[List[int], List[Tuple], dict]:
+    def rerank_facts(
+        self,
+        query: str,
+        query_fact_scores: np.ndarray,
+        keep_top_k: Optional[int] = None,
+        candidate_k: Optional[int] = None
+    ) -> Tuple[List[int], List[Tuple], dict]:
         """
         事实重排序：认知记忆机制的核心实现
         
@@ -5476,10 +5590,10 @@ class HippoRAG:
 
 
         """
-        # 加载配置参数
-        link_top_k: int = self.global_config.linking_top_k  # 最终选择的事实数量
-        # 候选事实数量：用于送入LLM重排序的事实数量，应该比link_top_k大以弥补embedding不准确
-        rerank_candidate_k: int = getattr(self.global_config, 'rerank_candidate_k', 50)
+        # 加载配置参数（允许调用侧覆盖，确保 retrieve_v2 的 payload 参数真正生效）
+        link_top_k: int = int(keep_top_k) if keep_top_k is not None else int(self.global_config.linking_top_k)  # 最终选择的事实数量
+        # 候选事实数量：用于送入重排序的事实数量，应该比 link_top_k 大以弥补 embedding 不准确
+        rerank_candidate_k: int = int(candidate_k) if candidate_k is not None else int(getattr(self.global_config, 'rerank_candidate_k', 50))
         
         # 检查是否有可用的事实进行重排序
         if len(query_fact_scores) == 0 or len(self.fact_node_keys) == 0:
@@ -5495,7 +5609,10 @@ class HippoRAG:
                 # 否则获取前rerank_candidate_k个事实（按分数降序排列）
                 candidate_fact_indices = np.argsort(query_fact_scores)[-rerank_candidate_k:][::-1].tolist()
             
-            logger.info(f"Reranking: selecting top {len(candidate_fact_indices)} candidates from {len(query_fact_scores)} facts, will keep top {link_top_k} after reranking")
+            logger.info(
+                f"Reranking(facts): selecting top {len(candidate_fact_indices)} candidates from {len(query_fact_scores)} facts, "
+                f"will keep top {link_top_k} after reranking"
+            )
                 
             # 获取实际的事实ID列表
             real_candidate_fact_ids = [self.fact_node_keys[idx] for idx in candidate_fact_indices]
@@ -5505,12 +5622,36 @@ class HippoRAG:
             
             # 解析事实内容，将字符串转换为三元组
             candidate_facts = [eval(fact_row_dict[id]['content']) for id in real_candidate_fact_ids]
-            
-            # 使用DSPy过滤器对事实进行重排序，最终保留link_top_k个
-            top_k_fact_indices, top_k_facts, reranker_dict = self.rerank_filter(query,
-                                                                                candidate_facts,
-                                                                                candidate_fact_indices,
-                                                                                len_after_rerank=link_top_k)
+
+            backend = getattr(self.global_config, "rerank_backend", "llm")
+            if backend == "transformers" and len(candidate_facts) > link_top_k:
+                try:
+                    reranker = self._get_transformers_reranker()
+                    fact_texts = [f"{f[0]} {f[1]} {f[2]}" if isinstance(f, (list, tuple)) and len(f) >= 3 else str(f) for f in candidate_facts]
+                    rr = reranker.rerank(query=query, docs=fact_texts, top_k=link_top_k)
+                    selected_local = rr.sorted_indices
+                    top_k_fact_indices = [candidate_fact_indices[i] for i in selected_local if i < len(candidate_fact_indices)]
+                    top_k_facts = [candidate_facts[i] for i in selected_local if i < len(candidate_facts)]
+                    reranker_dict = {"backend": "transformers", "model": getattr(self.global_config, "rerank_model_name", None)}
+                except Exception as e:
+                    logger.warning(f"Transformers fact rerank failed: {e}, falling back to embedding scores")
+                    top_k_fact_indices = candidate_fact_indices[:link_top_k]
+                    top_k_facts = candidate_facts[:link_top_k]
+                    reranker_dict = {"backend": "embedding_fallback", "error": str(e)}
+            elif backend == "llm" and len(candidate_facts) > link_top_k:
+                # 旧版DSPy/LLM rerank（兼容保留）
+                top_k_fact_indices, top_k_facts, reranker_dict = self.llm_rerank_filter(
+                    query,
+                    candidate_facts,
+                    candidate_fact_indices,
+                    len_after_rerank=link_top_k
+                )
+                reranker_dict = {"backend": "llm", **(reranker_dict or {})}
+            else:
+                # backend == 'none' 或者候选数本就不大：直接用embedding分数顺序
+                top_k_fact_indices = candidate_fact_indices[:link_top_k]
+                top_k_facts = candidate_facts[:link_top_k]
+                reranker_dict = {"backend": "none_or_small"}
             
             # 构建重排序日志，记录重排序前后的事实
             rerank_log = {'facts_before_rerank': candidate_facts, 'facts_after_rerank': top_k_facts}
@@ -5840,15 +5981,26 @@ class HippoRAG:
         max_code_candidates: int = 10,
         max_table_candidates: int = 10,
         max_image_candidates: int = 10,
-        verbose: bool = False
+        verbose: bool = False,
+        # ====== 性能/近似控制（默认在调用侧开启；这里保持兼容）======
+        time_budget_s: Optional[float] = None,
+        max_expansions: Optional[int] = None,
+        per_node_neighbor_limit: Optional[int] = None,
+        max_frontier_size: Optional[int] = None,
+        min_enqueue_score: float = 0.01
     ) -> Dict[str, List[Tuple[str, float]]]:
         """
-        基于代价和Query相似度的图扩散
+        基于代价和Query相似度的图扩散（优化版：预计算相似度+缓存）
         
         从种子节点（Entity、File）出发，沿低代价边扩散，
         综合考虑边代价和节点与Query的相似度进行评分。
         
         评分公式: score = similarity(node, query) / (1 + cost) × init_weight
+        
+        优化点：
+        1. 利用预计算的 embedding 矩阵（passage_embeddings 等）批量计算相似度
+        2. 使用相似度缓存避免重复查询 embedding store
+        3. 批量获取邻居节点的相似度
         
         Args:
             query: 查询字符串
@@ -5875,10 +6027,88 @@ class HippoRAG:
         import heapq
         
         start_time = time.time()
+        query_emb_flat = query_embedding.flatten()
+        spread_stop_reason = None
         
-        def get_node_similarity(node_id: str) -> float:
-            """获取节点与Query的相似度"""
+        # igraph 访问优化：把 name 列表提前取出，避免 vs[idx]['name'] 的 Python 开销
+        try:
+            vertex_names = self.graph.vs['name']
+        except Exception:
+            vertex_names = None
+        has_edge_type = False
+        has_edge_weight = False
+        try:
+            edge_attrs = self.graph.es.attributes()
+            has_edge_type = 'type' in edge_attrs
+            has_edge_weight = 'weight' in edge_attrs
+        except Exception:
+            pass
+        
+        # ========== 优化1: 预计算各类型的全量相似度（利用已有的embedding矩阵） ==========
+        precomputed_sims = {}
+        precompute_start = time.time()
+        
+        # Chunk相似度（利用passage_embeddings矩阵）
+        if hasattr(self, 'passage_embeddings') and self.passage_embeddings is not None:
+            chunk_sims = np.dot(self.passage_embeddings, query_emb_flat)
+            for i, key in enumerate(self.passage_node_keys):
+                precomputed_sims[key] = float(chunk_sims[i])
+        
+        # Entity相似度（利用entity_embeddings矩阵）
+        if hasattr(self, 'entity_embeddings') and self.entity_embeddings is not None:
+            entity_sims = np.dot(self.entity_embeddings, query_emb_flat)
+            for i, key in enumerate(self.entity_node_keys):
+                precomputed_sims[key] = float(entity_sims[i])
+        
+        # File相似度（利用file_embeddings矩阵）
+        if hasattr(self, 'file_embeddings') and self.file_embeddings is not None:
+            file_sims = np.dot(self.file_embeddings, query_emb_flat)
+            for i, key in enumerate(self.file_node_keys):
+                precomputed_sims[key] = float(file_sims[i])
+        
+        # Code相似度（利用code_embeddings矩阵）
+        if hasattr(self, 'code_embeddings') and self.code_embeddings is not None:
+            code_sims = np.dot(self.code_embeddings, query_emb_flat)
+            if hasattr(self, 'code_node_keys'):
+                for i, key in enumerate(self.code_node_keys):
+                    precomputed_sims[key] = float(code_sims[i])
+        
+        # Table相似度（利用table_embeddings矩阵）
+        if hasattr(self, 'table_embeddings') and self.table_embeddings is not None:
+            table_sims = np.dot(self.table_embeddings, query_emb_flat)
+            if hasattr(self, 'table_node_keys'):
+                for i, key in enumerate(self.table_node_keys):
+                    precomputed_sims[key] = float(table_sims[i])
+        
+        # Image相似度（利用image_embeddings矩阵）
+        if hasattr(self, 'image_embeddings') and self.image_embeddings is not None:
+            image_sims = np.dot(self.image_embeddings, query_emb_flat)
+            if hasattr(self, 'image_node_keys'):
+                for i, key in enumerate(self.image_node_keys):
+                    precomputed_sims[key] = float(image_sims[i])
+        
+        precompute_time = time.time() - precompute_start
+        
+        # ========== 优化2: 相似度缓存（处理预计算未覆盖的节点） ==========
+        similarity_cache = {}
+        cache_miss_count = 0
+        
+        def get_node_similarity_fast(node_id: str) -> float:
+            """快速获取节点相似度（优先预计算 > 缓存 > 查询store）"""
+            nonlocal cache_miss_count
+            
+            # 1. 优先使用预计算结果
+            if node_id in precomputed_sims:
+                return precomputed_sims[node_id]
+            
+            # 2. 检查缓存
+            if node_id in similarity_cache:
+                return similarity_cache[node_id]
+            
+            # 3. 缓存未命中，查询store（fallback）
+            cache_miss_count += 1
             try:
+                emb = None
                 if node_id.startswith('chunk-'):
                     emb = self.chunk_embedding_store.get_embedding(node_id)
                 elif node_id.startswith('entity-'):
@@ -5891,33 +6121,92 @@ class HippoRAG:
                     emb = self.table_embedding_store.get_embedding(node_id)
                 elif node_id.startswith('image-'):
                     emb = self.image_embedding_store.get_embedding(node_id)
-                else:
-                    return 0.0
                 
                 if emb is None:
+                    similarity_cache[node_id] = 0.0
                     return 0.0
-                emb = np.array(emb)
-                return float(np.dot(query_embedding.flatten(), emb.flatten()))
+                
+                sim = float(np.dot(query_emb_flat, np.array(emb).flatten()))
+                similarity_cache[node_id] = sim
+                return sim
             except Exception as e:
                 logger.debug(f"Error getting similarity for {node_id}: {e}")
+                similarity_cache[node_id] = 0.0
                 return 0.0
         
         def get_edge_cost(edge_type: str, edge_weight: float) -> float:
             """计算边的代价"""
             if edge_type == 'synonymy':
-                # 同义词边：相似度越高，代价越低
-                return max(0.01, 1.0 - edge_weight)  # 相似度0.95 → 代价0.05
+                return max(0.01, 1.0 - edge_weight)
             elif edge_type == 'semantic':
-                # 语义边：共现次数越多，代价越低
                 return 0.5 / max(edge_weight, 0.1)
             elif edge_type == 'passage':
-                # chunk-entity边
                 return 0.2
             elif edge_type == 'structural':
-                # file-chunk, chunk-code等结构边
                 return 0.3
             else:
                 return 0.5
+        
+        # 邻接缓存（按点懒加载）：避免每次扩展都 get_eid + 逐边取属性
+        neighbor_cache: Dict[int, List[Tuple[str, float]]] = {}
+        
+        def get_neighbors_with_cost_cached(v_idx: int) -> List[Tuple[str, float]]:
+            cached = neighbor_cache.get(v_idx)
+            if cached is not None:
+                return cached
+            
+            try:
+                neighbor_indices = self.graph.neighbors(v_idx, mode='all')
+            except Exception:
+                neighbor_cache[v_idx] = []
+                return neighbor_cache[v_idx]
+            
+            if not neighbor_indices:
+                neighbor_cache[v_idx] = []
+                return neighbor_cache[v_idx]
+            
+            # 批量获取边 id（比逐个 get_eid 快得多）
+            try:
+                eids = self.graph.get_eids([(v_idx, n) for n in neighbor_indices], directed=False, error=False)
+            except Exception:
+                # fallback：没有 get_eids 就退化，但仍缓存结果（只含默认代价）
+                neighbor_ids = [self.graph.vs[n]['name'] for n in neighbor_indices]
+                res = [(nid, 0.3) for nid in neighbor_ids]
+                neighbor_cache[v_idx] = res
+                return res
+            
+            edge_types = ['structural'] * len(eids)
+            edge_weights = [1.0] * len(eids)
+            
+            valid_pos = [i for i, eid in enumerate(eids) if eid is not None and eid >= 0]
+            if valid_pos:
+                valid_eids = [int(eids[i]) for i in valid_pos]
+                try:
+                    if has_edge_type:
+                        types = self.graph.es[valid_eids]['type']
+                        for p, t in zip(valid_pos, types):
+                            edge_types[p] = t if t is not None else 'structural'
+                    if has_edge_weight:
+                        weights = self.graph.es[valid_eids]['weight']
+                        for p, w in zip(valid_pos, weights):
+                            try:
+                                edge_weights[p] = float(w)
+                            except Exception:
+                                edge_weights[p] = 1.0
+                except Exception:
+                    # 忽略属性读取失败，继续用默认值
+                    pass
+            
+            if vertex_names is not None:
+                neighbor_ids = [vertex_names[n] for n in neighbor_indices]
+            else:
+                neighbor_ids = [self.graph.vs[n]['name'] for n in neighbor_indices]
+            
+            res = [(nid, get_edge_cost(et, ew)) for nid, et, ew in zip(neighbor_ids, edge_types, edge_weights)]
+            # 低代价优先：更符合“种子附近 + 低代价多跳”的目标，同时也能控住扩展宽度
+            res.sort(key=lambda x: x[1])
+            neighbor_cache[v_idx] = res
+            return res
         
         # 候选结果
         candidates = {
@@ -5930,13 +6219,15 @@ class HippoRAG:
         # 优先队列: (-score, node_id, cumulative_cost, init_weight)
         pq = []
         visited = set()
+        # 控制 frontier 规模与重复入队：只保留每个节点当前最好的入队分数
+        best_enqueued_score: Dict[str, float] = {}
         
         # 初始化种子节点
         seed_count = 0
         for entity_id, weight in seed_entities:
             vertex_idx = self.node_name_to_vertex_idx.get(entity_id)
             if vertex_idx is not None:
-                sim = get_node_similarity(entity_id)
+                sim = get_node_similarity_fast(entity_id)
                 score = sim * weight
                 heapq.heappush(pq, (-score, entity_id, 0.0, weight))
                 seed_count += 1
@@ -5944,17 +6235,27 @@ class HippoRAG:
         for file_id, weight in seed_files:
             vertex_idx = self.node_name_to_vertex_idx.get(file_id)
             if vertex_idx is not None:
-                sim = get_node_similarity(file_id)
+                sim = get_node_similarity_fast(file_id)
                 score = sim * weight
                 heapq.heappush(pq, (-score, file_id, 0.0, weight))
                 seed_count += 1
         
         if verbose:
             print(f"\n  🌱 扩散种子节点数: {seed_count} (Entity: {len(seed_entities)}, File: {len(seed_files)})")
+            print(f"  ⚡ 预计算相似度: {len(precomputed_sims)}个节点, 耗时{precompute_time:.3f}s")
         
         # 扩散
         expansion_count = 0
+        spread_start = time.time()
+        
         while pq:
+            if time_budget_s is not None and (time.time() - spread_start) > time_budget_s:
+                spread_stop_reason = f"time_budget_s={time_budget_s}"
+                break
+            if max_expansions is not None and expansion_count >= max_expansions:
+                spread_stop_reason = f"max_expansions={max_expansions}"
+                break
+            
             neg_score, node_id, cost, init_weight = heapq.heappop(pq)
             
             if node_id in visited:
@@ -5982,6 +6283,7 @@ class HippoRAG:
             total_candidates = sum(len(v) for v in candidates.values())
             if total_candidates >= (max_chunk_candidates + max_code_candidates + 
                                    max_table_candidates + max_image_candidates):
+                spread_stop_reason = "collected_enough_candidates"
                 break
             
             # 扩散到邻居
@@ -5989,47 +6291,50 @@ class HippoRAG:
             if vertex_idx is None:
                 continue
             
-            # 获取所有邻居
-            neighbor_indices = self.graph.neighbors(vertex_idx, mode='all')
+            neighbors = get_neighbors_with_cost_cached(vertex_idx)
+            if per_node_neighbor_limit is not None and per_node_neighbor_limit > 0:
+                neighbors = neighbors[:per_node_neighbor_limit]
             
-            for neighbor_idx in neighbor_indices:
-                neighbor_id = self.graph.vs[neighbor_idx]['name']
-                
+            for neighbor_id, edge_cost in neighbors:
                 if neighbor_id in visited:
                     continue
                 
-                # 获取边信息
-                edge_id = self.graph.get_eid(vertex_idx, neighbor_idx, error=False)
-                if edge_id < 0:
-                    # 尝试反向查找
-                    edge_id = self.graph.get_eid(neighbor_idx, vertex_idx, error=False)
-                
-                if edge_id >= 0:
-                    edge = self.graph.es[edge_id]
-                    edge_type = edge['type'] if 'type' in edge.attributes() else 'structural'
-                    edge_weight = edge['weight'] if 'weight' in edge.attributes() else 1.0
-                else:
-                    edge_type = 'structural'
-                    edge_weight = 1.0
-                
-                edge_cost = get_edge_cost(edge_type, edge_weight)
                 new_cost = cost + edge_cost
                 
                 if new_cost > max_cost:
                     continue
                 
-                # 计算新得分
-                neighbor_sim = get_node_similarity(neighbor_id)
+                # 计算新得分（使用优化后的相似度获取）
+                neighbor_sim = get_node_similarity_fast(neighbor_id)
                 decay = 1.0 / (1.0 + new_cost)
                 new_score = neighbor_sim * decay * init_weight
                 
-                if new_score > 0.01:  # 过滤低分
-                    heapq.heappush(pq, (-new_score, neighbor_id, new_cost, init_weight))
+                if new_score <= min_enqueue_score:
+                    continue
+                
+                prev_best = best_enqueued_score.get(neighbor_id)
+                if prev_best is not None and prev_best >= new_score:
+                    continue
+                best_enqueued_score[neighbor_id] = new_score
+                
+                heapq.heappush(pq, (-new_score, neighbor_id, new_cost, init_weight))
+            
+            if max_frontier_size is not None and max_frontier_size > 0 and len(pq) > max_frontier_size:
+                # 仅保留分数最高的前 max_frontier_size 个，避免 frontier 爆炸
+                pq = heapq.nsmallest(max_frontier_size, pq)
+                heapq.heapify(pq)
         
+        spread_time = time.time() - spread_start
         elapsed_time = time.time() - start_time
         
         if verbose:
-            print(f"  🔍 扩散完成: 访问{expansion_count}个节点, 耗时{elapsed_time:.3f}s")
+            print(f"  🔍 扩散完成: 访问{expansion_count}个节点")
+            print(f"      预计算耗时: {precompute_time:.3f}s")
+            print(f"      扩散耗时: {spread_time:.3f}s")
+            print(f"      缓存未命中: {cache_miss_count}次")
+            print(f"      总耗时: {elapsed_time:.3f}s")
+            if spread_stop_reason:
+                print(f"      早停原因: {spread_stop_reason}")
             print(f"      Chunk候选: {len(candidates['chunk'])}")
             print(f"      Code候选: {len(candidates['code'])}")
             print(f"      Table候选: {len(candidates['table'])}")
@@ -6509,9 +6814,10 @@ class HippoRAG:
         return results
 
     def _rerank_contents(self, query: str, contents: List[str], keys: List[str], 
-                         content_type: str, len_after_rerank: int) -> Tuple[List[int], List[str], dict]:
+                         content_type: str, len_after_rerank: int,
+                         backend_override: str = None) -> Tuple[List[int], List[str], dict]:
         """
-        对内容进行LLM重排序
+        对内容进行重排序（可选：LLM / 本地Cross-Encoder / 禁用）
         
         Args:
             query: 查询字符串
@@ -6519,6 +6825,7 @@ class HippoRAG:
             keys: 键列表
             content_type: 内容类型
             len_after_rerank: 重排序后保留的数量
+            backend_override: 可选，覆盖全局配置的rerank后端 ("llm" / "transformers" / None)
             
         Returns:
             (top_indices, top_contents, rerank_log)
@@ -6530,14 +6837,32 @@ class HippoRAG:
                 if len(content) > 2000:
                     content = content[:2000] + "..."
                 truncated_contents.append(content)
-            
-            # 调用重排序过滤器
-            top_indices, top_contents_list, reranker_dict = self.rerank_filter.rerank_contents(
-                query=query,
-                contents=truncated_contents,
-                content_type=content_type,
-                len_after_rerank=len_after_rerank
-            )
+
+            # 支持参数覆盖，用于阶段4单独使用LLM
+            backend = backend_override or getattr(self.global_config, "rerank_backend", "llm")
+            if backend == "transformers" and len(truncated_contents) > len_after_rerank:
+                try:
+                    reranker = self._get_transformers_reranker()
+                    rr = reranker.rerank(query=query, docs=truncated_contents, top_k=len_after_rerank)
+                    top_indices = rr.sorted_indices
+                    reranker_dict = {"backend": "transformers", "model": getattr(self.global_config, "rerank_model_name", None)}
+                except Exception as e:
+                    logger.warning(f"Transformers rerank failed for {content_type}: {e}, falling back to prefix order")
+                    top_k = min(len_after_rerank, len(contents))
+                    top_indices = list(range(top_k))
+                    reranker_dict = {"backend": "fallback", "error": str(e)}
+            elif backend == "llm" and len(truncated_contents) > len_after_rerank:
+                top_indices, _, reranker_dict = self.llm_rerank_filter.rerank_contents(
+                    query=query,
+                    contents=truncated_contents,
+                    content_type=content_type,
+                    len_after_rerank=len_after_rerank
+                )
+                reranker_dict = {"backend": "llm", **(reranker_dict or {})}
+            else:
+                top_k = min(len_after_rerank, len(contents))
+                top_indices = list(range(top_k))
+                reranker_dict = {"backend": "none_or_small"}
             
             # 返回原始完整内容
             top_full_contents = [contents[i] for i in top_indices]

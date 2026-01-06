@@ -30,3 +30,6 @@ clear_outputs_and_logs.sh
 structure.json
 abstract.json
 triples.json
+
+# Local model files (download separately)
+bge-reranker-v2-m3/

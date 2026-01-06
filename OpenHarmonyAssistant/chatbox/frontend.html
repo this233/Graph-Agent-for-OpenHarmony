@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>OpenHarmony RAG 问答</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-dark.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Source Han Sans SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0c1929 0%, #1a2f4a 50%, #0d2847 100%);
+            min-height: 100vh;
+            color: #e4e4e7;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        header h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.3rem;
+        }
+        header p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        /* 配置面板 */
+        .config-panel {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .config-row label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+        .config-row input {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            outline: none;
+        }
+        .config-row input:focus {
+            border-color: #38bdf8;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #64748b;
+        }
+        .status-dot.connected { background: #34d399; }
+        .status-dot.error { background: #f87171; }
+        
+        .input-section {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .input-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+        #query-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #query-input:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+        #query-input::placeholder { color: #64748b; }
+        #send-btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        #send-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(14, 165, 233, 0.4);
+        }
+        #send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .options {
+            margin-top: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .options label {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            cursor: pointer;
+        }
+        .options input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: #38bdf8;
+        }
+        
+        /* 耗时统计面板 */
+        .timing-panel {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.25rem;
+            display: none;
+        }
+        .timing-panel.show { display: block; }
+        .timing-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .timing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+        }
+        .timing-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+            text-align: center;
+        }
+        .timing-item .label {
+            font-size: 0.7rem;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+        }
+        .timing-item .value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #38bdf8;
+        }
+        .timing-item.total .value { color: #34d399; font-size: 1.1rem; }
+        .timing-item.llm .value { color: #c084fc; }
+        
+        /* 结果区域 */
+        .result-section {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        /* 分页标签 */
+        .tabs {
+            display: flex;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 0.875rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .tab-btn:hover { color: #94a3b8; background: rgba(255, 255, 255, 0.03); }
+        .tab-btn.active {
+            color: #fff;
+            background: rgba(56, 189, 248, 0.1);
+            border-bottom: 2px solid #38bdf8;
+        }
+        .tab-btn .badge {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .tab-btn.active .badge { background: rgba(56, 189, 248, 0.3); }
+        
+        /* 统计信息 */
+        .result-stats {
+            padding: 0.75rem 1rem;
+            background: rgba(0, 0, 0, 0.15);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        .result-stats span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        /* 内容区域 */
+        .tab-content {
+            display: none;
+            padding: 1.25rem;
+            min-height: 300px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .tab-content.active { display: block; }
+        
+        /* Markdown渲染 */
+        .markdown-body {
+            background: transparent !important;
+            color: #e2e8f0 !important;
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+        .markdown-body h1 {
+            font-size: 1.15rem;
+            color: #38bdf8;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+            padding-bottom: 0.4rem;
+            margin: 1.5rem 0 0.75rem;
+        }
+        .markdown-body h1:first-child { margin-top: 0; }
+        .markdown-body h2 {
+            font-size: 1.05rem;
+            color: #818cf8;
+            margin: 1rem 0 0.5rem;
+        }
+        .markdown-body h3 {
+            font-size: 0.95rem;
+            color: #a78bfa;
+            margin: 0.75rem 0 0.4rem;
+        }
+        .markdown-body pre {
+            background: rgba(0, 0, 0, 0.4) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 0.75rem;
+            overflow-x: auto;
+        }
+        .markdown-body code {
+            background: rgba(99, 102, 241, 0.15) !important;
+            color: #a5b4fc !important;
+            padding: 0.15em 0.35em;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+        .markdown-body pre code {
+            background: transparent !important;
+            padding: 0;
+            color: #e2e8f0 !important;
+        }
+        /* 表格样式 */
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.75rem 0;
+            font-size: 0.85rem;
+        }
+        .markdown-body th, .markdown-body td {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+        .markdown-body th {
+            background: rgba(56, 189, 248, 0.1);
+            color: #38bdf8;
+            font-weight: 600;
+        }
+        .markdown-body tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+        /* 图片样式 */
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin: 0.5rem 0;
+        }
+        .image-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin: 0.75rem 0;
+        }
+        .image-card img {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        .image-card .meta {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+        /* 列表样式 */
+        .markdown-body ul, .markdown-body ol {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+        }
+        .markdown-body li { margin: 0.25rem 0; }
+        
+        /* 加载状态 */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            color: #94a3b8;
+            padding: 3rem;
+        }
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(56, 189, 248, 0.2);
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .placeholder {
+            text-align: center;
+            color: #64748b;
+            padding: 3rem;
+        }
+        .error {
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        /* 滚动条 */
+        .tab-content::-webkit-scrollbar { width: 6px; }
+        .tab-content::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+        .tab-content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+        .tab-content::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 OpenHarmony RAG 问答</h1>
+            <p>基于 HippoRAG 知识检索的智能问答系统</p>
+        </header>
+
+        <!-- 后端配置 -->
+        <div class="config-panel">
+            <div class="config-row">
+                <label>🔗 后端地址:</label>
+                <input type="text" id="api-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+                <div class="status-dot" id="status-dot" title="连接状态"></div>
+                <button id="check-btn" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; border: none; border-radius: 4px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; cursor: pointer;">检测</button>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-row">
+                <input type="text" id="query-input" placeholder="请输入您的问题，例如：如何创建一个ArkTS页面？" autocomplete="off">
+                <button id="send-btn">发送</button>
+            </div>
+            <div class="options">
+                <label>
+                    <input type="checkbox" id="use-rag" checked>
+                    启用 RAG 检索
+                </label>
+                <label>
+                    <input type="checkbox" id="use-llm" checked>
+                    启用 LLM 回答
+                </label>
+            </div>
+        </div>
+
+        <!-- 耗时统计面板 -->
+        <div class="timing-panel" id="timing-panel">
+            <div class="timing-title">⏱️ 各阶段耗时</div>
+            <div class="timing-grid">
+                <div class="timing-item">
+                    <div class="label">阶段1: Embedding</div>
+                    <div class="value" id="t-stage1">-</div>
+                </div>
+                <div class="timing-item">
+                    <div class="label">阶段2: Rerank</div>
+                    <div class="value" id="t-stage2">-</div>
+                </div>
+                <div class="timing-item">
+                    <div class="label">阶段3: 图谱扩散</div>
+                    <div class="value" id="t-stage3">-</div>
+                </div>
+                <div class="timing-item">
+                    <div class="label">阶段4: 最终精排</div>
+                    <div class="value" id="t-stage4">-</div>
+                </div>
+                <div class="timing-item llm">
+                    <div class="label">LLM 生成</div>
+                    <div class="value" id="t-llm">-</div>
+                </div>
+                <div class="timing-item total">
+                    <div class="label">总耗时</div>
+                    <div class="value" id="t-total">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div class="result-section">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="rag">
+                    📚 检索结果
+                    <span class="badge" id="rag-count">0</span>
+                </button>
+                <button class="tab-btn" data-tab="llm">
+                    💬 LLM 回答
+                </button>
+            </div>
+            
+            <div class="result-stats" id="result-stats" style="display:none;">
+                <span id="stat-chunks">📄 0 段落</span>
+                <span id="stat-codes">💻 0 代码</span>
+                <span id="stat-tables">📊 0 表格</span>
+                <span id="stat-images">🖼️ 0 图片</span>
+            </div>
+            
+            <div class="tab-content active" id="tab-rag">
+                <div id="rag-result" class="placeholder">输入问题后点击发送，检索结果将显示在这里</div>
+            </div>
+            <div class="tab-content" id="tab-llm">
+                <div id="llm-result" class="placeholder">LLM 生成的回答将显示在这里</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置 marked
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, { language: lang }).value;
+                    } catch (e) {}
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        // 元素引用
+        const apiUrlInput = document.getElementById('api-url');
+        const statusDot = document.getElementById('status-dot');
+        const checkBtn = document.getElementById('check-btn');
+        const input = document.getElementById('query-input');
+        const btn = document.getElementById('send-btn');
+        const useRag = document.getElementById('use-rag');
+        const useLlm = document.getElementById('use-llm');
+        const ragResult = document.getElementById('rag-result');
+        const llmResult = document.getElementById('llm-result');
+        const timingPanel = document.getElementById('timing-panel');
+        const resultStats = document.getElementById('result-stats');
+
+        // 获取 API 基地址
+        function getApiUrl() {
+            return apiUrlInput.value.trim().replace(/\/$/, '');
+        }
+
+        // 检测后端连接
+        async function checkConnection() {
+            statusDot.className = 'status-dot';
+            statusDot.title = '检测中...';
+            try {
+                const res = await fetch(getApiUrl() + '/health', { method: 'GET' });
+                if (res.ok) {
+                    const data = await res.json();
+                    statusDot.className = 'status-dot connected';
+                    statusDot.title = `已连接 - HippoRAG: ${data.hipporag_initialized ? '已初始化' : '未初始化'}`;
+                } else {
+                    throw new Error('HTTP ' + res.status);
+                }
+            } catch (e) {
+                statusDot.className = 'status-dot error';
+                statusDot.title = '连接失败: ' + e.message;
+            }
+        }
+
+        checkBtn.addEventListener('click', checkConnection);
+        
+        // 页面加载时检测连接
+        setTimeout(checkConnection, 500);
+        
+        // 分页切换
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        function formatTime(seconds) {
+            if (seconds === undefined || seconds === null) return '-';
+            if (seconds < 0.01) return '<0.01s';
+            return seconds.toFixed(2) + 's';
+        }
+
+        function updateTiming(timing) {
+            if (!timing) return;
+            timingPanel.classList.add('show');
+            document.getElementById('t-stage1').textContent = formatTime(timing.stage1_embedding);
+            document.getElementById('t-stage2').textContent = formatTime(timing.stage2_rerank);
+            document.getElementById('t-stage3').textContent = formatTime(timing.stage3_spread);
+            document.getElementById('t-stage4').textContent = formatTime(timing.stage4_final_rerank);
+            document.getElementById('t-llm').textContent = formatTime(timing.llm);
+            document.getElementById('t-total').textContent = formatTime(timing.total);
+        }
+
+        function updateStats(data) {
+            if (!data.rag_used) {
+                resultStats.style.display = 'none';
+                return;
+            }
+            resultStats.style.display = 'flex';
+            document.getElementById('stat-chunks').textContent = '📄 ' + data.rag_chunks_count + ' 段落';
+            document.getElementById('stat-codes').textContent = '💻 ' + data.rag_codes_count + ' 代码';
+            document.getElementById('stat-tables').textContent = '📊 ' + data.rag_tables_count + ' 表格';
+            document.getElementById('stat-images').textContent = '🖼️ ' + data.rag_images_count + ' 图片';
+            
+            const total = data.rag_chunks_count + data.rag_codes_count + data.rag_tables_count + data.rag_images_count;
+            document.getElementById('rag-count').textContent = total;
+        }
+
+        async function sendQuery() {
+            const query = input.value.trim();
+            if (!query) return;
+
+            btn.disabled = true;
+            btn.textContent = '处理中...';
+            
+            // 重置显示
+            ragResult.className = 'loading';
+            ragResult.innerHTML = '<div class="spinner"></div><span>正在检索相关文档...</span>';
+            llmResult.className = 'loading';
+            llmResult.innerHTML = '<div class="spinner"></div><span>等待 LLM 生成回答...</span>';
+            timingPanel.classList.remove('show');
+            resultStats.style.display = 'none';
+            document.getElementById('rag-count').textContent = '0';
+            
+            // 切换到检索结果页
+            document.querySelector('.tab-btn[data-tab="rag"]').click();
+
+            try {
+                const res = await fetch(getApiUrl() + '/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query, 
+                        use_rag: useRag.checked,
+                        use_llm: useLlm.checked
+                    })
+                });
+                const data = await res.json();
+
+                // 更新检索结果
+                if (data.rag_context) {
+                    ragResult.className = 'markdown-body';
+                    ragResult.innerHTML = marked.parse(data.rag_context);
+                    // 高亮代码块
+                    ragResult.querySelectorAll('pre code').forEach(block => {
+                        hljs.highlightElement(block);
+                    });
+                } else {
+                    ragResult.className = 'placeholder';
+                    ragResult.textContent = data.rag_used ? '未检索到相关内容' : 'RAG 检索已禁用';
+                }
+
+                // 更新LLM回答
+                if (data.llm_response) {
+                    llmResult.className = 'markdown-body';
+                    llmResult.innerHTML = marked.parse(data.llm_response);
+                    llmResult.querySelectorAll('pre code').forEach(block => {
+                        hljs.highlightElement(block);
+                    });
+                } else {
+                    llmResult.className = 'placeholder';
+                    llmResult.textContent = data.llm_used ? 'LLM 未返回回答' : 'LLM 回答已禁用';
+                }
+
+                // 更新统计和耗时
+                updateStats(data);
+                updateTiming(data.timing);
+
+                // 更新连接状态
+                statusDot.className = 'status-dot connected';
+
+            } catch (e) {
+                ragResult.className = 'error';
+                ragResult.textContent = '请求失败: ' + e.message;
+                llmResult.className = 'error';
+                llmResult.textContent = '请求失败: ' + e.message;
+                statusDot.className = 'status-dot error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '发送';
+            }
+        }
+
+        btn.addEventListener('click', sendQuery);
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendQuery();
+            }
+        });
+
+        // 保存/恢复 API 地址
+        const savedUrl = localStorage.getItem('rag-api-url');
+        if (savedUrl) apiUrlInput.value = savedUrl;
+        apiUrlInput.addEventListener('change', () => {
+            localStorage.setItem('rag-api-url', apiUrlInput.value);
+        });
+
+        input.focus();
+    </script>
+</body>
+</html>
+
+
+

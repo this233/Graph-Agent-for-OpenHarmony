@@ -414,11 +414,11 @@ def harden_html_for_external_assets(html: str) -> str:
 
     meta_tag = '<meta name="referrer" content="no-referrer">'
 
-    # 1) 尽量插入到 <head> 内部（优先放在 charset/meta 之后也无妨）
+    # 1) 尽量插入到 <head> 内部
     if re.search(r"<meta\s+name=['\"]referrer['\"]", html, flags=re.IGNORECASE):
         out = html
     else:
-        m = re.search(r"<head[^>]*>", html, flags=re.IGNORECASE)
+        m = re.search(r"<head\b[^>]*>", html, flags=re.IGNORECASE)
         if m:
             insert_pos = m.end()
             out = html[:insert_pos] + "\n  " + meta_tag + html[insert_pos:]
@@ -426,12 +426,20 @@ def harden_html_for_external_assets(html: str) -> str:
             out = meta_tag + "\n" + html
 
     # 2) 给 img 补 referrerpolicy
-    out = re.sub(
-        r"<img\b(?![^>]*\breferrerpolicy=)([^>]*?)>",
-        r'<img\1 referrerpolicy="no-referrer">',
-        out,
+    # 重要：不能用 [^>]* 去匹配 img 标签，因为属性值里可能包含 '>'（如 onerror 内联 HTML）
+    img_tag_pattern = re.compile(
+        r"<img\b(?:(?:[^>'\"]+)|\"[^\"]*\"|'[^']*')*>",
         flags=re.IGNORECASE,
     )
+
+    def _add_referrerpolicy(match: re.Match) -> str:
+        tag = match.group(0)
+        if re.search(r"\breferrerpolicy\s*=", tag, flags=re.IGNORECASE):
+            return tag
+        # 在结束 > 前插入属性（保留原结构）
+        return tag[:-1] + ' referrerpolicy="no-referrer"' + tag[-1]
+
+    out = img_tag_pattern.sub(_add_referrerpolicy, out)
     return out
 
 def ensure_images_in_html(html: str, rag_result: Optional[Dict[str, Any]]) -> str:
@@ -572,22 +580,35 @@ def repair_img_srcs_from_rag(html: str, rag_result: Optional[Dict[str, Any]]) ->
 
     fallback_url = candidate_urls[0]
 
-    # 替换坏 src（不以 http/https 开头，或明显被截断如 https://gite）
-    def _fix_img(match: re.Match) -> str:
-        tag = match.group(0)
-        src = match.group("src") or ""
-        src_strip = src.strip()
-        if src_strip.startswith("http://") or src_strip.startswith("https://"):
-            # 额外兜底：明显截断的域名
-            if src_strip.startswith("https://gite") and "gitee.com" not in src_strip:
-                return re.sub(r'src\s*=\s*"[^"]*"', f'src="{fallback_url}"', tag, count=1, flags=re.IGNORECASE)
-            return tag
-        # 非 URL 直接替换
-        return re.sub(r'src\s*=\s*"[^"]*"', f'src="{fallback_url}"', tag, count=1, flags=re.IGNORECASE)
+    # 用“可跨越引号内 >”的方式匹配完整 img 标签，避免 onerror="<div>..</div>" 误截断
+    img_tag_pattern = re.compile(
+        r"<img\b(?:(?:[^>'\"]+)|\"[^\"]*\"|'[^']*')*>",
+        flags=re.IGNORECASE,
+    )
+    src_attr_pattern = re.compile(
+        r"\bsrc\s*=\s*(?P<q>['\"])(?P<src>.*?)(?P=q)",
+        flags=re.IGNORECASE,
+    )
 
-    # 仅处理双引号形式（我们生成/大部分模型也输出双引号）
-    pattern = re.compile(r"<img\b[^>]*\bsrc\s*=\s*\"(?P<src>[^\"]*)\"[^>]*>", flags=re.IGNORECASE)
-    return pattern.sub(_fix_img, html)
+    def _fix_img_tag(match: re.Match) -> str:
+        tag = match.group(0)
+        m = src_attr_pattern.search(tag)
+        if not m:
+            return tag
+
+        src = (m.group("src") or "").strip()
+        if src.startswith("http://") or src.startswith("https://"):
+            # 额外兜底：明显截断的域名
+            if src.startswith("https://gite") and "gitee.com" not in src:
+                q = m.group("q")
+                return src_attr_pattern.sub(f'src={q}{fallback_url}{q}', tag, count=1)
+            return tag
+
+        # 非 URL / 空 / 被截断：替换为 RAG 里可用的 URL
+        q = m.group("q")
+        return src_attr_pattern.sub(f'src={q}{fallback_url}{q}', tag, count=1)
+
+    return img_tag_pattern.sub(_fix_img_tag, html)
 
 # ==================== FastAPI Web 接口 ====================
 
