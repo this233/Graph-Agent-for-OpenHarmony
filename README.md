@@ -9,6 +9,10 @@
 
 整体面向"文档级问答 + 跨文件 API 推理 + 富交互 UI 应答"三类场景。
 
+![在线检索与问答总览](figures/retrieval_overview.png)
+
+> 上图概括了线上检索流程：① 多路向量召回排序（段落/代码/图像/表格 + 三元组）→ ② 三元组过滤 → ③ 分配种子节点权重 → ④ 代价感知图扩散 → ⑤ 利用所选多模态节点进行问答阅读。下文 [检索流程（4 阶段）](#检索流程4-阶段) 将逐阶段展开。
+
 > 命名说明：仓库根包仍叫 `hipporag`（代码导入路径），但本项目在节点结构、检索流程、服务化方式上做了较大改造，建议按本 README 而非上游文档为准。
 
 ---
@@ -284,7 +288,7 @@ structure.json → abstract.json → with_captions.json
 
 ## 检索流程（4 阶段）
 
-`retrieve_v2` 是真正在线上跑的方法，分 4 个阶段：
+整体流程的可视化总览见文首 [`figures/retrieval_overview.png`](figures/retrieval_overview.png)。`retrieve_v2` 是真正在线上跑的方法，分 4 个阶段：
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -559,6 +563,7 @@ Graph-Agent-for-OpenHarmony/
 ├── outputs/Harmony_docs_zh_cn/          # 默认输出目录（索引 + 嵌入）
 ├── bge-reranker-v2-m3/                  # 本地 rerank 模型（自备）
 │
+├── figures/                             # README 配图（如 retrieval_overview.png）
 ├── requirements.txt
 ├── setup.py
 └── README.md
@@ -618,6 +623,7 @@ MIT。详见 [LICENSE](LICENSE)。
 
 ## 更新日志
 
+- **v2.3** README 新增在线检索与问答总览图（`figures/retrieval_overview.png`），直观呈现 5 步线上检索流程。
 - **v2.2** 重写 README，对齐线上 `retrieve_v2` 实际行为（代价感知 Best-First 扩散，非 PPR）；新增图片感知哈希去重说明。
 - **v2.1** 引入层次化 JSON 索引（`index_from_json`）。
 - **v2.0** 4 阶段检索流程上线。
