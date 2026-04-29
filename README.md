@@ -1,8 +1,13 @@
-# DualGraphRAG-OpenHarmony
+# DualGraph-Agent-for-OpenHarmony
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个面向 **OpenHarmony 文档** 的知识图谱增强 RAG 系统。在 [HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG) 基础上深度改造，把 Markdown 文档解析成 **结构-语义双层异构图谱（Dual Graph）**，并使用 **代价感知的 Best-First 图扩散** 完成 4 阶段多模态检索。整体面向"文档级问答 + 跨文件 API 推理"两类场景。
+一个面向 **OpenHarmony** 的 **图谱增强智能体（Graph-Augmented Agent）**。系统由两层组成：
+
+- **Agent 层（`OpenHarmonyAssistant/`）**：负责对话、规划与 Generative UI 输出，把用户查询路由到下层工具。
+- **DualGraphRAG 工具层（`src/hipporag/` + `OpenHarmonyAssistant/chatbox/`）**：在 [HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG) 基础上深度改造，把 Markdown 文档解析成 **结构-语义双层异构图谱（Dual Graph）**，并使用 **代价感知的 Best-First 图扩散** 完成 4 阶段多模态检索，作为 Agent 的核心检索工具。
+
+整体面向"文档级问答 + 跨文件 API 推理 + 富交互 UI 应答"三类场景。
 
 > 命名说明：仓库根包仍叫 `hipporag`（代码导入路径），但本项目在节点结构、检索流程、服务化方式上做了较大改造，建议按本 README 而非上游文档为准。
 
@@ -52,22 +57,22 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│                       Frontend (frontend.html)                     │
+│                  User · Browser (frontend.html)                    │
 └─────────────────────────────┬──────────────────────────────────────┘
                               │ HTTP
                               ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│             API Gateway · server_text.py  (port 8000)              │
-│   • 接收用户请求 / 拼装 LLM Prompt / 流式输出 / 健康检查              │
-│   • 通过 HTTP 调用 HippoRAG 服务                                    │
+│   Agent 层 · OpenHarmonyAssistant   (server_text.py · port 8000)   │
+│   • 对话规划 / 工具路由 / Generative UI 输出                        │
+│   • 把用户查询喂给下层 DualGraphRAG，再把检索结果喂给 Chat LLM      │
 └─────────────────────────────┬──────────────────────────────────────┘
-                              │ HTTP
+                              │ HTTP（作为 Agent 的检索工具调用）
                               ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│           HippoRAG Service · hipporag_service.py  (port 8001)      │
-│   • 预加载 Embedding / Reranker / 知识图谱（启动较慢）               │
-│   • 执行 4 阶段检索流程 retrieve_v2                                  │
-│   • 返回多模态检索结果（chunks / codes / tables / images）           │
+│         DualGraphRAG 工具层 · hipporag_service.py (port 8001)       │
+│   • 预加载 Embedding / Reranker / 双层异构知识图谱                  │
+│   • 执行 4 阶段检索：召回 → Rerank → 代价感知图扩散 → 终排          │
+│   • 返回多模态检索结果（chunks / codes / tables / images）          │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
