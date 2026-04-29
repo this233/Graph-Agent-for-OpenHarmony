@@ -1,426 +1,338 @@
-# HippoRAG: 基于知识图谱的检索增强生成系统
+# DualGraphRAG-OpenHarmony
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-HippoRAG 是一个受人类海马体记忆机制启发的先进 RAG（检索增强生成）系统，结合了开放信息抽取(OpenIE)、知识图谱构建、多层次向量嵌入和个性化 PageRank 算法，用于高质量的文档检索和问答。
+一个面向 **OpenHarmony 文档** 的知识图谱增强 RAG 系统。在 [HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG) 基础上深度改造，把 Markdown 文档解析成 **结构-语义双层异构图谱（Dual Graph）**，并使用 **代价感知的 Best-First 图扩散** 完成 4 阶段多模态检索。整体面向"文档级问答 + 跨文件 API 推理"两类场景。
+
+> 命名说明：仓库根包仍叫 `hipporag`（代码导入路径），但本项目在节点结构、检索流程、服务化方式上做了较大改造，建议按本 README 而非上游文档为准。
 
 ---
 
-## 📁 目录
+## 目录
 
+- [项目亮点](#项目亮点)
 - [系统架构](#系统架构)
-- [知识图谱构建流程](#知识图谱构建流程)
-- [检索流程（4阶段）](#检索流程4阶段)
+- [知识图谱：节点与边](#知识图谱节点与边)
+- [构建流程（5 步）](#构建流程5-步)
+- [检索流程（4 阶段）](#检索流程4-阶段)
 - [快速开始](#快速开始)
-- [API 使用文档](#api-使用文档)
-- [配置参数详解](#配置参数详解)
+- [服务化与 API](#服务化与-api)
+- [配置参数](#配置参数)
 - [项目结构](#项目结构)
 - [常见问题](#常见问题)
 
 ---
 
+## 项目亮点
+
+1. **细粒度多模态分域嵌入**  
+   文档段落被解析为 6 类图节点 + 1 类纯向量节点，**每类独立向量库**，避免长文本淹没代码 / 表格 / 图片 / 实体的信号：
+   - 图节点：`file` / `chunk` / `code` / `table` / `image` / `entity`
+   - 纯向量节点（不入图，仅作为种子来源）：`fact`（OpenIE 三元组）
+
+2. **结构 + 语义二级异构图谱**  
+   - **结构层**：来自 Markdown 标题层级与超链接 —— `File → Chunk → SubChunk`、`Chunk → Code/Table/Image`、`Chunk → File`（跳转）。
+   - **语义层**：来自 OpenIE 抽取的三元组 + 实体 KNN 同义词边 + 段落↔实体关联边。
+   - 两层之间通过 `Chunk ↔ Entity` 桥接，形成"外圈结构 + 内圈语义"的双层网络。
+
+3. **代价感知 Best-First 图扩散（非 PPR）**  
+   线上检索（`retrieve_v2`）使用堆驱动的 Best-First 扩散，从 Fact 命中实体 + 命中文件出发，沿"低代价边"多跳传播：  
+   `score = sim(node, query) · init_weight / (1 + cumulative_cost)`  
+   不同类型边给出不同代价（`synonymy / semantic / passage / structural`），并配有时间预算、扩展数、frontier 大小等多重早停，**比 PPR 全图迭代延迟更可控**，更契合在线 API 推理。
+
+4. **图片感知哈希去重**  
+   建图时对图片用 dHash/pHash + LSH 桶 + 可选 SSIM 做近重复合并，保留最高分辨率代表，被合并图片的边会自动重定向。
+
+5. **完整的服务化能力**  
+   双进程架构：`hipporag_service`（预加载图谱、专注检索）+ `server_text`（API 网关、调用 LLM 生成最终回答），配套自带前端页面。
+
+---
+
 ## 系统架构
 
-### 整体架构
-
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              前端 (frontend.html)                         │
-└───────────────────────────────────┬──────────────────────────────────────┘
-                                    │ HTTP
-                                    ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│                      API 网关 (server_text.py:8000)                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │  • 接收用户请求                                                      │ │
-│  │  • 调用 HippoRAG 服务进行检索                                        │ │
-│  │  • 调用 LLM 生成回答                                                 │ │
-│  │  • 格式化输出结果                                                    │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-└───────────────────────────────────┬──────────────────────────────────────┘
-                                    │ HTTP
-                                    ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│                  HippoRAG 服务 (hipporag_service.py:8001)                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │  • 预加载 Embedding 模型和知识图谱                                   │ │
-│  │  • 执行 4 阶段检索流程                                               │ │
-│  │  • 返回多类型检索结果                                                │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                       Frontend (frontend.html)                     │
+└─────────────────────────────┬──────────────────────────────────────┘
+                              │ HTTP
+                              ▼
+┌────────────────────────────────────────────────────────────────────┐
+│             API Gateway · server_text.py  (port 8000)              │
+│   • 接收用户请求 / 拼装 LLM Prompt / 流式输出 / 健康检查              │
+│   • 通过 HTTP 调用 HippoRAG 服务                                    │
+└─────────────────────────────┬──────────────────────────────────────┘
+                              │ HTTP
+                              ▼
+┌────────────────────────────────────────────────────────────────────┐
+│           HippoRAG Service · hipporag_service.py  (port 8001)      │
+│   • 预加载 Embedding / Reranker / 知识图谱（启动较慢）               │
+│   • 执行 4 阶段检索流程 retrieve_v2                                  │
+│   • 返回多模态检索结果（chunks / codes / tables / images）           │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 核心组件
 
-| 组件 | 描述 | 位置 |
-|------|------|------|
-| **HippoRAG** | 核心检索引擎，实现知识图谱构建和检索 | `src/hipporag/HippoRAG.py` |
-| **DocumentProcessor** | 文档解析器，处理 Markdown 文件结构 | `src/hipporag/document_processor.py` |
-| **OpenIE** | 开放信息抽取模块，提取实体和三元组 | `src/hipporag/information_extraction/` |
-| **EmbeddingStoreV2** | 向量嵌入存储，支持多类型内容 | `src/hipporag/embedding_store_v2.py` |
-| **TransformersCrossEncoderReranker** | 本地 Rerank 模型 | `src/hipporag/rerankers/` |
+| 组件 | 位置 | 说明 |
+| --- | --- | --- |
+| `HippoRAG` | `src/hipporag/HippoRAG.py` | 核心引擎：图谱构建 + 检索 |
+| `DocumentProcessor` | `src/hipporag/document_processor.py` | Markdown → 层次化 JSON 解析 |
+| `OpenIE` | `src/hipporag/information_extraction/` | 实体与三元组抽取（在线 / 离线） |
+| `EmbeddingStoreV2` | `src/hipporag/embedding_store_v2.py` | 多类型向量存储 |
+| `TransformersCrossEncoderReranker` | `src/hipporag/rerankers/` | 本地 bge-reranker 精排 |
+| `hipporag_service.py` | `OpenHarmonyAssistant/chatbox/` | FastAPI 检索服务 |
+| `server_text.py` | `OpenHarmonyAssistant/chatbox/` | FastAPI 网关 + 命令行 |
+| `frontend.html` | `OpenHarmonyAssistant/chatbox/` | Web 前端 |
 
 ---
 
-## 知识图谱构建流程
+## 知识图谱：节点与边
 
-### TL;DR 快速命令
+### 节点（6 类入图 + 1 类纯向量）
+
+| 节点 | ID 前缀 | 嵌入文本 | 是否入图 |
+| --- | --- | --- | --- |
+| 文件 | `file-`   | 文件摘要 | 是 |
+| 段落 | `chunk-`  | 段落摘要（embedding 内容用 `filter_chunk.content`：去掉代码/表/图引用后的纯文本） | 是 |
+| 代码块 | `code-`  | 代码块摘要（LLM 生成） | 是 |
+| 表格 | `table-`  | 表格摘要（LLM 生成） | 是 |
+| 图片 | `image-`  | 图片 caption（MLLM 生成，配感知哈希去重） | 是 |
+| 实体 | `entity-` | `"name: description"` | 是 |
+| 事实 | `fact-`   | 三元组字符串 `(h, r, t)` | **否（仅向量库，作为图扩散种子的来源）** |
+
+> 注：原版 HippoRAG 的"Fact 节点入图 + PPR"链路在本项目中已**不再使用于线上检索**。线上 `retrieve_v2` 用的是基于代价的 Best-First 扩散，Fact 仅在向量层作为 seed 生成器。
+
+### 边（5 类，由 `_classify_edge_type` 统一打标）
+
+```
+① structural   包含关系（contains 边自动加反向）
+   File ──contains──▶ Chunk ──contains──▶ SubChunk / Code / Table / Image
+
+② jump         段落级超链接（Markdown [text](xxx.md)）
+   Chunk ──jump──▶ File
+
+③ passage      段落↔实体（chunk 内出现过的实体）
+   Chunk ──contains──▶ Entity
+
+④ semantic     实体三元组（双向，权重=共现频次）
+   Entity ◀──(h, r, t)──▶ Entity
+
+⑤ synonymy    同义扩展（实体向量 KNN + 阈值 ≥ synonymy_edge_sim_threshold）
+   Entity ◀──sim──▶ Entity
+```
+
+### 边代价（用于扩散打分）
+
+| 边类型 | 代价公式 |
+| --- | --- |
+| `synonymy`   | `max(0.01, 1 - weight)` |
+| `semantic`   | `0.5 / max(weight, 0.1)` |
+| `passage`    | `0.2`（固定） |
+| `structural` | `0.3`（固定） |
+| 其他/未知    | `0.5` |
+
+直观含义：**结构与段落-实体边便宜，弱语义/弱同义边贵**，从而控制噪声、控制扩展规模。
+
+---
+
+## 构建流程（5 步）
+
+> 所有命令默认在仓库根目录执行，输出根目录为 `outputs/Harmony_docs_zh_cn/`。
 
 ```bash
 conda activate hipporag
-
-# 步骤1: 提取文档结构（包含图片）
-python src/hipporag/document_processor.py >> index.log 2>&1
-
-# 步骤2: 生成全文摘要（失败时复用备份）
-python generate_abstracts.py \
-    outputs/Harmony_docs_zh_cn/markdown_parse/structure.json \
-    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
-    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
-    >> index.log 2>&1
-
-# 步骤3: 生成图片caption
-python generate_image_captions.py \
-    outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
-    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
-    --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
-    >> index.log 2>&1
-
-python retry_failed_captions.py \
-    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
-    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json
-
-# 步骤4: 提取实体和三元组
-python extract_entities_triples.py \
-    outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json \
-    outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
-    >> index.log 2>&1
-
-# 步骤5: 构建知识图谱索引（通过启动服务自动完成）
-cd OpenHarmonyAssistant/chatbox
-python hipporag_service.py --port 8001
 ```
 
-### 流程概览
+### 步骤 1 · 文档结构解析
 
-```
-步骤1                   步骤2                   步骤3
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Markdown 文档  │ ──▶ │   文档结构解析   │ ──▶ │   摘要生成      │
-│   (.md 文件)     │     │   (层次化JSON)   │     │   (LLM)        │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                         │
-                                                         ▼
-步骤5                   步骤4                   步骤3续
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   知识图谱构建   │ ◀── │   实体三元组提取  │ ◀── │   图片描述生成   │
-│   (igraph)      │     │   (OpenIE)      │     │   (MLLM)       │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-         │
-         ▼
-┌─────────────────┐     ┌─────────────────┐
-│   向量嵌入存储   │ ──▶ │   索引完成       │
-│   (多类型)      │     │   (可检索)       │
-└─────────────────┘     └─────────────────┘
-```
+`DocumentProcessor` 把 Markdown 解析为层次化 JSON：
 
-**数据流向**:
-```
-structure.json → abstract.json → with_captions.json → with_captions_final.json → triples.json
-    步骤1           步骤2              步骤3                 步骤3重试              步骤4
-```
+- 按 `#` ~ `######` 递归分块
+- 抽取 ≥ 5 行的代码块 / Markdown / HTML 表格（带前后 `context_lines` 上下文）
+- 抽取图片引用并解析相对路径
+- 抽取段落内的 `[text](*.md)` 超链接生成 `jump`
+- 同时输出去掉代码/表/图引用的 `filter_chunk.content`，供后续 OpenIE 使用
 
-### 第一步：文档结构解析
-
-使用 `DocumentProcessor` 将 Markdown 文档解析为层次化 JSON 结构。
-
-**核心代码位置**: `src/hipporag/document_processor.py`
-
-**处理内容**:
-- **Markdown 标题分层**: 根据 `#`、`##`、`###` 等标题层级递归分块
-- **代码块提取**: 提取 ≥5 行的代码块，保留上下文
-- **表格提取**: 提取 ≥5 行的 Markdown/HTML 表格
-- **图片提取**: 提取图片引用，解析相对路径
-- **超链接提取**: 识别文档间的跳转关系
-
-**执行命令**:
 ```bash
-# 直接运行脚本（使用脚本内预设的路径配置）
 python src/hipporag/document_processor.py >> index.log 2>&1
+# 默认对应：/root/code/docs/zh-cn → outputs/Harmony_docs_zh_cn/markdown_parse/structure.json
+```
 
-# 或者通过代码调用
-python -c "
+也可以代码调用：
+
+```python
 from src.hipporag.document_processor import DocumentProcessor
-processor = DocumentProcessor(context_lines=15)
-result = processor.process_directory(
-    '/root/code/docs/zh-cn',
-    'outputs/Harmony_docs_zh_cn/markdown_parse/structure.json'
+proc = DocumentProcessor(context_lines=15)
+proc.process_directory(
+    "/path/to/docs/zh-cn",
+    "outputs/Harmony_docs_zh_cn/markdown_parse/structure.json",
 )
-"
 ```
 
-**输出路径**: `outputs/Harmony_docs_zh_cn/markdown_parse/structure.json`
+### 步骤 2 · 摘要生成（File / Chunk / Code / Table）
 
-**输出 JSON 结构示例**:
-```json
-{
-  "file-abc123...": {
-    "abstract": "",
-    "file_path": "/path/to/document.md",
-    "content": "完整文件内容...",
-    "chunks": {
-      "chunk-def456...": {
-        "abstract": "",
-        "content": "段落内容...",
-        "metadata": {"h1": "标题1", "h2": "子标题"},
-        "jump": {},
-        "images": {},
-        "codes": {
-          "code-ghi789...": {
-            "abstract": "",
-            "content": "代码内容..."
-          }
-        },
-        "tables": {},
-        "filter_chunk": {
-          "content": "过滤后的纯文本内容",
-          "extracted_entities": [],
-          "extracted_triples": []
-        },
-        "chunks": { /* 嵌套子段落 */ }
-      }
-    }
-  }
-}
-```
-
-### 第二步：摘要生成
-
-使用 LLM 为各层次内容生成摘要。
-
-**核心代码位置**: `generate_abstracts.py`, `src/hipporag/abstract_generator.py`
-
-**执行命令**:
 ```bash
 python generate_abstracts.py \
     outputs/Harmony_docs_zh_cn/markdown_parse/structure.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
     --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
-    --max-workers 20
+    --max-workers 20 \
+    >> index.log 2>&1
 ```
 
-**参数说明**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `input_file` | 必填 | 输入的 JSON 结构文件 |
-| `output_file` | 必填 | 输出文件路径 |
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
 | `--max-workers` | 20 | 并发线程数 |
-| `--backup` | 无 | 备份文件，调用失败时复用已有摘要 |
-| `--disable-fallback` | False | 禁用备用 LLM 配置 |
-| `--dry-run` | False | 只分析任务，不实际生成 |
+| `--backup` | - | 失败时复用已有摘要 |
+| `--disable-fallback` | False | 关闭备用 LLM 配置 |
+| `--dry-run` | False | 只统计任务 |
 
-### 第三步：图片描述生成
+### 步骤 3 · 图片描述（MLLM Caption）
 
-使用多模态 LLM 为图片生成描述（caption）。
-
-**核心代码位置**: `generate_image_captions.py`, `retry_failed_captions.py`
-
-**执行命令**:
 ```bash
-# 第一轮：生成图片caption
+# 第一轮
 python generate_image_captions.py \
     outputs/Harmony_docs_zh_cn/markdown_parse/abstract.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
     --backup outputs/Harmony_docs_zh_cn/markdown_parse_bak/abstract.json \
     --max-workers 10
 
-# 第二轮：重试失败的图片
+# 重试失败项
 python retry_failed_captions.py \
     outputs/Harmony_docs_zh_cn/markdown_parse/with_captions.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json
 ```
 
-**参数说明**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `input_file` | 必填 | 输入的 JSON 文件（包含摘要） |
-| `output_file` | 必填 | 输出文件路径 |
-| `--backup` | 无 | 备份文件，调用失败时复用已有caption |
-| `--max-workers` | 10 | 并发线程数 |
+### 步骤 4 · 实体与三元组抽取（OpenIE）
 
-### 第四步：实体和三元组提取
+`extract_entities_triples.py` 会把 OpenIE 结果写回每个 `chunk.filter_chunk.extracted_entities / extracted_triples`：
 
-使用 OpenIE 从 `filter_chunk` 中提取实体和关系三元组。
-
-**核心代码位置**: `extract_entities_triples.py`, `src/hipporag/information_extraction/`
-
-**执行命令**:
 ```bash
 python extract_entities_triples.py \
     outputs/Harmony_docs_zh_cn/markdown_parse/with_captions_final.json \
     outputs/Harmony_docs_zh_cn/markdown_parse/triples.json \
     --batch-size 200 \
-    --openie-mode online
+    --openie-mode online \
+    >> index.log 2>&1
 ```
 
-**参数说明**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `input_file` | 必填 | 输入的 JSON 文件（包含图片描述） |
-| `output_file` | 必填 | 输出文件路径 |
-| `--batch-size` | 200 | 批处理大小 |
-| `--openie-mode` | online | OpenIE 模式：`online` 或 `offline` |
-| `--llm-name` | gpt-3.5-turbo | LLM 模型名称 |
-| `--llm-base-url` | 无 | 自定义 API 端点 |
-| `--disable-fallback` | False | 禁用备用配置 |
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `--batch-size` | 200 | 批大小 |
+| `--openie-mode` | online | `online` 走 OpenAI 协议；`offline` 走 vLLM |
+| `--llm-name` | 见脚本 | LLM 名称 |
+| `--llm-base-url` | - | 自定义端点 |
+| `--disable-fallback` | False | 关闭备用配置 |
 
-**提取结果示例**:
+每个 chunk 输出形如：
+
 ```json
-{
-  "filter_chunk": {
-    "content": "ArkTS 是 OpenHarmony 的主要开发语言...",
-    "extracted_entities": ["ArkTS", "OpenHarmony", "开发语言"],
-    "extracted_triples": [
-      ["ArkTS", "是...的主要开发语言", "OpenHarmony"]
-    ]
-  }
+"filter_chunk": {
+  "content": "ArkTS 是 OpenHarmony 的主要开发语言…",
+  "extracted_entities": [
+    ["ArkTS", "OpenHarmony 主推的应用开发语言"],
+    ["OpenHarmony", "操作系统"]
+  ],
+  "extracted_triples": [
+    ["ArkTS", "是…的主要开发语言", "OpenHarmony"]
+  ]
 }
 ```
 
-### 第五步：知识图谱构建与索引
+### 步骤 5 · 知识图谱构建与索引
 
-使用 `HippoRAG.index_from_json()` 构建完整的知识图谱。
+启动 `hipporag_service.py` 时会自动调用 `HippoRAG.index_from_json` 完成：
 
-**核心代码位置**: `src/hipporag/HippoRAG.py` 中的 `index_from_json` 方法
+1. 各类节点向量化并写入对应嵌入存储（`file/chunk/code/table/image/entity/fact`）
+2. 图片感知哈希去重（dHash + 可选 SSIM + LSH 桶）
+3. 添加 5 类边（structural / jump / passage / semantic / synonymy）
+4. 同义词边补全 → `augment_graph` → 写入磁盘
+5. 保存节点元信息（面包屑导航 `breadcrumb` + Gitee URL）
 
-**构建内容**:
+也可手动触发：
 
-1. **多类型节点向量化**:
-   - File 节点：文件摘要嵌入
-   - Chunk 节点：段落摘要嵌入
-   - Code 节点：代码摘要嵌入
-   - Table 节点：表格摘要嵌入
-   - Image 节点：图片描述嵌入
-   - Entity 节点：实体名称嵌入
-   - Fact 节点：三元组嵌入
-
-2. **图结构边构建**:
-   - **结构边**: File → Chunk, Chunk → 子Chunk, Chunk → Code/Table/Image
-   - **语义边**: Entity ↔ Entity（通过三元组关系）
-   - **同义词边**: 相似实体间的连接（基于向量相似度）
-   - **超链接边**: 文档间的跳转关系
-
-**完整建图脚本示例**:
 ```python
 import json
-import sys
-sys.path.append('src')
+from src.hipporag import HippoRAG
+from src.hipporag.utils.config_utils import BaseConfig
 
-from hipporag import HippoRAG
-from hipporag.utils.config_utils import BaseConfig
-
-# 配置
 cfg = BaseConfig()
-cfg.save_dir = 'outputs/your_project'
-cfg.llm_name = 'deepseek-v3.2-exp'
-cfg.llm_base_url = 'https://api.modelarts-maas.com/openai/v1'
-cfg.embedding_model_name = 'Qwen3-Embedding-4B'
+cfg.save_dir = "outputs/Harmony_docs_zh_cn"
+cfg.llm_name = "deepseek-v3.2-exp"
+cfg.llm_base_url = "https://api.modelarts-maas.com/openai/v1"
+cfg.embedding_model_name = "Qwen3-Embedding-4B"
 
-# 初始化
 hipporag = HippoRAG(global_config=cfg)
-
-# 加载 JSON 结构
-with open('output_with_triples.json', 'r') as f:
+with open("outputs/Harmony_docs_zh_cn/markdown_parse/triples.json") as f:
     json_structure = json.load(f)
-
-# 构建索引
 hipporag.index_from_json(json_structure)
+```
+
+### 数据流
+
+```
+structure.json → abstract.json → with_captions.json
+              → with_captions_final.json → triples.json → 图谱(igraph)
 ```
 
 ---
 
-## 检索流程（4阶段）
+## 检索流程（4 阶段）
 
-HippoRAG v2 使用 4 阶段检索流程：
+`retrieve_v2` 是真正在线上跑的方法，分 4 个阶段：
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         阶段1: Embedding 候选获取                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
-│  │   Fact 检索  │  │   File 检索  │  │  Chunk 检索  │                     │
-│  │  (100个候选) │  │  (100个候选) │  │  (100个候选) │                     │
-│  └─────────────┘  └─────────────┘  └─────────────┘                      │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         阶段2: Rerank 精排                               │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
-│  │ Fact → 50个  │  │ File → 50个  │  │ Chunk → 50个 │                     │
-│  └─────────────┘  └─────────────┘  └─────────────┘                      │
-│  使用 TransformersCrossEncoder (bge-reranker-v2-m3) 本地精排             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         阶段3: 图谱扩散                                  │
-│  基于知识图谱进行广度优先扩散，从精排后的节点出发：                         │
-│  • 沿结构边扩散：Chunk → Code/Table/Image                                │
-│  • 沿语义边扩散：Entity → 相关 Entity → 关联 Chunk                        │
-│  • 扩散参数控制：时间预算、最大扩展数、邻居限制                             │
-│                                                                          │
-│  输出：Chunk(100), Code(5), Table(5), Image(5)                           │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         阶段4: 最终精排 + 合并输出                        │
-│  使用 LLM 对扩散结果进行最终精排：                                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
-│  │ Chunk → 10个 │  │ Code → 2个  │  │ Table → 2个  │  │ Image → 2个  │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │
-│                                                                          │
-│  合并输出：格式化为可展示的 Markdown 文本                                  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ 阶段 1 · 多路向量召回                                                 │
+│   Fact-top100 / File-top100 / Chunk-top100                            │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 阶段 2 · Rerank（Cross-encoder bge-reranker-v2-m3，本地）              │
+│   Fact → top50 / File → top50 / Chunk → top50                         │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 阶段 3 · 代价感知 Best-First 图扩散                                    │
+│   • 种子：top-Fact 解出的 Entity（init_weight=0.8）                    │
+│           + top-File（init_weight=0.9）                                │
+│   • 必选 Chunk：top-Fact 来源 chunk + 阶段 2 top-Chunk                 │
+│   • 评分：score = sim(node, q) · init_weight / (1 + cumulative_cost)   │
+│   • 收集：Chunk / Code / Table / Image                                 │
+│   • 早停：time_budget_s / max_expansions /                             │
+│           per_node_neighbor_limit / max_frontier_size /                │
+│           min_enqueue_score / 候选已收满                               │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 阶段 4 · 最终 Rerank（默认 LLM 后端） + 合并输出                        │
+│   Chunk → 10 / Code → 2 / Table → 2 / Image → 2                       │
+│   合并为可直接展示的 Markdown（带面包屑、Gitee URL、ID）               │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-### 检索参数说明
+### 关键参数
 
-**阶段1 参数（候选数量）**:
 | 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `fact_candidate_k` | 100 | Fact 向量检索的候选数量 |
-| `file_candidate_k` | 100 | File 向量检索的候选数量 |
-| `chunk_candidate_k` | 100 | Chunk 向量检索的候选数量 |
-
-**阶段2 参数（精排保留数量）**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `fact_top_k` | 50 | Fact 精排后保留数量 |
-| `file_top_k` | 50 | File 精排后保留数量 |
-| `chunk_top_k` | 50 | Chunk 精排后保留数量 |
-
-**阶段3 参数（图扩散）**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `spread_chunk_k` | 100 | 扩散后 Chunk 数量上限 |
-| `spread_code_k` | 5 | 扩散后 Code 数量上限 |
-| `spread_table_k` | 5 | 扩散后 Table 数量上限 |
-| `spread_image_k` | 5 | 扩散后 Image 数量上限 |
+| --- | --- | --- |
+| `fact_candidate_k` / `file_candidate_k` / `chunk_candidate_k` | 100 | 阶段 1 三路召回数 |
+| `fact_top_k` / `file_top_k` / `chunk_top_k` | 50 | 阶段 2 精排保留数 |
+| `spread_chunk_k` | 100 | 阶段 3 chunk 候选上限 |
+| `spread_code_k` / `spread_table_k` / `spread_image_k` | 5 | 阶段 3 模态候选上限 |
 | `spread_time_budget_s` | 2.0 | 扩散时间预算（秒） |
 | `spread_max_expansions` | 12000 | 最大扩展节点数 |
-| `spread_per_node_neighbor_limit` | 96 | 每节点最大扩展邻居数 |
+| `spread_per_node_neighbor_limit` | 96 | 单节点最多扩展邻居数（按低代价优先） |
 | `spread_max_frontier_size` | 20000 | 优先队列最大长度 |
 | `spread_min_enqueue_score` | 0.01 | 入队最小分数阈值 |
+| `final_chunk_k` | 10 | 最终返回 chunk 数 |
+| `final_code_k` / `final_table_k` / `final_image_k` | 2 | 最终返回各模态数 |
+| `generate_report` | false | 是否生成 LLM 整合报告 |
+| `verbose` | true | 是否打印检索过程 |
 
-**阶段4 参数（最终输出）**:
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `final_chunk_k` | 10 | 最终返回的 Chunk 数量 |
-| `final_code_k` | 2 | 最终返回的 Code 数量 |
-| `final_table_k` | 2 | 最终返回的 Table 数量 |
-| `final_image_k` | 2 | 最终返回的 Image 数量 |
-| `generate_report` | False | 是否生成 LLM 整合报告 |
+> `server_text.py` 的默认网关配置略有不同（`fact_candidate_k=300`、`chunk_candidate_k=300`、`fact_top_k=10` 等），见 `DEFAULT_RETRIEVAL_CONFIG`。
 
 ---
 
@@ -429,10 +341,10 @@ HippoRAG v2 使用 4 阶段检索流程：
 ### 环境要求
 
 - Python 3.10+
-- CUDA 11.8+ (GPU 加速)
-- 足够的显存（建议 ≥24GB）
+- CUDA 11.8+（推荐 GPU；建议 ≥ 24GB 显存）
+- 网络可访问 LLM/Embedding API（或本地 vLLM）
 
-### 安装依赖
+### 安装
 
 ```bash
 pip install -r requirements.txt
@@ -441,199 +353,92 @@ pip install -e .
 
 ### 启动服务
 
-**1. 启动 HippoRAG 服务（需要预加载模型，较慢）**
+**1. HippoRAG 服务（端口 8001，预加载较慢）**
 
 ```bash
-cd /root/code/HippoRAG-main/OpenHarmonyAssistant/chatbox
+cd OpenHarmonyAssistant/chatbox
 python hipporag_service.py --port 8001
 ```
 
-等待看到 `✅ HippoRAG 初始化完成` 后服务就绑定了。
+看到 `✅ HippoRAG 初始化完成` 后即可。
 
-**2. 启动 API 网关（快速）**
+**2. API 网关（端口 8000，秒级启动）**
 
 ```bash
-# 新开一个终端
-cd /root/code/HippoRAG-main/OpenHarmonyAssistant/chatbox
+# 新开终端
+cd OpenHarmonyAssistant/chatbox
 python server_text.py --server --port 8000
 ```
 
-**3. 访问前端**
+**3. 浏览器打开** `http://localhost:8000/`
 
-浏览器打开 `http://localhost:8000/`
+### 命令行交互
+
+```bash
+cd OpenHarmonyAssistant/chatbox
+python server_text.py -i        # 交互模式（默认 RAG + LLM）
+python server_text.py "如何创建一个 ArkTS 页面？"  # 单次提问
+python server_text.py "如何使用 @State？" --no-llm  # 仅检索
+```
 
 ---
 
-## API 使用文档
+## 服务化与 API
 
-### API 端点概览
+### 端点速查
 
 | 端点 | 方法 | 说明 |
-|------|------|------|
-| `/` | GET | 返回前端页面 |
-| `/chat` | POST | 问答接口（RAG + LLM） |
-| `/retrieve` | POST | 单独检索接口 |
-| `/health` | GET | 健康检查 |
+| --- | --- | --- |
+| `/` (8000)         | GET  | 返回前端页面 |
+| `/chat` (8000)     | POST | RAG + LLM 完整问答 |
+| `/retrieve` (8000) | POST | 仅检索（不调用 LLM） |
+| `/health` (8000)   | GET  | 健康检查（含下游 8001 状态） |
+| `/retrieve` (8001) | POST | 直接调用底层 HippoRAG 检索 |
+| `/health` (8001)   | GET  | HippoRAG 服务健康检查 |
 
-### /chat 接口
+### `/chat` 示例
 
-**基本用法**:
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "如何创建一个ArkTS页面？",
+    "query": "如何创建一个 ArkTS 页面？",
     "use_rag": true,
     "use_llm": true
   }'
 ```
 
-**只检索，不调用 LLM**:
+只检索：
+
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何创建一个ArkTS页面？",
-    "use_rag": true,
-    "use_llm": false
-  }'
+  -d '{"query": "如何使用 @State 装饰器？", "use_rag": true, "use_llm": false}'
 ```
 
-**自定义检索参数**:
+自定义检索参数：
+
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "如何创建一个ArkTS页面？",
-    "use_rag": true,
-    "use_llm": true,
+    "query": "如何创建一个 ArkTS 页面？",
     "retrieval_config": {
       "final_chunk_k": 5,
       "final_code_k": 3,
-      "final_table_k": 2,
-      "final_image_k": 2
-    }
-  }'
-```
-
-**完整参数示例**:
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何创建一个ArkTS页面？",
-    "use_rag": true,
-    "use_llm": false,
-    "retrieval_config": {
-      "fact_candidate_k": 100,
-      "file_candidate_k": 100,
-      "chunk_candidate_k": 100,
-      "fact_top_k": 50,
-      "file_top_k": 50,
-      "chunk_top_k": 50,
-      "spread_chunk_k": 100,
-      "spread_code_k": 5,
-      "spread_table_k": 5,
-      "spread_image_k": 5,
-      "final_chunk_k": 10,
-      "final_code_k": 2,
-      "final_table_k": 2,
-      "final_image_k": 2,
+      "spread_chunk_k": 80,
       "verbose": true
     }
   }'
 ```
 
-### /retrieve 接口
-
-**基本用法**:
-```bash
-curl -X POST http://localhost:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何使用@State装饰器？"
-  }'
-```
-
-**自定义参数**:
-```bash
-curl -X POST http://localhost:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何使用@State装饰器？",
-    "retrieval_config": {
-      "final_chunk_k": 5,
-      "final_code_k": 3
-    }
-  }'
-```
-
-### 直接调用 HippoRAG 服务
-
-```bash
-# 使用默认参数
-curl -X POST http://localhost:8001/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何创建一个ArkTS页面？"
-  }'
-
-# 自定义参数
-curl -X POST http://localhost:8001/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "如何创建一个ArkTS页面？",
-    "final_chunk_k": 5,
-    "final_code_k": 3,
-    "final_table_k": 2,
-    "final_image_k": 2,
-    "verbose": true
-  }'
-```
-
-### 请求参数说明
-
-#### ChatRequest 参数
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `query` | string | 必填 | 查询问题 |
-| `use_rag` | bool | true | 是否启用 RAG 检索 |
-| `use_llm` | bool | true | 是否调用 LLM 生成回答 |
-| `retrieval_config` | object | null | 检索参数配置（可选） |
-
-#### retrieval_config 参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `fact_candidate_k` | 100 | 阶段1：事实候选数量 |
-| `file_candidate_k` | 100 | 阶段1：文件候选数量 |
-| `chunk_candidate_k` | 100 | 阶段1：段落候选数量 |
-| `fact_top_k` | 50 | 阶段2：精排后保留的事实数 |
-| `file_top_k` | 50 | 阶段2：精排后保留的文件数 |
-| `chunk_top_k` | 50 | 阶段2：精排后保留的段落数 |
-| `spread_chunk_k` | 100 | 阶段3：扩散后的段落数 |
-| `spread_code_k` | 5 | 阶段3：扩散后的代码数 |
-| `spread_table_k` | 5 | 阶段3：扩散后的表格数 |
-| `spread_image_k` | 5 | 阶段3：扩散后的图片数 |
-| `final_chunk_k` | 10 | 阶段4：最终返回的段落数 |
-| `final_code_k` | 2 | 阶段4：最终返回的代码数 |
-| `final_table_k` | 2 | 阶段4：最终返回的表格数 |
-| `final_image_k` | 2 | 阶段4：最终返回的图片数 |
-| `generate_report` | false | 是否生成 LLM 整合报告 |
-| `verbose` | true | 是否输出详细日志 |
-
-### 响应格式
-
-#### ChatResponse
+### 响应（节选）
 
 ```json
 {
-  "query": "如何创建一个ArkTS页面？",
-  "rag_context": "# 相关文档段落 1\n...",
-  "llm_response": "要创建一个ArkTS页面，您需要...",
-  "rag_used": true,
-  "llm_used": true,
+  "query": "如何创建一个 ArkTS 页面？",
+  "rag_context": "# 相关文档段落 1\n- ID: chunk-...\n- 文件: https://gitee.com/...\n- 定位: H1 / H2 / H3\n\n...",
+  "llm_response": "要创建一个 ArkTS 页面，您需要…",
   "rag_chunks_count": 10,
   "rag_codes_count": 2,
   "rag_tables_count": 2,
@@ -647,263 +452,168 @@ curl -X POST http://localhost:8001/retrieve \
     "rag_total": 7.59,
     "llm": 5.67,
     "total": 13.26
-  },
-  "answer": "要创建一个ArkTS页面，您需要...",
-  "timing_rag": 7.59,
-  "timing_llm": 5.67
+  }
 }
 ```
 
-#### RetrieveResponse
-
-```json
-{
-  "query": "如何使用@State装饰器？",
-  "context": "# 相关文档段落 1\n...",
-  "chunks_count": 10,
-  "codes_count": 2,
-  "tables_count": 2,
-  "images_count": 2,
-  "timing": 7.59
-}
-```
-
-#### HealthResponse
-
-```json
-{
-  "status": "ok",
-  "hipporag_service_url": "http://localhost:8001",
-  "hipporag_available": true,
-  "timestamp": "2025-12-25T16:30:00.000000"
-}
-```
-
-### 格式化输出（使用 jq）
-
-```bash
-# 安装 jq
-apt install jq
-
-# 格式化 JSON 输出
-curl -s -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"query": "如何创建一个ArkTS页面？", "use_rag": true, "use_llm": false}' \
-  | jq .
-
-# 只看耗时信息
-curl -s -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"query": "如何创建一个ArkTS页面？", "use_rag": true, "use_llm": false}' \
-  | jq '.timing'
-
-# 只看 LLM 回答
-curl -s -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"query": "如何创建一个ArkTS页面？", "use_rag": true, "use_llm": true}' \
-  | jq -r '.llm_response'
-```
+更多 curl / jq 用法见 [`OpenHarmonyAssistant/chatbox/API_README.md`](OpenHarmonyAssistant/chatbox/API_README.md)。
 
 ---
 
-## 配置参数详解
+## 配置参数
 
-### BaseConfig 核心配置
+### `BaseConfig`（`src/hipporag/utils/config_utils.py`）
 
-**位置**: `src/hipporag/utils/config_utils.py`
-
-#### LLM 配置
+**LLM**
 
 | 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `llm_name` | gpt-4o-mini | LLM 模型名称 |
-| `llm_base_url` | None | LLM API 基础 URL |
-| `max_new_tokens` | 2048 | 每次推理最大新 Token 数 |
+| --- | --- | --- |
+| `llm_name` | gpt-4o-mini | OpenIE / 最终精排 / QA 用的 LLM |
+| `llm_base_url` | None | 自定义 OpenAI-兼容端点 |
+| `max_new_tokens` | 2048 | 单次推理最大 token |
 | `temperature` | 0 | 采样温度 |
-| `response_format` | {"type": "json_object"} | 响应格式 |
 
-#### Embedding 配置
+**Embedding**
 
 | 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `embedding_model_name` | nvidia/NV-Embed-v2 | 嵌入模型名称 |
-| `embedding_batch_size` | 10000 | 嵌入批处理大小 |
+| --- | --- | --- |
+| `embedding_model_name` | nvidia/NV-Embed-v2 | 嵌入模型 |
+| `embedding_batch_size` | 10000 | 嵌入批大小 |
 | `embedding_max_seq_len` | 2048 | 最大序列长度 |
-| `embedding_return_as_normalized` | True | 是否归一化嵌入 |
+| `embedding_return_as_normalized` | True | 是否归一化 |
 
-#### 图构建配置
+**图谱构建**
 
 | 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `synonymy_edge_topk` | 2047 | 同义词边 KNN 检索 k 值 |
+| --- | --- | --- |
+| `synonymy_edge_topk` | 2047 | 实体 KNN 候选数 |
 | `synonymy_edge_sim_threshold` | 0.95 | 同义词边相似度阈值 |
-| `is_directed_graph` | False | 是否为有向图 |
+| `is_directed_graph` | False | 是否有向 |
+| `enable_image_content_dedup` | True | 是否启用图片感知哈希去重 |
+| `image_dedup_hash_method` | dhash | `dhash` / `phash` |
+| `image_dedup_hamming_threshold` | 6 | 汉明距离阈值 |
+| `enable_image_dedup_ssim` | False | 是否额外 SSIM 复核 |
 
-#### 检索配置
+### 服务侧默认配置（`hipporag_service.py`）
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `linking_top_k` | 5 | 每步检索的链接节点数 |
-| `rerank_candidate_k` | 50 | 重排序候选数量 |
-| `retrieval_top_k` | 200 | 每步检索的文档数 |
-| `damping` | 0.5 | PPR 阻尼因子 |
-
-#### 存储配置
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `save_dir` | None | 保存目录 |
-| `save_openie` | True | 是否保存 OpenIE 结果 |
-| `force_index_from_scratch` | False | 强制重新构建索引 |
-| `force_openie_from_scratch` | False | 强制重新进行 OpenIE |
+| 项 | 默认 |
+| --- | --- |
+| `save_dir` | `outputs/Harmony_docs_zh_cn` |
+| `llm_name` | `deepseek-v3.2-exp` |
+| `llm_base_url` | `https://api.modelarts-maas.com/openai/v1` |
+| `embedding_model_name` | `Qwen3-Embedding-4B` |
+| `rerank_backend` | `transformers` |
+| `rerank_model_name` | 本地 `bge-reranker-v2-m3` |
+| `final_rerank_backend` | `llm` |
 
 ### 环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `HIPPORAG_SERVICE_URL` | http://localhost:8001 | HippoRAG 服务地址 |
-| `CHAT_MODEL_NAME` | qwen3-coder-480b-a35b-instruct | Chat LLM 模型名称 |
-| `CHAT_BASE_URL` | https://api.modelarts-maas.com/v2 | Chat LLM API 地址 |
-| `OPENAI_API_KEY` | - | OpenAI API Key |
-| `RERANK_BACKEND` | transformers | Rerank 后端 |
-| `RERANK_MODEL_NAME` | bge-reranker-v2-m3 路径 | Rerank 模型名称 |
-| `FINAL_RERANK_BACKEND` | llm | 最终 Rerank 后端 |
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `HIPPORAG_SERVICE_URL` | `http://localhost:8001` | 网关访问的下游 HippoRAG 地址 |
+| `CHAT_MODEL_NAME` | `qwen3-coder-480b-a35b-instruct` | 网关侧 Chat LLM |
+| `CHAT_BASE_URL` | `https://api.modelarts-maas.com/v2` | 网关侧 Chat LLM 端点 |
+| `OPENAI_API_KEY` / `MAAS_API_KEY` | - | LLM 鉴权 |
+| `RERANK_BACKEND` | `transformers` | 阶段 2 rerank 后端 |
+| `RERANK_MODEL_NAME` | `bge-reranker-v2-m3` 路径 | rerank 模型 |
+| `RERANK_DEVICE` / `RERANK_BATCH_SIZE` / `RERANK_MAX_LENGTH` | 见代码 | rerank 性能调优 |
+| `FINAL_RERANK_BACKEND` | `llm` | 阶段 4 最终 rerank 后端 |
 
 ---
 
 ## 项目结构
 
 ```
-HippoRAG-main/
-├── src/hipporag/                    # 核心代码
-│   ├── HippoRAG.py                  # 主类：知识图谱构建和检索
-│   ├── document_processor.py        # 文档解析器
-│   ├── abstract_generator.py        # 摘要生成器
-│   ├── embedding_store_v2.py        # 向量嵌入存储
-│   ├── rerank.py                    # DSPy Rerank
-│   ├── information_extraction/      # 信息抽取模块
-│   │   ├── openie_openai.py         # 在线 OpenIE
-│   │   └── openie_vllm_offline.py   # 离线 OpenIE
-│   ├── embedding_model/             # 嵌入模型
-│   ├── llm/                         # LLM 接口
-│   ├── rerankers/                   # Rerank 模型
-│   ├── prompts/                     # 提示模板
-│   └── utils/                       # 工具函数
-│       ├── config_utils.py          # 配置管理
-│       └── misc_utils.py            # 杂项工具
+Graph-Agent-for-OpenHarmony/
+├── src/hipporag/                        # 核心代码
+│   ├── HippoRAG.py                      # 主类：图谱构建 + 4 阶段检索
+│   ├── document_processor.py            # Markdown → 层次化 JSON
+│   ├── abstract_generator.py            # 摘要生成器
+│   ├── embedding_store_v2.py            # 多类型向量存储
+│   ├── rerank.py                        # DSPy 风格 fact rerank
+│   ├── information_extraction/          # OpenIE（在线 / 离线）
+│   ├── embedding_model/                 # Embedding 适配
+│   ├── llm/                             # LLM 客户端
+│   ├── rerankers/                       # Cross-encoder rerank
+│   ├── prompts/                         # 提示模板
+│   └── utils/                           # 配置 / 工具
 │
-├── OpenHarmonyAssistant/chatbox/    # Web 服务
-│   ├── hipporag_service.py          # HippoRAG 服务（端口 8001）
-│   ├── server_text.py               # API 网关（端口 8000）
-│   ├── frontend.html                # 前端页面
-│   └── API_README.md                # API 文档
+├── OpenHarmonyAssistant/chatbox/        # Web 服务 + 前端
+│   ├── hipporag_service.py              # FastAPI 检索服务（端口 8001）
+│   ├── server_text.py                   # FastAPI 网关 + CLI（端口 8000）
+│   ├── frontend.html                    # Web 前端
+│   └── API_README.md                    # API 详细文档
 │
-├── extract_entities_triples.py      # 实体三元组提取脚本
-├── generate_abstracts.py            # 摘要生成脚本
-├── generate_image_captions.py       # 图片描述生成脚本
-├── markdown_parser.py               # Markdown 解析器
+├── extract_entities_triples.py          # 步骤 4：实体三元组抽取
+├── generate_abstracts.py                # 步骤 2：摘要生成
+├── generate_image_captions.py           # 步骤 3：图片 caption
+├── retry_failed_captions.py             # 步骤 3 重试
+├── markdown_parser.py                   # Markdown 解析辅助
+├── demo_retrieval.py / demo_*.py        # 各类示例
 │
-├── bge-reranker-v2-m3/              # 本地 Rerank 模型
-├── outputs/                         # 输出目录
-│   └── Harmony_docs_zh_cn/          # OpenHarmony 文档索引
+├── outputs/Harmony_docs_zh_cn/          # 默认输出目录（索引 + 嵌入）
+├── bge-reranker-v2-m3/                  # 本地 rerank 模型（自备）
 │
-├── requirements.txt                 # Python 依赖
-├── setup.py                         # 安装配置
-└── README.md                        # 本文档
+├── requirements.txt
+├── setup.py
+└── README.md
 ```
 
 ---
 
 ## 常见问题
 
-### 1. HippoRAG 服务启动失败
+**Q1. 启动 `hipporag_service.py` 卡住或 OOM？**  
+- 检查 `nvidia-smi`，确认 CUDA 可用；显存不足可缩小 `embedding_batch_size`。  
+- 第一次启动会读取 `outputs/Harmony_docs_zh_cn/` 下全部嵌入并构建 igraph，**预热时间在分钟级**属正常。
 
-**问题**: 显存不足或模型加载失败
+**Q2. 检索结果为空？**  
+- 确认 `outputs/Harmony_docs_zh_cn/` 下嵌入文件存在；
+- `curl http://localhost:8001/health` 看 `hipporag_initialized` 是否为 `true`；
+- 用 `verbose: true` 调用 `/retrieve` 查看每阶段日志。
 
-**解决方案**:
-```bash
-# 检查 GPU 状态
-nvidia-smi
+**Q3. `/chat` 超时？**  
+- 减小 `final_chunk_k` / `spread_chunk_k`；
+- 缩短 `spread_time_budget_s`；
+- 确认下游 LLM API 可达。
 
-# 确保 CUDA 可用
-python -c "import torch; print(torch.cuda.is_available())"
+**Q4. 如何增量加文档？**  
+1. 重新跑 `DocumentProcessor.process_directory` 生成新 `structure.json`；
+2. 顺次执行步骤 2~4；
+3. 重新运行 `index_from_json`（或重启 `hipporag_service.py`）。  
+代码内 `add_synonymy_edges` / `add_new_nodes` / `add_new_edges` 已支持增量合并。
 
-# 如果显存不足，可以尝试减少 tensor_parallel_size
-```
-
-### 2. 检索结果为空
-
-**问题**: 索引未正确构建
-
-**解决方案**:
-```bash
-# 检查索引目录是否存在
-ls -la outputs/Harmony_docs_zh_cn/
-
-# 确认 embedding 文件存在
-ls -la outputs/Harmony_docs_zh_cn/deepseek-v3.2-exp_Qwen3-Embedding-4B/
-```
-
-### 3. API 调用超时
-
-**问题**: 检索或 LLM 调用时间过长
-
-**解决方案**:
-- 减少检索参数中的 k 值
-- 确保 HippoRAG 服务已完成初始化
-- 检查网络连接和 API 可用性
-
-### 4. 如何添加新文档
-
-**流程**:
-1. 将新 Markdown 文件放入文档目录
-2. 运行 `DocumentProcessor.process_directory()` 生成 JSON
-3. 运行 `generate_abstracts.py` 生成摘要
-4. 运行 `extract_entities_triples.py` 提取实体和三元组
-5. 调用 `HippoRAG.index_from_json()` 重新构建索引
+**Q5. 想换 LLM / Embedding？**  
+- 换 LLM：修改 `hipporag_service.py` 中 `llm_model_name` / `llm_base_url`，或通过 `OPENAI_API_KEY` + 自定义 `BaseConfig`；
+- 换 Embedding：修改 `embedding_model_name`；如果向量维度变化，**必须重新构建索引**。
 
 ---
 
-## 维护者须知
+## 维护者备注
 
-### 核心文件说明
-
-1. **`HippoRAG.py`**: 7900+ 行，包含所有核心逻辑，修改需谨慎
-2. **`document_processor.py`**: 文档解析逻辑，修改会影响 JSON 结构
-3. **`server_text.py`**: API 网关，修改会影响所有 API 行为
-4. **`hipporag_service.py`**: 检索服务，修改会影响检索结果
-
-### 添加新功能建议
-
-1. 新的检索参数：在 `RetrieveRequest` 和 `retrieve_v2` 中添加
-2. 新的内容类型：需要修改 `index_from_json` 和 `retrieve_v2`
-3. 新的 API 端点：在 `server_text.py` 中添加
-
-### 调试技巧
+- **`HippoRAG.py` 接近 8000 行**，修改 `index_from_json` / `retrieve_v2` / `graph_spread_with_similarity` 前请先理解 `node_to_node_stats / fact_to_chunk_id / fact_to_entities` 三个核心字典。
+- 新增节点类型：在 `index_from_json` 增 `*_embedding_store`、在 `_extract_nodes_from_json` 增解析、在 `_classify_edge_type` 增分类；同时在 `retrieve_v2` 阶段 3/4 增加候选收集与最终精排逻辑。
+- 新增边类型：在 `_classify_edge_type` 中分类，并在 `graph_spread_with_similarity::get_edge_cost` 给出代价。
+- 调试单查询：
 
 ```python
-# 启用详细日志
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-# 单独测试检索
 from src.hipporag import HippoRAG
-hipporag = HippoRAG(global_config=cfg)
+from src.hipporag.utils.config_utils import BaseConfig
+
+hipporag = HippoRAG(global_config=BaseConfig(save_dir="outputs/Harmony_docs_zh_cn"))
 hipporag.prepare_retrieval_objects()
-result = hipporag.retrieve_v2(["测试查询"], verbose=True)
+result = hipporag.retrieve_v2(["如何使用 @State？"], verbose=True)
 ```
 
 ---
 
 ## 许可证
 
-请参阅 [LICENSE](LICENSE) 文件。
-
----
+MIT。详见 [LICENSE](LICENSE)。
 
 ## 更新日志
 
-- **v2.1**: 添加层次化 JSON 索引支持
-- **v2.0**: 实现 4 阶段检索流程
-- **v1.0**: 基础 HippoRAG 实现
-
+- **v2.2** 重写 README，对齐线上 `retrieve_v2` 实际行为（代价感知 Best-First 扩散，非 PPR）；新增图片感知哈希去重说明。
+- **v2.1** 引入层次化 JSON 索引（`index_from_json`）。
+- **v2.0** 4 阶段检索流程上线。
+- **v1.0** 基础 HippoRAG 实现。
